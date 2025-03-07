@@ -1,8 +1,8 @@
-name: 'Codium PR Agent'
-description: 'Summarize, review and suggest improvements for pull requests'
+name: 'Beekeeper PR Agent'
+description: 'Summarize, review and suggest improvements for pull requests. Also considers the Beekeeper Guidelines from https://github.com/beekpr/beekeeper-engineering-hub.'
 branding:
   icon: 'award'
   color: 'green'
 runs:
   using: 'docker'
-  image: 'Dockerfile.github_action_dockerhub'
+  image: 'Dockerfile.github_action'
