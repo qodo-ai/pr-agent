@@ -704,14 +704,12 @@ def _fix_key_value(key: str, value: str):
 
 
 def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", last_key="") -> dict:
-    response_text_original = copy.deepcopy(response_text)
-    response_text = response_text.strip('\n').removeprefix('```yaml').rstrip().removesuffix('```')
+    response_text_stripped = response_text.strip('\n').removeprefix('```yaml').rstrip().removesuffix('```')
     try:
-        data = yaml.safe_load(response_text)
+        data = yaml.safe_load(response_text_stripped)
     except Exception as e:
         get_logger().warning(f"Initial failure to parse AI prediction: {e}")
-        data = try_fix_yaml(response_text, keys_fix_yaml=keys_fix_yaml, first_key=first_key, last_key=last_key,
-                            response_text_original=response_text_original)
+        data = try_fix_yaml(response_text, keys_fix_yaml=keys_fix_yaml, first_key=first_key, last_key=last_key)
         if not data:
             get_logger().error(f"Failed to parse AI prediction after fallbacks",
                                artifact={'response_text': response_text})
@@ -720,59 +718,44 @@ def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", l
                               artifact={'response_text': response_text})
     return data
 
-
-
-def try_fix_yaml(response_text: str,
-                 keys_fix_yaml: List[str] = [],
-                 first_key="",
-                 last_key="",
-                 response_text_original="") -> dict:
+def add_pipe(response_text: str,
+             keys_fix_yaml: List[str] = []) -> str:
+    """
+    Convert 'relevant line: ...' to relevant line: |-\n        ...'
+    """
     response_text_lines = response_text.split('\n')
 
     keys_yaml = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:', 'improved code:']
     keys_yaml = keys_yaml + keys_fix_yaml
-    # first fallback - try to convert 'relevant line: ...' to relevant line: |-\n        ...'
+    
     response_text_lines_copy = response_text_lines.copy()
     for i in range(0, len(response_text_lines_copy)):
         for key in keys_yaml:
             if key in response_text_lines_copy[i] and not '|' in response_text_lines_copy[i]:
                 response_text_lines_copy[i] = response_text_lines_copy[i].replace(f'{key}',
                                                                                   f'{key} |\n        ')
-    try:
-        data = yaml.safe_load('\n'.join(response_text_lines_copy))
-        get_logger().info(f"Successfully parsed AI prediction after adding |-\n")
-        return data
-    except:
-        pass
+    
+    return '\n'.join(response_text_lines_copy)
 
-    # second fallback - try to extract only range from first ```yaml to ````
+def extract_yaml(response_text: str) -> str:
+    """
+    Extract only range from first ```yaml to ````
+    """
     snippet_pattern = r'```(yaml)?[\s\S]*?```'
-    snippet = re.search(snippet_pattern, '\n'.join(response_text_lines_copy))
-    if not snippet:
-        snippet = re.search(snippet_pattern, response_text_original) # before we removed the "```"
+    snippet = re.search(snippet_pattern, response_text)
     if snippet:
         snippet_text = snippet.group()
-        try:
-            data = yaml.safe_load(snippet_text.removeprefix('```yaml').rstrip('`'))
-            get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
-            return data
-        except:
-            pass
+        response_text = snippet_text.removeprefix('```yaml').rstrip('`')
+    return response_text
 
-
-    # third fallback - try to remove leading and trailing curly brackets
-    response_text_copy = response_text.strip().rstrip().removeprefix('{').removesuffix('}').rstrip(':\n')
-    try:
-        data = yaml.safe_load(response_text_copy)
-        get_logger().info(f"Successfully parsed AI prediction after removing curly brackets")
-        return data
-    except:
-        pass
-
-
-    # forth fallback - try to extract yaml snippet by 'first_key' and 'last_key'
-    # note that 'last_key' can be in practice a key that is not the last key in the yaml snippet.
-    # it just needs to be some inner key, so we can look for newlines after it
+def extract_by_keys(response_text: str,
+                     first_key: str,
+                     last_key: str) -> str:
+    """
+    Extract yaml snippet by 'first_key' and 'last_key'
+    note that 'last_key' can be in practice a key that is not the last key in the yaml snippet.
+    it just needs to be some inner key, so we can look for newlines after it
+    """
     if first_key and last_key:
         index_start = response_text.find(f"\n{first_key}:")
         if index_start == -1:
@@ -781,27 +764,83 @@ def try_fix_yaml(response_text: str,
         index_end = response_text.find("\n\n", index_last_code) # look for newlines after last_key
         if index_end == -1:
             index_end = len(response_text)
-        response_text_copy = response_text[index_start:index_end].strip().strip('```yaml').strip('`').strip()
-        try:
-            data = yaml.safe_load(response_text_copy)
-            get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
-            return data
-        except:
-            pass
+        response_text = response_text[index_start:index_end].strip().strip('```yaml').strip('`').strip()
+    return response_text
 
-    # fifth fallback - try to remove leading '+' (sometimes added by AI for 'existing code' and 'improved code')
-    response_text_lines_copy = response_text_lines.copy()
+def remove_leading_plus_sign(response_text: str) -> str:
+    """
+    Remove leading '+' (sometimes added by AI for 'existing code' and 'improved code')
+    """
+    response_text_lines_copy = response_text.split('\n')
     for i in range(0, len(response_text_lines_copy)):
         if response_text_lines_copy[i].startswith('+'):
             response_text_lines_copy[i] = ' ' + response_text_lines_copy[i][1:]
+
+    return '\n'.join(response_text_lines_copy)
+
+def remove_think_block(response_text: str) -> str:
+    """
+    Remove content between <think> </think> tags from response_text
+    It's common for reasoning models
+    """
+    snippet_pattern = r'<think>?[\s\S]*?</think>'
+    return re.sub(snippet_pattern, '', response_text, flags=re.DOTALL).strip()
+
+def try_fix_yaml(response_text: str,
+                 keys_fix_yaml: List[str] = [],
+                 first_key="",
+                 last_key="") -> dict:
+    # Apply changes sequentially and try to parse YAML
+    response_text = remove_think_block(response_text)
     try:
-        data = yaml.safe_load('\n'.join(response_text_lines_copy))
+        data = yaml.safe_load(response_text)
+        get_logger().info(f"Successfully parsed AI prediction after removing <think></think> block\n")
+        return data
+    except:
+        pass
+
+    response_text = remove_leading_plus_sign(response_text)
+    try:
+        data = yaml.safe_load(response_text)
         get_logger().info(f"Successfully parsed AI prediction after removing leading '+'")
         return data
     except:
         pass
 
-    # sixth fallback - try to remove last lines
+    response_text = add_pipe(response_text, keys_fix_yaml)
+    try:
+        data = yaml.safe_load(response_text)
+        get_logger().info(f"Successfully parsed AI prediction after adding |-\n")
+        return data
+    except:
+        pass
+    
+    response_text = extract_yaml(response_text)
+    try:
+        data = yaml.safe_load(response_text)
+        get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
+        return data
+    except:
+        pass
+    # Next fallbacks don't change the response
+    # Try to remove leading and trailing curly brackets
+    modified_response_text = response_text.strip().rstrip().removeprefix('{').removesuffix('}').rstrip(':\n')
+    try:
+        data = yaml.safe_load(modified_response_text)
+        get_logger().info(f"Successfully parsed AI prediction after removing curly brackets")
+        return data
+    except:
+        pass
+
+    modified_response_text = extract_by_keys(response_text, first_key, last_key)
+    try:
+        data = yaml.safe_load(modified_response_text)
+        get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
+        return data
+    except:
+        pass
+    # Try to remove last lines
+    response_text_lines = response_text.split('\n')
     for i in range(1, len(response_text_lines)):
         response_text_lines_tmp = '\n'.join(response_text_lines[:-i])
         try:

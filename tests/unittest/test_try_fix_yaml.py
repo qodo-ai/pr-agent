@@ -16,7 +16,7 @@ class TestTryFixYaml:
     # The function adds '|-' to 'relevant line:' if it is not already present and successfully parses the YAML string.
     def test_add_relevant_line(self):
         review_text = "relevant line: value: 3\n"
-        expected_output = {'relevant line': 'value: 3\n'}
+        expected_output = {'relevant line': 'value: 3'}
         assert try_fix_yaml(review_text) == expected_output
 
     # The function extracts YAML snippet
@@ -88,3 +88,31 @@ We can further improve the code by using the `const` keyword instead of `var` in
 '''
         expected_output = {'code_suggestions': [{'relevant_file': 'src/index.ts\n', 'label': 'best practice\n'}, {'relevant_file': 'src/index2.ts\n', 'label': 'enhancment'}]}
         assert try_fix_yaml(review_text, first_key='code_suggestions', last_key='label') == expected_output
+
+    def test_think_block_with_plus_sign(self):
+        yaml_str = '''
+<think>
+Okay, let's tackle these code suggestions one by one. First, I need to understand the PR diff provided.
+Looking at the .gitlab-ci.yml file changes: The image name was updated from 'latest' to '0.27', and there are some variables added or modified like config__model, fallback_models, and pr_code_suggestions__extra_instructions. Also, in the old hunk, config__fallback_models had quotes and brackets, which were removed in the new code.
+Now, let's go through each suggestion:
+</think>
+```yaml
+code_suggestions:
+- suggestion_summary: |  
++    Correct fallback models list format.  
+  relevant_file: ".gitlab-ci.yml"  
+  relevant_lines_start: 20  
+  relevant_lines_end: 20  
+  suggestion_score: 7  
+  why: |  
+    The `config__fallback_models` is a comma-separated string, but using a YAML list improves readability and avoids potential parsing issues. This change addresses formatting for better compatibility with the application's expectations.   
+```
+'''
+
+
+        expected_output = {'code_suggestions': [{'suggestion_summary': 'Correct fallback models list format.  '}]}
+        assert try_fix_yaml(yaml_str,
+                         keys_fix_yaml=["relevant_file", "suggestion_content", "existing_code", "improved_code"],
+                         first_key="code_suggestions",
+                         last_key="label"
+                        ) == expected_output
