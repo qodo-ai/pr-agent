@@ -51,68 +51,68 @@ extra_instructions = "..."
 
 !!! example "General options"
 
-<table>
-  <tr>
-    <td><b>persistent_comment</b></td>
-    <td>If set to true, the review comment will be persistent, meaning that every new review request will edit the previous one. Default is true.</td>
-  </tr>
-  <tr>
-  <td><b>final_update_message</b></td>
-  <td>When set to true, updating a persistent review comment during online commenting will automatically add a short comment with a link to the updated review in the pull request .Default is true.</td>
-  </tr>
-  <tr>
-    <td><b>extra_instructions</b></td>
-    <td>Optional extra instructions to the tool. For example: "focus on the changes in the file X. Ignore change in ...".</td>
-  </tr>
-  <tr>
-    <td><b>enable_help_text</b></td>
-    <td>If set to true, the tool will display a help text in the comment. Default is true.</td>
-  </tr>
-</table>
+    <table>
+      <tr>
+        <td><b>persistent_comment</b></td>
+        <td>If set to true, the review comment will be persistent, meaning that every new review request will edit the previous one. Default is true.</td>
+      </tr>
+      <tr>
+      <td><b>final_update_message</b></td>
+      <td>When set to true, updating a persistent review comment during online commenting will automatically add a short comment with a link to the updated review in the pull request .Default is true.</td>
+      </tr>
+      <tr>
+        <td><b>extra_instructions</b></td>
+        <td>Optional extra instructions to the tool. For example: "focus on the changes in the file X. Ignore change in ...".</td>
+      </tr>
+      <tr>
+        <td><b>enable_help_text</b></td>
+        <td>If set to true, the tool will display a help text in the comment. Default is true.</td>
+      </tr>
+    </table>
 
 !!! example "Enable\\disable specific sub-sections"
 
-<table>
-  <tr>
-    <td><b>require_score_review</b></td>
-    <td>If set to true, the tool will add a section that scores the PR. Default is false.</td>
-  </tr>
-  <tr>
-    <td><b>require_tests_review</b></td>
-    <td>If set to true, the tool will add a section that checks if the PR contains tests. Default is true.</td>
-  </tr>
-  <tr>
-    <td><b>require_estimate_effort_to_review</b></td>
-    <td>If set to true, the tool will add a section that estimates the effort needed to review the PR. Default is true.</td>
-  </tr>
-  <tr>
-    <td><b>require_can_be_split_review</b></td>
-    <td>If set to true, the tool will add a section that checks if the PR contains several themes, and can be split into smaller PRs. Default is false.</td>
-  </tr>
-  <tr>
-    <td><b>require_security_review</b></td>
-    <td>If set to true, the tool will add a section that checks if the PR contains a possible security or vulnerability issue. Default is true.</td>
-  </tr>
-  <tr>
-    <td><b>require_ticket_analysis_review</b></td>
-    <td>If set to true, and the PR contains a GitHub or Jira ticket link, the tool will add a section that checks if the PR in fact fulfilled the ticket requirements. Default is true.</td>
-  </tr>
-</table>
+    <table>
+      <tr>
+        <td><b>require_score_review</b></td>
+        <td>If set to true, the tool will add a section that scores the PR. Default is false.</td>
+      </tr>
+      <tr>
+        <td><b>require_tests_review</b></td>
+        <td>If set to true, the tool will add a section that checks if the PR contains tests. Default is true.</td>
+      </tr>
+      <tr>
+        <td><b>require_estimate_effort_to_review</b></td>
+        <td>If set to true, the tool will add a section that estimates the effort needed to review the PR. Default is true.</td>
+      </tr>
+      <tr>
+        <td><b>require_can_be_split_review</b></td>
+        <td>If set to true, the tool will add a section that checks if the PR contains several themes, and can be split into smaller PRs. Default is false.</td>
+      </tr>
+      <tr>
+        <td><b>require_security_review</b></td>
+        <td>If set to true, the tool will add a section that checks if the PR contains a possible security or vulnerability issue. Default is true.</td>
+      </tr>
+      <tr>
+        <td><b>require_ticket_analysis_review</b></td>
+        <td>If set to true, and the PR contains a GitHub or Jira ticket link, the tool will add a section that checks if the PR in fact fulfilled the ticket requirements. Default is true.</td>
+      </tr>
+    </table>
 
 !!! example "Adding PR labels"
 
-You can enable\disable the `review` tool to add specific labels to the PR:
+    You can enable\disable the `review` tool to add specific labels to the PR:
 
-<table>
-  <tr>
-    <td><b>enable_review_labels_security</b></td>
-    <td>If set to true, the tool will publish a 'possible security issue' label if it detects a security issue. Default is true.</td>
-  </tr>
-  <tr>
-    <td><b>enable_review_labels_effort</b></td>
-    <td>If set to true, the tool will publish a 'Review effort [1-5]: x' label. Default is true.</td>
-  </tr>
-</table>
+    <table>
+      <tr>
+        <td><b>enable_review_labels_security</b></td>
+        <td>If set to true, the tool will publish a 'possible security issue' label if it detects a security issue. Default is true.</td>
+      </tr>
+      <tr>
+        <td><b>enable_review_labels_effort</b></td>
+        <td>If set to true, the tool will publish a 'Review effort [1-5]: x' label. Default is true.</td>
+      </tr>
+    </table>
 
 
 ## Usage Tips
