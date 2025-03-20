@@ -50,6 +50,22 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
     context["installation_id"] = installation_id
     context["settings"] = copy.deepcopy(global_settings)
     context["git_provider"] = {}
+
+    # Get the repository URL from the payload
+    repo_html_url = body.get("repository", {}).get("html_url")
+    # Load the list of allowed repos from settings
+    allowed_repos = context["settings"].get("allowed_repos", [])
+    if not repo_html_url or repo_html_url not in allowed_repos:
+        get_logger().warning(f"Rejected webhook from unauthorized repo: {repo_html_url}")
+        # Return a 403
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This repository is not permitted to use kaito-pr-agent. "
+                "Please reach out to kaito-dev@microsoft.com."
+            )
+        )
+
     background_tasks.add_task(handle_request, body, event=request.headers.get("X-GitHub-Event", None))
     return {}
 
