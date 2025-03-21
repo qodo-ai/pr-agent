@@ -138,7 +138,7 @@ async def handle_new_pr_opened(body: Dict[str, Any],
         # logic to ignore PRs with specific titles (e.g. "[Auto] ...")
         apply_repo_settings(api_url)
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
-                await _perform_auto_commands_github("pr_commands", agent, body, api_url, log_context)
+            await _perform_auto_commands_github("pr_commands", agent, body, api_url, log_context)
         else:
             get_logger().info(f"User {sender=} is not eligible to process PR {api_url=}")
 
@@ -196,8 +196,8 @@ async def handle_push_trigger_for_new_commits(body: Dict[str, Any],
 
     try:
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
-                get_logger().info(f"Performing incremental review for {api_url=} because of {event=} and {action=}")
-                await _perform_auto_commands_github("push_commands", agent, body, api_url, log_context)
+            get_logger().info(f"Performing incremental review for {api_url=} because of {event=} and {action=}")
+            await _perform_auto_commands_github("push_commands", agent, body, api_url, log_context)
 
     finally:
         # release the waiting task block
@@ -233,7 +233,7 @@ def get_log_context(body, event, action, build_number):
                        "request_id": uuid.uuid4().hex, "build_number": build_number, "app_name": app_name,
                         "repo": repo, "git_org": git_org, "installation_id": installation_id}
     except Exception as e:
-        get_logger().error("Failed to get log context", e)
+        get_logger().error(f"Failed to get log context: {e}")
         log_context = {}
     return log_context, sender, sender_id, sender_type
 
@@ -310,16 +310,20 @@ async def handle_request(body: Dict[str, Any], event: str):
         event: The GitHub event type (e.g. "pull_request", "issue_comment", etc.).
     """
     action = body.get("action")  # "created", "opened", "reopened", "ready_for_review", "review_requested", "synchronize"
+    get_logger().debug(f"Handling request with event: {event}, action: {action}")
     if not action:
+        get_logger().debug(f"No action found in request body, exiting handle_request")
         return {}
     agent = PRAgent()
     log_context, sender, sender_id, sender_type = get_log_context(body, event, action, build_number)
 
     # logic to ignore PRs opened by bot, PRs with specific titles, labels, source branches, or target branches
     if is_bot_user(sender, sender_type) and 'check_run' not in body:
+        get_logger().debug(f"Request ignored: bot user detected")
         return {}
     if action != 'created' and 'check_run' not in body:
         if not should_process_pr_logic(body):
+            get_logger().debug(f"Request ignored: PR logic filtering")
             return {}
 
     if 'check_run' in body:  # handle failed checks
