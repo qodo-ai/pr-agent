@@ -28,6 +28,8 @@ except Exception as e:
 </details>
 
 
+___
+
 <b>Pattern 2: Add defensive null/type checking for dictionary access to prevent potential runtime errors, especially when working with API responses or user inputs.
 </b>
 
@@ -50,6 +52,8 @@ if suggestion.get('score') is not None and suggestion.get('improved_code') and i
 </details>
 
 
+___
+
 <b>Pattern 3: Add descriptive comments for complex logic or non-obvious code to improve maintainability and help future developers understand the purpose of the code.
 </b>
 
@@ -71,6 +75,8 @@ if not issue or not isinstance(issue, dict):
 - https://github.com/qodo-ai/pr-agent/pull/1583#discussion_r1971790979
 </details>
 
+
+___
 
 <b>Pattern 4: Wrap API calls and external service interactions with proper try-except blocks and add specific error handling for different failure scenarios.
 </b>
@@ -103,6 +109,8 @@ except Exception as e:
 </details>
 
 
+___
+
 <b>Pattern 5: Use consistent formatting and capitalization in documentation, especially in field descriptions and configuration comments, to improve readability.
 </b>
 
@@ -126,6 +134,8 @@ class ConfigFields(BaseModel):
 </details>
 
 
+___
+
 <b>Pattern 6: Fix typos and grammatical errors in documentation, comments, and user-facing messages to maintain professionalism and clarity.
 </b>
 
@@ -145,3 +155,5 @@ Example code after:
 - https://github.com/qodo-ai/pr-agent/pull/1517#discussion_r1942896094
 </details>
 
+
+___
