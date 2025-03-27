@@ -101,6 +101,7 @@ def aggregate_documentation_files_for_prompt_contents(base_path: str, doc_files:
 
 def format_markdown_q_and_a_response(question_str: str, response_str: str, relevant_sections: List[Dict[str, str]],
                                      supported_suffixes: List[str], base_url_prefix: str, base_url_suffix: str="") -> str:
+    base_url_prefix = base_url_prefix.strip('/') #Sanitize base_url_prefix
     answer_str = ""
     answer_str += f"### Question: \n{question_str}\n\n"
     answer_str += f"### Answer:\n{response_str.strip()}\n\n"
@@ -114,9 +115,9 @@ def format_markdown_q_and_a_response(question_str: str, response_str: str, relev
         if str(section['relevant_section_header_string']).strip():
             markdown_header = format_markdown_header(section['relevant_section_header_string'])
             if base_url_prefix:
-                answer_str += f"> - {base_url_prefix}{file}{base_url_suffix}#{markdown_header}\n"
+                answer_str += f"> - {base_url_prefix}/{file}{base_url_suffix}#{markdown_header}\n"
         else:
-            answer_str += f"> - {base_url_prefix}{file}{base_url_suffix}\n"
+            answer_str += f"> - {base_url_prefix}/{file}{base_url_suffix}\n"
     return answer_str
 
 def format_markdown_header(header: str) -> str:
