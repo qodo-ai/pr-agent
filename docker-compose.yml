@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  app:
+    image: node:14
+    working_dir: /usr/src/app
+    volumes:
+      - .:/usr/src/app
+    command: bash -c "npm install && npm start"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASSWORD=secret
+      - DB_NAME=myapp
+
+  db:
+    image: postgres:9.5
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: myapp
+    ports:
+      - "5432:5432"
