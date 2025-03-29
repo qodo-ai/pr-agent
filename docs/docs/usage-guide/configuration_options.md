@@ -61,7 +61,7 @@ Then you can give a list of extra instructions to the `review` tool.
 
 `Platforms supported: GitHub, GitLab, Bitbucket`
 
-If you create a repo called `pr-agent-settings` in your **organization**, it's configuration file `.pr_agent.toml` will be used as a global configuration file for any other repo that belongs to the same organization.
+If you create a repo called `pr-agent-settings` in your **organization**, its configuration file `.pr_agent.toml` will be used as a global configuration file for any other repo that belongs to the same organization.
 Parameters from a local `.pr_agent.toml` file, in a specific repo, will override the global configuration parameters.
 
 For example, in the GitHub organization `Codium-ai`:
@@ -71,9 +71,9 @@ For example, in the GitHub organization `Codium-ai`:
 - The repo [`https://github.com/Codium-ai/pr-agent`](https://github.com/Codium-ai/pr-agent/blob/main/.pr_agent.toml) inherits the global configuration file from `pr-agent-settings`.
 
 ### Bitbucket Organization level configuration file 💎
-`Relevant platforms: Bitbucket Cloud, Bitbucket Data Center`
+`Relevant platforms: Bitbucket Data Center`
 
-In Bitbucket, there are two levels where you can define a global configuration file:
+In Bitbucket Data Center, there are two levels where you can define a global configuration file:
 
 * Project-level global configuration:
 
