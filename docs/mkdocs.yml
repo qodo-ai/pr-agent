@@ -49,7 +49,7 @@ nav:
       - Impact evaluation: 'core-abilities/impact_evaluation.md'
       - Interactivity: 'core-abilities/interactivity.md'
       - Compression strategy: 'core-abilities/compression_strategy.md'
-      - Company Codebase: 'core-abilities/company_codebase.md'
+      - RAG Context Enrichment: 'core-abilities/rag_context_enrichment.md'
       - Static code analysis: 'core-abilities/static_code_analysis.md'
       - Code Fine-tuning Benchmark: 'finetuning_benchmark/index.md'
   - Chrome Extension:

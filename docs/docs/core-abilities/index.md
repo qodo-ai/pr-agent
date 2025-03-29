@@ -9,7 +9,7 @@ Qodo Merge utilizes a variety of core abilities to provide a comprehensive and e
 - [Impact evaluation](https://qodo-merge-docs.qodo.ai/core-abilities/impact_evaluation/)
 - [Interactivity](https://qodo-merge-docs.qodo.ai/core-abilities/interactivity/)
 - [Compression strategy](https://qodo-merge-docs.qodo.ai/core-abilities/compression_strategy/)
-- [Company Codebase](https://qodo-merge-docs.qodo.ai/core-abilities/company_codebase/)
+- [RAG Context Enrichment](https://qodo-merge-docs.qodo.ai/core-abilities/rag_context_enrichment/)
 - [Static code analysis](https://qodo-merge-docs.qodo.ai/core-abilities/static_code_analysis/)
 - [Code fine-tuning benchmark](https://qodo-merge-docs.qodo.ai/finetuning_benchmark/)
 
