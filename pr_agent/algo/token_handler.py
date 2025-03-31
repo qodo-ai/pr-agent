@@ -1,7 +1,6 @@
 from threading import Lock
 
 from jinja2 import Environment, StrictUndefined
-from math import ceil
 from tiktoken import encoding_for_model, get_encoding
 
 from pr_agent.config_loader import get_settings
@@ -105,6 +104,19 @@ class TokenHandler:
             get_logger().error( f"Error in Anthropic token counting: {e}")
             return MaxTokens
 
+    def estimate_token_count_for_non_anth_claude_models(self, model, default_encoder_estimate):
+        from math import ceil
+        import re
+
+        model_is_from_o_series = re.match(r"^o[1-9](-mini|-preview)?$", model)
+        if ('gpt' in get_settings().config.model.lower() or model_is_from_o_series) and get_settings(use_context=False).get('openai.key'):
+            return default_encoder_estimate
+        #else: Model is not an OpenAI one - therefore, cannot provide an accurate token count and instead, return a higher number as best effort.
+
+        elbow_factor = 1 + get_settings().get('config.model_token_count_estimate_factor', 0)
+        get_logger().warning(f"{model}'s expected token count cannot be accurately estimated. Using {elbow_factor} of encoder output as best effort estimate")
+        return ceil(elbow_factor * default_encoder_estimate)
+
     def count_tokens(self, patch: str, force_accurate=False) -> int:
         """
         Counts the number of tokens in a given patch string.
@@ -116,21 +128,15 @@ class TokenHandler:
         The number of tokens in the patch string.
         """
         encoder_estimate = len(self.encoder.encode(patch, disallowed_special=()))
+
+        #If an estimate is enough (for example, in cases where the maximal allowed tokens is way below the known limits), return it.
         if not force_accurate:
             return encoder_estimate
-        #else, need to provide an accurate estimation:
 
+        #else, force_accurate==True: User requested providing an accurate estimation:
         model = get_settings().config.model.lower()
-        if force_accurate and 'claude' in model and get_settings(use_context=False).get('anthropic.key'):
+        if 'claude' in model and get_settings(use_context=False).get('anthropic.key'):
             return self.calc_claude_tokens(patch) # API call to Anthropic for accurate token counting for Claude models
-        #else: Non Anthropic provided model
 
-        import re
-        model_is_from_o_series = re.match(r"^o[1-9](-mini|-preview)?$", model)
-        if ('gpt' in get_settings().config.model.lower() or model_is_from_o_series) and get_settings(use_context=False).get('openai.key'):
-            return encoder_estimate
-        #else: Model is neither an OpenAI, nor an Anthropic model - therefore, cannot provide an accurate token count and instead, return a higher number as best effort.
-
-        elbow_factor = 1 + get_settings().get('config.model_token_count_estimate_factor', 0)
-        get_logger().warning(f"{model}'s expected token count cannot be accurately estimated. Using {elbow_factor} of encoder output as best effort estimate")
-        return ceil(elbow_factor * encoder_estimate)
+        #else: Non Anthropic provided model:
+        return self.estimate_token_count_for_non_anth_claude_models(model, encoder_estimate)
