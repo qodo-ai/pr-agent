@@ -9,6 +9,7 @@ Qodo Merge is a hosted version of PR-Agent, designed for companies and teams tha
 
 - See the [Tools Guide](./tools/index.md) for a detailed description of the different tools.
 
+- See the [Video Tutorials](https://www.youtube.com/playlist?list=PLRTpyDOSgbwFMA_VBeKMnPLaaZKwjGBFT) for practical demonstrations on how to use the tools.
 
 ## Docs Smart Search
 

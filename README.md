@@ -52,6 +52,13 @@ PR-Agent aims to help efficiently review and handle pull requests, by providing 
 
 ## News and Updates
 
+## March 28, 2025
+A new version, v0.28, was released. See release notes [here](https://github.com/qodo-ai/pr-agent/releases/tag/v0.28).
+
+This version includes a new tool, [Help Docs](https://qodo-merge-docs.qodo.ai/tools/help_docs/), which can answer free-text questions based on a documentation folder.
+
+`/help_docs` is now being used to provide immediate automatic feedback to any user who [opens an issue](https://github.com/qodo-ai/pr-agent/issues/1608#issue-2897328825) on PR-Agent's open-source project
+
 ### Feb 28, 2025
 A new version, v0.27, was released. See release notes [here](https://github.com/qodo-ai/pr-agent/releases/tag/v0.27).
 
@@ -59,30 +66,6 @@ A new version, v0.27, was released. See release notes [here](https://github.com/
 - Updated the default model to `o3-mini` for all tools. You can still use the `gpt-4o` as the default model by setting the `model` parameter in the configuration file.
 - Important updates and bug fixes for Azure DevOps, see [here](https://github.com/qodo-ai/pr-agent/pull/1583)
 - Added support for adjusting the [response language](https://qodo-merge-docs.qodo.ai/usage-guide/additional_configurations/#language-settings) of the PR-Agent tools.
-
-### Feb 6, 2025
-New design for the `/improve` tool:
-
-<kbd><img src="https://github.com/user-attachments/assets/26506430-550e-469a-adaa-af0a09b70c6d" width="512"></kbd>
-
-### Jan 25, 2025
-
-The open-source GitHub organization was updated:
-`https://github.com/codium-ai/pr-agent` →
-`https://github.com/qodo-ai/pr-agent`
-
-The docker should be redirected automatically to the new location. 
-However, if you have any issues, please update the GitHub action docker image from
-`uses: Codium-ai/pr-agent@main`
-to
-`uses: qodo-ai/pr-agent@main`
-
-
-### Jan 2, 2025
-
-New tool  [/Implement](https://qodo-merge-docs.qodo.ai/tools/implement/) (💎), which converts human code review discussions and feedback into ready-to-commit code changes.
-
-<kbd><img src="https://www.qodo.ai/images/pr_agent/implement1.png?v=2" width="512"></kbd>
 
 
 ### December 30, 2024

@@ -435,6 +435,9 @@ Note: Chunking is primarily relevant for large PRs. For most PRs (up to 500 line
         <td>If set to true, the tool will display a reference to the PR chat in the comment. Default is true.</td>
       </tr>
       <tr>
+        <td><b>publish_output_no_suggestions</b></td>
+        <td>If set to true, the tool will publish a comment even if no suggestions were found. Default is true.</td>
+      <tr>
         <td><b>wiki_page_accepted_suggestions</b></td>
         <td>If set to true, the tool will automatically track accepted suggestions in a dedicated wiki page called `.pr_agent_accepted_suggestions`. Default is true.</td>
       </tr>

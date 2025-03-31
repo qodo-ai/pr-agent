@@ -14,7 +14,6 @@ model_token_count_estimate_factor=0.3 # factor to increase the token count estim
 git_provider="github"
 publish_output=true
 publish_output_progress=true
-publish_output_no_suggestions=true
 verbosity_level=0 # 0,1,2
 use_extra_bad_extensions=false
 # Configurations
@@ -130,9 +129,9 @@ focus_only_on_problems=true
 extra_instructions = ""
 enable_help_text=false
 enable_chat_text=false
-enable_intro_text=true
 persistent_comment=true
 max_history_len=4
+publish_output_no_suggestions=true
 # enable to apply suggestion 💎
 apply_suggestions_checkbox=true
 # suggestions scoring

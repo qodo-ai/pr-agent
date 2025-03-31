@@ -217,7 +217,8 @@ class PRCodeSuggestions:
 
     async def publish_no_suggestions(self):
         pr_body = "## PR Code Suggestions ✨\n\nNo code suggestions found for the PR."
-        if get_settings().config.publish_output and get_settings().config.publish_output_no_suggestions:
+        if (get_settings().config.publish_output and
+                get_settings().pr_code_suggestions.get('publish_output_no_suggestions', True)):
             get_logger().warning('No code suggestions found for the PR.')
             get_logger().debug(f"PR output", artifact=pr_body)
             if self.progress_response:
@@ -784,7 +785,7 @@ class PRCodeSuggestions:
                 pr_body += "No suggestions found to improve this PR."
                 return pr_body
 
-            if get_settings().pr_code_suggestions.enable_intro_text and get_settings().config.is_auto_command:
+            if get_settings().config.is_auto_command:
                 pr_body += "Explore these optional code suggestions:\n\n"
 
             language_extension_map_org = get_settings().language_extension_map_org
