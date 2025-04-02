@@ -9,7 +9,6 @@
 model="o3-mini"
 fallback_models=["gpt-4o-2024-11-20"]
 #model_weak="gpt-4o-mini-2024-07-18" # optional, a weaker model to use for some easier tasks
-model_token_count_estimate_factor=0.3 # factor to increase the token count estimate, in order to reduce likelihood of model failure due to too many tokens.
 # CLI
 git_provider="github"
 publish_output=true
