@@ -112,6 +112,19 @@ async_ai_calls=true
 [pr_questions] # /ask #
 enable_help_text=false
 
+[pr_best_practices]
+max_context_tokens=100000
+#
+auto_extended_mode=true
+max_number_of_calls = 3
+parallel_calls = true
+#
+persistent_comment=true
+enable_help_text=false
+final_update_message=false
+max_history_len=4
+num_code_suggestions_per_chunk=4
+extra_instructions=""
 
 [pr_code_suggestions] # /improve #
 max_context_tokens=16000

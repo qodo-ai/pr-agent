@@ -15,6 +15,7 @@ global_settings = Dynaconf(
         "settings/configuration.toml",
         "settings/ignore.toml",
         "settings/language_extensions.toml",
+        "settings/beekeeper_pr_best_practices_prompts.toml",
         "settings/pr_reviewer_prompts.toml",
         "settings/pr_questions_prompts.toml",
         "settings/pr_line_questions_prompts.toml",
