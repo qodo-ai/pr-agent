@@ -31,6 +31,7 @@ global_settings = Dynaconf(
         "settings/pr_help_docs_prompts.toml",
         "settings/.secrets.toml",
         "settings_prod/.secrets.toml",
+        "settings_prod/allowed_repos.toml",
     ]]
 )
 
