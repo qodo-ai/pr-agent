@@ -268,17 +268,18 @@ class PredictionPreparator:
             get_logger().exception(f"Caught exception during init. Setting ai_handler to None to prevent __call__.")
             self.ai_handler = None
 
+    #Called by retry_with_fallback_models and therefore, on any failure must throw an exception:
     async def __call__(self, model: str) -> str:
+        if not self.ai_handler:
+            get_logger().error("ai handler not set. Cannot invoke model!")
+            raise ValueError("PredictionPreparator not initialized")
         try:
-            if not self.ai_handler:
-                get_logger().error("ai handler not set. Cannot invoke model!")
-                return ""
             response, finish_reason = await self.ai_handler.chat_completion(
                 model=model, temperature=get_settings().config.temperature, system=self.system_prompt, user=self.user_prompt)
             return response
         except Exception as e:
             get_logger().exception("Caught exception during prediction.", artifacts={'system': self.system_prompt, 'user': self.user_prompt})
-            return ""
+            raise e
 
 
 class PRHelpDocs(object):
