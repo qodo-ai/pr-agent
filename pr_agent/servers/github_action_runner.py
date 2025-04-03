@@ -4,6 +4,7 @@ import os
 from typing import Union
 
 from pr_agent.agent.pr_agent import PRAgent
+from pr_agent.beekeeper.tools.beekeeper_pr_best_practices import BeekeeperPRBestPracticesCheck
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider
 from pr_agent.git_providers.utils import apply_repo_settings
@@ -101,6 +102,10 @@ async def run_action():
                 if auto_improve is None:
                     auto_improve = get_setting_or_env("GITHUB_ACTION_CONFIG.AUTO_IMPROVE", None)
 
+                beekeeper_pr_best_practices = get_setting_or_env("GITHUB_ACTION.BEEKEEPER_PR_BEST_PRACTICES", None)
+                if beekeeper_pr_best_practices is None:
+                    beekeeper_pr_best_practices = get_setting_or_env("GITHUB_ACTION_CONFIG.BEEKEEPER_PR_BEST_PRACTICES", None)
+
                 # Set the configuration for auto actions
                 get_settings().config.is_auto_command = True # Set the flag to indicate that the command is auto
                 get_settings().pr_description.final_update_message = False  # No final update message when auto_describe is enabled
@@ -113,6 +118,9 @@ async def run_action():
                     await PRReviewer(pr_url).run()
                 if auto_improve is None or is_true(auto_improve):
                     await PRCodeSuggestions(pr_url).run()
+
+                if beekeeper_pr_best_practices is None or is_true(beekeeper_pr_best_practices):
+                    await BeekeeperPRBestPracticesCheck(pr_url).run()
         else:
             get_logger().info(f"Skipping action: {action}")
 

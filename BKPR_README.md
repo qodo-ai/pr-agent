@@ -1,5 +1,11 @@
 # Beekeeper Readme
 
+### Enable PR Best Practices Check in Github Actions
+
+```shell
+# add this to the env section of your workflow
+GITHUB_ACTION_CONFIG.BEEKEEPER_PR_BEST_PRACTICES: true
+```
 
 ## Running Beekeeper tests
 

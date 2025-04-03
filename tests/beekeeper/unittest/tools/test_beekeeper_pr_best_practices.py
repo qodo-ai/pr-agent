@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 from pr_agent.beekeeper.tools.beekeeper_pr_best_practices import BeekeeperPRBestPracticesCheck
@@ -27,6 +28,7 @@ class TestBeekeeperPRBestPracticesCheck(unittest.TestCase):
         settings_mock = MagicMock()
         settings_mock.pr_best_practices = MagicMock()
         settings_mock.pr_best_practices.auto_extended_mode = False
+        settings_mock.pr_best_practices.max_context_tokens = 80000
         settings_mock.pr_code_suggestions = MagicMock()
         settings_mock.pr_code_suggestions.num_code_suggestions_per_chunk = 5
         settings_mock.pr_code_suggestions.max_context_tokens = 100000
@@ -40,7 +42,9 @@ class TestBeekeeperPRBestPracticesCheck(unittest.TestCase):
 
         # Set up mocks
         mock_git_provider.return_value = MagicMock()
-        mock_git_provider.return_value.get_files.return_value = ["database.sql"]
+        mock_git_provider.return_value.get_files.return_value = [SimpleNamespace(
+                filename='database.sql',
+            )]
         mock_git_provider.return_value.pr = MagicMock()
         mock_git_provider.return_value.pr.title = "Update SQL schema"
         mock_git_provider.return_value.get_pr_branch.return_value = "feature/update-schema"
@@ -53,7 +57,7 @@ class TestBeekeeperPRBestPracticesCheck(unittest.TestCase):
         mock_fetcher = MagicMock()
         mock_fetcher_class.return_value = mock_fetcher
         mock_fetcher.get_relevant_guidelines.return_value = {
-            str(self.rdbms_guidelines_path): {
+            self.rdbms_guidelines_path: {
                 "markdown": self.markdown_content,
                 "file_types": ["sql"],
             }
