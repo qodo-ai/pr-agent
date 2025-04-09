@@ -6,6 +6,7 @@
     - RAG is available only for Qodo enterprise plan users, with single tenant or on-premises setup.
     - Database setup and codebase indexing must be completed before proceeding. [Contact support](https://www.qodo.ai/contact/) for more information.
 
+
 ## Overview
 
 ### What is RAG Context Enrichment?
@@ -15,6 +16,7 @@ A feature that enhances AI analysis by retrieving and referencing relevant code 
 ### How does RAG Context Enrichment work?
 
 Using Retrieval-Augmented Generation (RAG), it searches your configured repositories for contextually relevant code segments, enriching pull request (PR) insights and accelerating review accuracy.
+
 
 ## Getting started
 
@@ -39,10 +41,29 @@ enable_rag=true
       </tr>
     </table>
 
+### Applications
 
-References from the repository will be shown in a collapsible bookmark, allowing you to easily access relevant code snippets:
+#### 1\. The `/review` Tool
 
-![References](https://codium.ai/images/pr_agent/rag_context_enrichment_references.png){width=640}
+The [`/review`](https://qodo-merge-docs.qodo.ai/tools/review/) tool offers the _Focus area from RAG data_ which contains feedback based on the RAG references analysis. 
+The complete list of references found relevant to the PR will be shown in the _References_ section, helping developers understand the broader context by exploring the provided references.
+
+![References](https://codium.ai/images/pr_agent/rag_review.png){width=640}
+
+#### 2\. The `/implement` Tool
+
+The [`/implement`](https://qodo-merge-docs.qodo.ai/tools/implement/) tool utilizes the RAG feature to provide comprehensive context of the repository codebase, allowing it to generate more refined code output.
+The _References_ section contains links to the content used to support the code generation.
+
+![References](https://codium.ai/images/pr_agent/rag_implement.png){width=640}
+
+#### 3\. The `/ask` Tool
+
+The [`/ask`](https://qodo-merge-docs.qodo.ai/tools/ask/) tool can access broader repository context through the RAG feature when answering questions that go beyond the PR scope alone.
+The _References_ section displays the additional repository content consulted to formulate the answer.
+
+![References](https://codium.ai/images/pr_agent/rag_ask.png){width=640}
+
 
 ## Limitations
 

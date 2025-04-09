@@ -16,7 +16,7 @@ The approach eliminates manual steps, provides clear visual indicators, and crea
 
 The [`/improve`](https://qodo-merge-docs.qodo.ai/tools/improve/) command delivers a comprehensive interactive experience:
 
-- _**Apply this suggestion**_: Clicking this checkbox instantly converts a suggestion into a committable code change
+- _**Apply this suggestion**_: Clicking this checkbox instantly converts a suggestion into a committable code change. When committed to the PR, changes made to code that was flagged for improvement will be marked with a check mark, allowing developers to easily track and review implemented recommendations.
 
 - _**More**_: Triggers additional suggestions generation while keeping each suggestion focused and relevant as the original set
 
