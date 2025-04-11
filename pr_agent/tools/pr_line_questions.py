@@ -16,7 +16,7 @@ from pr_agent.git_providers import get_git_provider
 from pr_agent.git_providers.git_provider import get_main_pr_language
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
-
+from pr_agent.git_providers.github_provider import GithubProvider
 
 class PR_LineQuestions:
     def __init__(self, pr_url: str, args=None, ai_handler: partial[BaseAiHandler,] = LiteLLMAIHandler):
@@ -35,6 +35,7 @@ class PR_LineQuestions:
             "question": self.question_str,
             "full_hunk": "",
             "selected_lines": "",
+            "conversation_history": "",  
         }
         self.token_handler = TokenHandler(self.git_provider.pr,
                                           self.vars,
@@ -55,6 +56,11 @@ class PR_LineQuestions:
         get_logger().info('Answering a PR lines question...')
         # if get_settings().config.publish_output:
         #     self.git_provider.publish_comment("Preparing answer...", is_temporary=True)
+
+        # set conversation history if enabled
+        # currently only supports GitHub provider
+        if get_settings().pr_questions.use_conversation_history and isinstance(self.git_provider, GithubProvider):
+            self._load_conversation_history()
 
         self.patch_with_lines = ""
         ask_diff = get_settings().get('ask_diff_hunk', "")
@@ -92,6 +98,44 @@ class PR_LineQuestions:
                 self.git_provider.publish_comment(model_answer_sanitized)
 
         return ""
+        
+    def _load_conversation_history(self):
+        """generate conversation history from the code review thread"""
+        # set conversation history to empty string
+        self.vars["conversation_history"] = ""
+        
+        comment_id = get_settings().get('comment_id', '')
+        file_path = get_settings().get('file_name', '')
+        line_number = get_settings().get('line_end', '')
+        
+        # early return if any required parameter is missing
+        if not all([comment_id, file_path, line_number]):
+            return
+        
+        try:
+            # retrieve thread comments
+            thread_comments = self.git_provider.get_review_thread_comments(comment_id)
+            
+            # generate conversation history
+            conversation_history = []
+            for comment in thread_comments:
+                body = getattr(comment, 'body', '')
+
+                # skip empty comments, current comment(will be added as a question at prompt)
+                if not body or not body.strip() or comment_id == comment.id:
+                    continue
+                
+                user = comment.user
+                author = user.login if hasattr(user, 'login') else 'Unknown'
+                conversation_history.append(f"{author}: {body}")
+            
+            # transform and save conversation history
+            if conversation_history:
+                self.vars["conversation_history"] = "\n\n".join(conversation_history)
+                get_logger().info(f"Loaded {len(conversation_history)} comments from the code review thread")
+        
+        except Exception as e:
+            get_logger().error(f"Error processing conversation history, error: {e}")
 
     async def _get_prediction(self, model: str):
         variables = copy.deepcopy(self.vars)
