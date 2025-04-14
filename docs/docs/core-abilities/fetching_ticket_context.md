@@ -176,6 +176,50 @@ jira_base_url = "YOUR_JIRA_BASE_URL" # e.g. https://jira.example.com
 jira_api_token = "YOUR_API_TOKEN"
 ```
 
+#### Validating PAT token via Python script
+
+If you are facing issues retrieving tickets in Qodo Merge with PAT token, you can validate the flow using a Python script. 
+This following steps will help you check if the token is working correctly, and if you can access the Jira ticket details:
+
+1. run `pip install jira==3.8.0`
+
+2. run the following Python script (after replacing the placeholders with your actual values):
+
+??? example "Script to validate PAT token"
+
+    ```python
+    from jira import JIRA
+    
+    
+    if __name__ == "__main__":
+        try:
+            # Jira server URL
+            server = "https://..."
+            # Jira PAT token
+            token_auth = "..."
+            # Jira ticket code (e.g. "PROJ-123")
+            ticket_id = "..."
+    
+            print("Initializing JiraServerTicketProvider with JIRA server")
+            # Initialize JIRA client
+            jira = JIRA(
+                server=server,
+                token_auth=token_auth,
+                timeout=30
+            )
+            if jira:
+                print(f"JIRA client initialized successfully")
+            else:
+                print("Error initializing JIRA client")
+    
+            # Fetch ticket details
+            ticket = jira.issue(ticket_id)
+            print(f"Ticket title: {ticket.fields.summary}")
+    
+        except Exception as e:
+            print(f"Error fetching JIRA ticket details: {e}")
+    ```
+
 ### How to link a PR to a Jira ticket
 
 To integrate with Jira, you can link your PR to a ticket using either of these methods:

@@ -23,5 +23,4 @@ It includes information on how to adjust Qodo Merge configurations, define which
     - [Working with large PRs](./additional_configurations.md#working-with-large-prs)
     - [Changing a model](./additional_configurations.md#changing-a-model)
     - [Patch Extra Lines](./additional_configurations.md#patch-extra-lines)
-    - [Editing the prompts](./additional_configurations.md#editing-the-prompts)
 - [Qodo Merge Models](./qodo_merge_models)

@@ -133,7 +133,7 @@ class GithubProvider(GitProvider):
         if (not owner or not repo) and self.repo: #"else" - User did not provide an external git url, or not an issue, use self.repo object
             owner, repo = self.repo.split('/')
             scheme_and_netloc = self.base_url_html
-            desired_branch = self.get_pr_branch()
+            desired_branch = self.repo_obj.default_branch
         if not all([scheme_and_netloc, owner, repo]): #"else": Not invoked from a PR context,but no provided git url for context
             get_logger().error(f"Unable to get canonical url parts since missing context (PR or explicit git url)")
             return ("", "")

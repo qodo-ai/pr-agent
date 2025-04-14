@@ -120,24 +120,16 @@ Increasing this number provides more context to the model, but will also increas
 
 If the PR is too large (see [PR Compression strategy](https://github.com/Codium-ai/pr-agent/blob/main/PR_COMPRESSION.md)), Qodo Merge may automatically set this number to 0, and will use the original git patch.
 
+## Log Level
 
-## Editing the prompts
+Qodo Merge allows you to control the verbosity of logging by using the `log_level` configuration parameter. This is particularly useful for troubleshooting and debugging issues with your PR workflows.
 
-The prompts for the various Qodo Merge tools are defined in the `pr_agent/settings` folder.
-In practice, the prompts are loaded and stored as a standard setting object.
-Hence, editing them is similar to editing any other configuration value - just place the relevant key in `.pr_agent.toml`file, and override the default value.
-
-For example, if you want to edit the prompts of the [describe](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/pr_description_prompts.toml) tool, you can add the following to your `.pr_agent.toml` file:
 ```
-[pr_description_prompt]
-system="""
-...
-"""
-user="""
-...
-"""
+[config]
+log_level = "DEBUG"  # Options: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
 ```
-Note that the new prompt will need to generate an output compatible with the relevant [post-process function](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/tools/pr_description.py#L137).
+
+The default log level is "DEBUG", which provides detailed output of all operations. If you prefer less verbose logs, you can set higher log levels like "INFO" or "WARNING".
 
 ## Integrating with Logging Observability Platforms
 

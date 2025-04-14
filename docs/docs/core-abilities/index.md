@@ -1,17 +1,18 @@
 # Core Abilities
 Qodo Merge utilizes a variety of core abilities to provide a comprehensive and efficient code review experience. These abilities include:
 
-- [Fetching ticket context](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/)
 - [Auto best practices](https://qodo-merge-docs.qodo.ai/core-abilities/auto_best_practices/)
-- [Local and global metadata](https://qodo-merge-docs.qodo.ai/core-abilities/metadata/)
+- [Code fine-tuning benchmark](https://qodo-merge-docs.qodo.ai/finetuning_benchmark/)
+- [Code validation](https://qodo-merge-docs.qodo.ai/core-abilities/code_validation/)
+- [Compression strategy](https://qodo-merge-docs.qodo.ai/core-abilities/compression_strategy/)
 - [Dynamic context](https://qodo-merge-docs.qodo.ai/core-abilities/dynamic_context/)
-- [Self-reflection](https://qodo-merge-docs.qodo.ai/core-abilities/self_reflection/)
+- [Fetching ticket context](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/)
 - [Impact evaluation](https://qodo-merge-docs.qodo.ai/core-abilities/impact_evaluation/)
 - [Interactivity](https://qodo-merge-docs.qodo.ai/core-abilities/interactivity/)
-- [Compression strategy](https://qodo-merge-docs.qodo.ai/core-abilities/compression_strategy/)
-- [RAG Context Enrichment](https://qodo-merge-docs.qodo.ai/core-abilities/rag_context_enrichment/)
+- [Local and global metadata](https://qodo-merge-docs.qodo.ai/core-abilities/metadata/)
+- [RAG context enrichment](https://qodo-merge-docs.qodo.ai/core-abilities/rag_context_enrichment/)
+- [Self-reflection](https://qodo-merge-docs.qodo.ai/core-abilities/self_reflection/)
 - [Static code analysis](https://qodo-merge-docs.qodo.ai/core-abilities/static_code_analysis/)
-- [Code fine-tuning benchmark](https://qodo-merge-docs.qodo.ai/finetuning_benchmark/)
 
 ## Blogs
 

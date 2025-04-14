@@ -25,7 +25,7 @@ from pr_agent.config_loader import get_settings
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 
-setup_logger(fmt=LoggingFormat.JSON, level="DEBUG")
+setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 security = HTTPBasic()
 router = APIRouter()
 available_commands_rgx = re.compile(r"^\/(" + "|".join(command2class.keys()) + r")\s*")

@@ -2,22 +2,25 @@
 
 See [here](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/algo/__init__.py) for a list of available models.
 To use a different model than the default (o3-mini), you need to edit in the [configuration file](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L2) the fields:
-```
+
+```toml
 [config]
 model = "..."
 fallback_models = ["..."]
 ```
 
 For models and environments not from OpenAI, you might need to provide additional keys and other parameters.
-You can give parameters via a configuration file, or from environment variables. 
+You can give parameters via a configuration file, or from environment variables.
 
 !!! note "Model-specific environment variables"
     See [litellm documentation](https://litellm.vercel.app/docs/proxy/quick_start#supported-llms) for the environment variables needed per model, as they may vary and change over time. Our documentation per-model may not always be up-to-date with the latest changes.
+    Failing to set the needed keys of a specific model will usually result in litellm not identifying the model type, and failing to utilize it.
 
 ### Azure
 
 To use Azure, set in your `.secrets.toml` (working from CLI), or in the GitHub `Settings > Secrets and variables` (working from GitHub App or GitHub Action):
-```
+
+```toml
 [openai]
 key = "" # your azure api key
 api_type = "azure"
@@ -27,26 +30,29 @@ deployment_id = ""  # The deployment name you chose when you deployed the engine
 ```
 
 and set in your configuration file:
-```
+
+```toml
 [config]
 model="" # the OpenAI model you've deployed on Azure (e.g. gpt-4o)
 fallback_models=["..."]
 ```
 
-Passing custom headers to the underlying LLM Model API can be done by setting extra_headers parameter to litellm. 
-```
+Passing custom headers to the underlying LLM Model API can be done by setting extra_headers parameter to litellm.
+
+```toml
 [litellm]
 extra_headers='{"projectId": "<authorized projectId >", ...}') #The value of this setting should be a JSON string representing the desired headers, a ValueError is thrown otherwise.
 ```
-This enables users to pass authorization tokens or API keys, when routing requests through an API management gateway.
 
+This enables users to pass authorization tokens or API keys, when routing requests through an API management gateway.
 
 ### Ollama
 
 You can run models locally through either [VLLM](https://docs.litellm.ai/docs/providers/vllm) or [Ollama](https://docs.litellm.ai/docs/providers/ollama)
 
 E.g. to use a new model locally via Ollama, set in `.secrets.toml` or in a configuration file:
-```
+
+```toml
 [config]
 model = "ollama/qwen2.5-coder:32b"
 fallback_models=["ollama/qwen2.5-coder:32b"]
@@ -63,7 +69,7 @@ Please note that the `custom_model_max_tokens` setting should be configured in a
 
 !!! note "Local models vs commercial models"
     Qodo Merge is compatible with almost any AI model, but analyzing complex code repositories and pull requests requires a model specifically optimized for code analysis.
-    
+
     Commercial models such as GPT-4, Claude Sonnet, and Gemini have demonstrated robust capabilities in generating structured output for code analysis tasks with large input. In contrast, most open-source models currently available (as of January 2025) face challenges with these complex tasks.
 
     Based on our testing, local open-source models are suitable for experimentation and learning purposes (mainly for the `ask` command), but they are not suitable for production-level code analysis tasks.
@@ -73,7 +79,8 @@ Please note that the `custom_model_max_tokens` setting should be configured in a
 ### Hugging Face
 
 To use a new model with Hugging Face Inference Endpoints, for example, set:
-```
+
+```toml
 [config] # in configuration.toml
 model = "huggingface/meta-llama/Llama-2-7b-chat-hf"
 fallback_models=["huggingface/meta-llama/Llama-2-7b-chat-hf"]
@@ -83,40 +90,59 @@ custom_model_max_tokens=... # set the maximal input tokens for the model
 key = ... # your Hugging Face api key
 api_base = ... # the base url for your Hugging Face inference endpoint
 ```
+
 (you can obtain a Llama2 key from [here](https://replicate.com/replicate/llama-2-70b-chat/api))
 
 ### Replicate
 
 To use Llama2 model with Replicate, for example, set:
-```
+
+```toml
 [config] # in configuration.toml
 model = "replicate/llama-2-70b-chat:2c1608e18606fad2812020dc541930f2d0495ce32eee50074220b87300bc16e1"
 fallback_models=["replicate/llama-2-70b-chat:2c1608e18606fad2812020dc541930f2d0495ce32eee50074220b87300bc16e1"]
 [replicate] # in .secrets.toml
 key = ...
 ```
-(you can obtain a Llama2 key from [here](https://replicate.com/replicate/llama-2-70b-chat/api))
 
+(you can obtain a Llama2 key from [here](https://replicate.com/replicate/llama-2-70b-chat/api))
 
 Also, review the [AiHandler](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/algo/ai_handler.py) file for instructions on how to set keys for other models.
 
 ### Groq
 
 To use Llama3 model with Groq, for example, set:
-```
+
+```toml
 [config] # in configuration.toml
 model = "llama3-70b-8192"
 fallback_models = ["groq/llama3-70b-8192"]
 [groq] # in .secrets.toml
 key = ... # your Groq api key
 ```
+
 (you can obtain a Groq key from [here](https://console.groq.com/keys))
+
+### xAI
+
+To use xAI's models with PR-Agent, set:
+
+```toml
+[config] # in configuration.toml
+model = "xai/grok-2-latest"
+fallback_models = ["xai/grok-2-latest"] # or any other model as fallback
+
+[xai] # in .secrets.toml
+key = "..." # your xAI API key
+```
+
+You can obtain an xAI API key from [xAI's console](https://console.x.ai/) by creating an account and navigating to the developer settings page.
 
 ### Vertex AI
 
 To use Google's Vertex AI platform and its associated models (chat-bison/codechat-bison) set:
 
-```
+```toml
 [config] # in configuration.toml
 model = "vertex_ai/codechat-bison"
 fallback_models="vertex_ai/codechat-bison"
@@ -149,14 +175,15 @@ If you don't want to set the API key in the .secrets.toml file, you can set the 
 
 To use Anthropic models, set the relevant models in the configuration section of the configuration file:
 
-```
+```toml
 [config]
 model="anthropic/claude-3-opus-20240229"
 fallback_models=["anthropic/claude-3-opus-20240229"]
 ```
 
 And also set the api key in the .secrets.toml file:
-```
+
+```toml
 [anthropic]
 KEY = "..."
 ```
@@ -167,7 +194,7 @@ See [litellm](https://docs.litellm.ai/docs/providers/anthropic#usage) documentat
 
 To use Amazon Bedrock and its foundational models, add the below configuration:
 
-```
+```toml
 [config] # in configuration.toml
 model="bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
 fallback_models=["bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"]
@@ -199,17 +226,18 @@ key = ...
 
 (you can obtain a deepseek-chat key from [here](https://platform.deepseek.com))
 
-
 ### DeepInfra
 
 To use DeepSeek model with DeepInfra, for example, set:
-```
+
+```toml
 [config] # in configuration.toml
 model = "deepinfra/deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
 fallback_models = ["deepinfra/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"]
 [deepinfra] # in .secrets.toml
 key = ... # your DeepInfra api key
 ```
+
 (you can obtain a DeepInfra key from [here](https://deepinfra.com/dash/api_keys))
 
 ### Custom models
@@ -217,33 +245,41 @@ key = ... # your DeepInfra api key
 If the relevant model doesn't appear [here](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/algo/__init__.py), you can still use it as a custom model:
 
 1. Set the model name in the configuration file:
-```
+
+```toml
 [config]
 model="custom_model_name"
 fallback_models=["custom_model_name"]
 ```
+
 2. Set the maximal tokens for the model:
-```
+
+```toml
 [config]
 custom_model_max_tokens= ...
 ```
+
 3. Go to [litellm documentation](https://litellm.vercel.app/docs/proxy/quick_start#supported-llms), find the model you want to use, and set the relevant environment variables.
 
-4. Most reasoning models do not support chat-style inputs (`system` and `user` messages) or temperature settings. 
+4. Most reasoning models do not support chat-style inputs (`system` and `user` messages) or temperature settings.
 To bypass chat templates and temperature controls, set `config.custom_reasoning_model = true` in your configuration file.
 
 ## Dedicated parameters
 
 ### OpenAI models
 
+```toml
 [config]
 reasoning_efffort= = "medium" # "low", "medium", "high"
+```
 
 With the OpenAI models that support reasoning effort (eg: o3-mini), you can specify its reasoning effort via `config` section. The default value is `medium`. You can change it to `high` or `low` based on your usage.
 
 ### Anthropic models
 
+```toml
 [config]
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048
 extended_thinking_max_output_tokens = 4096
+```

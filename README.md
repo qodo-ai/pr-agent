@@ -22,7 +22,7 @@ PR-Agent aims to help efficiently review and handle pull requests, by providing 
 [![Static Badge](https://img.shields.io/badge/Chrome-Extension-violet)](https://chromewebstore.google.com/detail/qodo-merge-ai-powered-cod/ephlnjeghhogofkifjloamocljapahnl)
 [![Static Badge](https://img.shields.io/badge/Pro-App-blue)](https://github.com/apps/qodo-merge-pro/)
 [![Static Badge](https://img.shields.io/badge/OpenSource-App-red)](https://github.com/apps/qodo-merge-pro-for-open-source/)
-[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=purple)](https://discord.com/channels/1057273017547378788/1126104260430528613)
+[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=purple)](https://discord.com/invite/SgSxuQ65GF)
 <a href="https://github.com/Codium-ai/pr-agent/commits/main">
 <img alt="GitHub" src="https://img.shields.io/github/last-commit/Codium-ai/pr-agent/main?style=for-the-badge" height="20">
 </a>
@@ -51,6 +51,15 @@ PR-Agent aims to help efficiently review and handle pull requests, by providing 
 - [Why use PR-Agent?](#why-use-pr-agent)
 
 ## News and Updates
+
+## Apr 14, 2025
+
+GPT-4.1 is out. And its quite good on coding tasks...
+
+https://openai.com/index/gpt-4-1/
+
+<img width="635" alt="image" src="https://github.com/user-attachments/assets/a8f4c648-a058-4bdc-9825-2a4bb71a23e5" />
+
 
 ## March 28, 2025
 A new version, v0.28, was released. See release notes [here](https://github.com/qodo-ai/pr-agent/releases/tag/v0.28).

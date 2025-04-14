@@ -67,6 +67,8 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.api_key = get_settings().groq.key
         if get_settings().get("REPLICATE.KEY", None):
             litellm.replicate_key = get_settings().replicate.key
+        if get_settings().get("XAI.KEY", None):
+            litellm.api_key = get_settings().xai.key
         if get_settings().get("HUGGINGFACE.KEY", None):
             litellm.huggingface_key = get_settings().huggingface.key
         if get_settings().get("HUGGINGFACE.API_BASE", None) and 'huggingface' in get_settings().config.model:

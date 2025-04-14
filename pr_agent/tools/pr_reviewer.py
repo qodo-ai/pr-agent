@@ -229,6 +229,10 @@ class PRReviewer:
                          first_key=first_key, last_key=last_key)
         github_action_output(data, 'review')
 
+        if 'review' not in data:
+            get_logger().exception("Failed to parse review data", artifact={"data": data})
+            return ""
+
         # move data['review'] 'key_issues_to_review' key to the end of the dictionary
         if 'key_issues_to_review' in data['review']:
             key_issues_to_review = data['review'].pop('key_issues_to_review')

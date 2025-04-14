@@ -6,7 +6,7 @@ To run PR-Agent locally, you first need to acquire two keys:
 
 ## Using Docker image
 
-A list of the relevant tools can be found in the [tools guide](../tools/ask.md).
+A list of the relevant tools can be found in the [tools guide](../tools/).
 
 To invoke a tool (for example `review`), you can run PR-Agent directly from the Docker image. Here's how:
 

@@ -9,13 +9,14 @@
 model="o3-mini"
 fallback_models=["gpt-4o-2024-11-20"]
 #model_weak="gpt-4o-mini-2024-07-18" # optional, a weaker model to use for some easier tasks
-model_token_count_estimate_factor=0.3 # factor to increase the token count estimate, in order to reduce likelihood of model failure due to too many tokens.
 # CLI
 git_provider="github"
 publish_output=true
 publish_output_progress=true
 verbosity_level=0 # 0,1,2
 use_extra_bad_extensions=false
+# Log
+log_level="DEBUG"
 # Configurations
 use_wiki_settings_file=true
 use_repo_settings_file=true
@@ -30,6 +31,7 @@ max_description_tokens = 500
 max_commits_tokens = 500
 max_model_tokens = 32000 # Limits the maximum number of tokens that can be used by any model, regardless of the model's default capabilities.
 custom_model_max_tokens=-1 # for models not in the default list
+model_token_count_estimate_factor=0.3 # factor to increase the token count estimate, in order to reduce likelihood of model failure due to too many tokens - applicable only when requesting an accurate estimate.
 # patch extension logic
 patch_extension_skip_types =[".md",".txt"]
 allow_dynamic_context=true
@@ -141,7 +143,7 @@ new_score_mechanism_th_high=9
 new_score_mechanism_th_medium=7
 # params for '/improve --extended' mode
 auto_extended_mode=true
-num_code_suggestions_per_chunk=4
+num_code_suggestions_per_chunk=3
 max_number_of_calls = 3
 parallel_calls = true
 
@@ -165,7 +167,7 @@ The code suggestions should focus only on the following:
 ...
 """
 suggestions_score_threshold=0
-num_code_suggestions_per_chunk=4
+num_code_suggestions_per_chunk=3
 self_reflect_on_custom_suggestions=true
 enable_help_text=false
 

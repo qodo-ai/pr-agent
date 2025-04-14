@@ -64,9 +64,15 @@ class BitbucketServerProvider(GitProvider):
         workspace_name = None
         project_name = None
         if not repo_git_url:
-            desired_branch = self.get_pr_branch()
             workspace_name = self.workspace_slug
             project_name = self.repo_slug
+            default_branch_dict = self.bitbucket_client.get_default_branch(workspace_name, project_name)
+            if 'displayId' in default_branch_dict:
+                desired_branch = default_branch_dict['displayId']
+            else:
+                get_logger().error(f"Cannot obtain default branch for workspace_name={workspace_name}, "
+                                   f"project_name={project_name}, default_branch_dict={default_branch_dict}")
+                return ("", "")
         elif '.git' in repo_git_url and 'scm/' in repo_git_url:
             repo_path = repo_git_url.split('.git')[0].split('scm/')[-1]
             if repo_path.count('/') == 1:  # Has to have the form <workspace>/<repo>

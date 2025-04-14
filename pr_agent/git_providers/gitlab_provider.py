@@ -87,7 +87,11 @@ class GitLabProvider(GitProvider):
             return ("", "")
         if not repo_git_url: #Use PR url as context
             repo_path = self._get_project_path_from_pr_or_issue_url(self.pr_url)
-            desired_branch = self.get_pr_branch()
+            try:
+                desired_branch = self.gl.projects.get(self.id_project).default_branch
+            except Exception as e:
+                get_logger().exception(f"Cannot get PR: {self.pr_url} default branch. Tried project ID: {self.id_project}")
+                return ("", "")
         else: #Use repo git url
             repo_path = repo_git_url.split('.git')[0].split('.com/')[-1]
         prefix = f"{self.gitlab_url}/{repo_path}/-/blob/{desired_branch}"

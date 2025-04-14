@@ -66,7 +66,8 @@ PR-Agent and Qodo Merge offers extensive pull request functionalities across var
 |       | [PR interactive actions](https://www.qodo.ai/images/pr_agent/pr-actions.mp4) 💎                         | ✅ |        ✅           |           |              |
 |       | [Impact Evaluation](https://qodo-merge-docs.qodo.ai/core-abilities/impact_evaluation/) 💎               | ✅ | ✅ |           |   |
 
-💎 marks a feature available only in [Qodo Merge](https://www.codium.ai/pricing/){:target="_blank"}, and not in the open-source version.
+!!! note "💎 means Qodo Merge only"
+      All along the documentation, 💎 marks a feature available only in [Qodo Merge](https://www.codium.ai/pricing/){:target="_blank"}, and not in the open-source version.
 
 
 ## Example Results

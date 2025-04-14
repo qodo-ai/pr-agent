@@ -20,6 +20,14 @@ MAX_TOKENS = {
     'gpt-4o-mini-2024-07-18': 128000,  # 128K, but may be limited by config.max_model_tokens
     'gpt-4o-2024-08-06': 128000,  # 128K, but may be limited by config.max_model_tokens
     'gpt-4o-2024-11-20': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-4.5-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-4.5-preview-2025-02-27': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-4.1': 1047576,
+    'gpt-4.1-2025-04-14': 1047576,
+    'gpt-4.1-mini': 1047576,
+    'gpt-4.1-mini-2025-04-14': 1047576,
+    'gpt-4.1-nano': 1047576,
+    'gpt-4.1-nano-2025-04-14': 1047576,
     'o1-mini': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-mini-2024-09-12': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
@@ -51,6 +59,7 @@ MAX_TOKENS = {
     'gemini/gemini-1.5-pro': 1048576,
     'gemini/gemini-1.5-flash': 1048576,
     'gemini/gemini-2.0-flash': 1048576,
+    'gemini/gemini-2.5-pro-preview-03-25': 1048576,
     'codechat-bison': 6144,
     'codechat-bison-32k': 32000,
     'anthropic.claude-instant-v1': 100000,
@@ -74,12 +83,21 @@ MAX_TOKENS = {
     "bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0": 100000,
     "bedrock/us.anthropic.claude-3-7-sonnet-20250219-v1:0": 200000,
     'claude-3-5-sonnet': 100000,
+    'groq/meta-llama/llama-4-scout-17b-16e-instruct': 131072,
+    'groq/meta-llama/llama-4-maverick-17b-128e-instruct': 131072,
     'groq/llama3-8b-8192': 8192,
     'groq/llama3-70b-8192': 8192,
     'groq/llama-3.1-8b-instant': 8192,
     'groq/llama-3.3-70b-versatile': 128000,
     'groq/mixtral-8x7b-32768': 32768,
     'groq/gemma2-9b-it': 8192,
+    'xai/grok-2': 131072,
+    'xai/grok-2-1212': 131072,
+    'xai/grok-2-latest': 131072,
+    'xai/grok-3-beta': 131072,
+    'xai/grok-3-fast-beta': 131072,
+    'xai/grok-3-mini-beta': 131072,
+    'xai/grok-3-mini-fast-beta': 131072,
     'ollama/llama3': 4096,
     'watsonx/meta-llama/llama-3-8b-instruct': 4096,
     "watsonx/meta-llama/llama-3-70b-instruct": 4096,
