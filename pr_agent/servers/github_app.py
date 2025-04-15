@@ -317,6 +317,31 @@ def should_process_pr_logic(body) -> bool:
     return True
 
 
+async def handle_new_issue(body: Dict[str, Any],
+                           event: str,
+                           sender: str,
+                           sender_id: str,
+                           action: str,
+                           log_context: Dict[str, Any],
+                           agent: PRAgent):
+    issue = body.get("issue", {})
+    if not issue:
+        return {}
+    
+    api_url = issue.get("url")
+    if not api_url:
+        return {}
+    
+    log_context["issue_url"] = api_url
+    
+    if action in get_settings().github_app.handle_issue_actions:
+        apply_repo_settings(api_url)
+        if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
+            get_logger().info(f"Processing new issue {api_url=}")
+            await _perform_auto_commands_github("issue_commands", agent, body, api_url, log_context)
+        else:
+            get_logger().info(f"User {sender=} is not eligible to process new issue {api_url=}")
+
 async def handle_request(body: Dict[str, Any], event: str):
     """
     Handle incoming GitHub webhook requests.
@@ -353,6 +378,10 @@ async def handle_request(body: Dict[str, Any], event: str):
     elif event == 'pull_request' and action != 'synchronize' and action != 'closed':
         get_logger().debug(f'Request body', artifact=body, event=event)
         await handle_new_pr_opened(body, event, sender, sender_id, action, log_context, agent)
+    # handle new issues
+    elif event == 'issues' and action == 'opened':
+        get_logger().debug(f'Request body', artifact=body, event=event)
+        await handle_new_issue(body, event, sender, sender_id, action, log_context, agent)
     elif event == "issue_comment" and 'edited' in action:
         pass # handle_checkbox_clicked
     # handle pull_request event with synchronize action - "push trigger" for new commits
