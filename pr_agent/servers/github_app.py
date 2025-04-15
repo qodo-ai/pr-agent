@@ -446,6 +446,9 @@ async def _perform_auto_commands_github(commands_conf: str, agent: PRAgent, body
         split_command = command.split(" ")
         command = split_command[0]
         args = split_command[1:]
+        if command == "/help_docs":
+            issue_body = body.get("issue", {}).get("body", "")
+            command = f"{command} {issue_body}"
         other_args = update_settings_from_args(args)
         new_command = ' '.join([command] + other_args)
         get_logger().info(f"{commands_conf}. Performing auto command '{new_command}', for {api_url=}")
