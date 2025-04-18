@@ -427,7 +427,45 @@ class GithubProvider(GitProvider):
                 self._publish_inline_comments_fallback_with_verification(comments)
             except Exception as e:
                 get_logger().error(f"Failed to publish inline code comments fallback, error: {e}")
-                raise e
+                raise e    
+    
+    def get_review_thread_comments(self, comment_id: int) -> list[dict]:
+        """
+        Retrieves all comments in the same line as the given comment.
+        
+        Args:
+            comment_id: Review comment ID
+                
+        Returns:
+            List of comments on the same line
+        """
+        try:
+            # Get the original comment to find its location
+            comment = self.pr.get_comment(comment_id)
+            if not comment:
+                return []
+                
+            # Extract file path and line number
+            file_path = comment.path
+            line_number = comment.raw_data["line"] if "line" in comment.raw_data else comment.raw_data.get("original_line")
+            
+            # Get all comments
+            all_comments = list(self.pr.get_comments())
+            
+            # Filter comments on the same line of the same file
+            thread_comments = [
+                c for c in all_comments 
+                if c.path == file_path and (c.raw_data.get("line") == line_number or c.raw_data.get("original_line") == line_number)
+            ]
+            
+            # Sort chronologically
+            thread_comments.sort(key=lambda c: c.created_at)
+            
+            return thread_comments
+                
+        except Exception as e:
+            get_logger().warning(f"Failed to get review comments for comment {comment_id}, error: {e}")
+            return []
 
     def _publish_inline_comments_fallback_with_verification(self, comments: list[dict]):
         """
