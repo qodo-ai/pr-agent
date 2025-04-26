@@ -265,6 +265,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         stop=stop_after_attempt(OPENAI_RETRIES)
     )
     async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2, img_path: str = None):
+        print("\n\n\nLiteLLMAIHandler.chat_completion", model, system, user, temperature, img_path, "\n\n\n")
         try:
             resp, finish_reason = None, None
             deployment_id = self.deployment_id

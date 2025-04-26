@@ -39,6 +39,7 @@ class LangChainOpenAIHandler(BaseAiHandler):
     @retry(exceptions=(APIError, Timeout, AttributeError, RateLimitError),
            tries=OPENAI_RETRIES, delay=2, backoff=2, jitter=(1, 3))
     async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2):
+        print("\n\n\nLangChainOpenAIHandler.chat_completion", model, system, user, temperature, "\n\n\n")
         try:
             messages = [SystemMessage(content=system), HumanMessage(content=user)]
 
