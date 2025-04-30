@@ -4,10 +4,10 @@
 #
 # Use this page: 'https://qodo-merge-docs.qodo.ai/ai_search/' to ask questions about the configuration options.
 
-[config]
-# models
-model="o4-mini"
-fallback_models=["gpt-4.1"]
+[config] # in configuration.toml
+model="bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
+fallback_models=["bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0", "bedrock/anthropic.claude-3-7-sonnet-20250219-v1:0"]
+
 #model_reasoning="o4-mini" # dedictated reasoning model for self-reflection
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
 # CLI
@@ -227,7 +227,7 @@ enable_help_text=false
 
 [github]
 # The type of deployment to create. Valid values are 'app' or 'user'.
-deployment_type = "user"
+deployment_type = "app"
 ratelimit_retries = 5
 base_url = "https://api.github.com"
 publish_inline_comments_fallback_with_verification = true

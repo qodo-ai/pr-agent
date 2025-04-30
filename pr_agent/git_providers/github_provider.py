@@ -3,6 +3,7 @@ import difflib
 import hashlib
 import itertools
 import re
+import os
 import time
 import traceback
 import json
@@ -829,7 +830,7 @@ class GithubProvider(GitProvider):
         self.auth = None
         if self.deployment_type == 'app':
             try:
-                private_key = get_settings().github.private_key
+                private_key = os.environ.get('GITHUB_PRIVATE_KEY')
                 app_id = get_settings().github.app_id
             except AttributeError as e:
                 raise ValueError("GitHub app ID and private key are required when using GitHub app deployment") from e
