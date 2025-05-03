@@ -3,12 +3,22 @@ from typing import Dict
 
 from pr_agent.config_loader import get_settings
 
+_cached_bad_extensions_set: set[str] | None = None
+
+
+def _get_bad_extensions_set() -> set[str]:
+    global _cached_bad_extensions_set
+
+    if _cached_bad_extensions_set is None:
+        _cached_bad_extensions_set = set(get_settings().bad_extensions.default)
+        if get_settings().config.use_extra_bad_extensions:
+            _cached_bad_extensions_set.update(set(get_settings().bad_extensions.extra))
+    return _cached_bad_extensions_set
+
 
 def filter_bad_extensions(files):
     # Bad Extensions, source: https://github.com/EleutherAI/github-downloader/blob/345e7c4cbb9e0dc8a0615fd995a08bf9d73b3fe6/download_repo_text.py  # noqa: E501
-    bad_extensions = get_settings().bad_extensions.default
-    if get_settings().config.use_extra_bad_extensions:
-        bad_extensions += get_settings().bad_extensions.extra
+    bad_extensions = _get_bad_extensions_set()
     return [f for f in files if f.filename is not None and is_valid_file(f.filename, bad_extensions)]
 
 
@@ -16,10 +26,7 @@ def is_valid_file(filename:str, bad_extensions=None) -> bool:
     if not filename:
         return False
     if not bad_extensions:
-        bad_extensions = get_settings().bad_extensions.default
-        if get_settings().config.use_extra_bad_extensions:
-            bad_extensions += get_settings().bad_extensions.extra
-
+        bad_extensions = _get_bad_extensions_set()
     auto_generated_files = ['package-lock.json', 'yarn.lock', 'composer.lock', 'Gemfile.lock', 'poetry.lock']
     for forbidden_file in auto_generated_files:
         if filename.endswith(forbidden_file):
