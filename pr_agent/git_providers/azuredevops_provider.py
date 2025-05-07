@@ -170,10 +170,6 @@ class AzureDevopsProvider(GitProvider):
             return []
 
     def is_supported(self, capability: str) -> bool:
-        if capability in [
-            "get_issue_comments",
-        ]:
-            return False
         return True
 
     def set_pr(self, pr_url: str):
@@ -390,6 +386,13 @@ class AzureDevopsProvider(GitProvider):
             self.temp_comments.append(created_comment)
         return created_comment
 
+    def publish_persistent_comment(self, pr_comment: str,
+                                   initial_header: str,
+                                   update_header: bool = True,
+                                   name='review',
+                                   final_update_message=True):
+        return self.publish_persistent_comment_full(pr_comment, initial_header, update_header, name, final_update_message)
+
     def publish_description(self, pr_title: str, pr_body: str):
         if len(pr_body) > MAX_PR_DESCRIPTION_AZURE_LENGTH:
 
@@ -432,7 +435,6 @@ class AzureDevopsProvider(GitProvider):
 
     def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str, original_suggestion=None):
         self.publish_inline_comments([self.create_inline_comment(body, relevant_file, relevant_line_in_file)])
-
 
     def create_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str,
                               absolute_position: int = None):
@@ -617,3 +619,13 @@ class AzureDevopsProvider(GitProvider):
 
     def get_line_link(self, relevant_file: str, relevant_line_start: int, relevant_line_end: int = None) -> str:
         return self.pr_url+f"?_a=files&path={relevant_file}"
+
+    def get_comment_url(self, comment) -> str:
+        return self.pr_url + "?discussionId=" + str(comment.thread_id)
+
+    def get_latest_commit_url(self) -> str:
+        commits = self.azure_devops_client.get_pull_request_commits(self.repo_slug, self.pr_num, self.workspace_slug)
+        last = commits[0]
+        url = self.azure_devops_client.normalized_url + "/" + self.workspace_slug + "/_git/" + self.repo_slug + "/commit/" + last.commit_id
+        return url
+    
