@@ -276,14 +276,13 @@ class PRCodeSuggestions:
             return new_comment
 
         history_header = f"#### Previous suggestions\n"
-        last_commit_num = git_provider.get_latest_commit_url().split('/')[-1][:7]
+        last_commit_url = git_provider.get_latest_commit_url()
+        last_commit_num = last_commit_url.split('/')[-1][:7]
         if only_fold: # A user clicked on the 'self-review' checkbox
             text = get_settings().pr_code_suggestions.code_suggestions_self_review_text
             latest_suggestion_header = f"\n\n- [x]  {text}"
         else:
-            latest_suggestion_header = f"Latest suggestions up to {last_commit_num}"
-        latest_commit_html_comment = f"<!-- {last_commit_num} -->"
-        found_comment = None
+            latest_suggestion_header = f"Latest suggestions up to [{last_commit_num}]({last_commit_url})"
 
         if max_previous_comments > 0:
             try:
@@ -312,7 +311,7 @@ class PRCodeSuggestions:
 
                             new_suggestion_table = pr_comment.replace(initial_header, "").strip()
 
-                            pr_comment_updated = f"{initial_header}\n{latest_commit_html_comment}\n\n"
+                            pr_comment_updated = f"{initial_header}\n\n"
                             pr_comment_updated += f"{latest_suggestion_header}\n{new_suggestion_table}\n\n___\n\n"
                             pr_comment_updated += f"{history_header}{prev_suggestion_table}\n"
                         else:
@@ -341,8 +340,7 @@ class PRCodeSuggestions:
 
                             new_suggestion_table = pr_comment.replace(initial_header, "").strip()
 
-                            pr_comment_updated = f"{initial_header}\n"
-                            pr_comment_updated += f"{latest_commit_html_comment}\n\n"
+                            pr_comment_updated = f"{initial_header}\n\n"
                             pr_comment_updated += f"{latest_suggestion_header}\n\n{new_suggestion_table}\n\n"
                             pr_comment_updated += "___\n\n"
                             pr_comment_updated += f"{history_header}\n"
@@ -362,7 +360,7 @@ class PRCodeSuggestions:
 
         # if we are here, we did not find a previous comment to update
         body = pr_comment.replace(initial_header, "").strip()
-        pr_comment = f"{initial_header}\n\n{latest_commit_html_comment}\n\n{body}\n\n"
+        pr_comment = f"{initial_header}\n\n{body}\n\n"
         if progress_response:
             git_provider.edit_comment(progress_response, pr_comment)
             new_comment = progress_response

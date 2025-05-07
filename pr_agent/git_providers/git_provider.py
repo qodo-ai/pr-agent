@@ -251,7 +251,7 @@ class GitProvider(ABC):
                     self.edit_comment(comment, pr_comment_updated)
                     if final_update_message:
                         self.publish_comment(
-                            f"**[Persistent {name}]({comment_url})** updated to latest commit {latest_commit_url}")
+                            f"**[Persistent {name}]({comment_url})** updated to latest commit [{latest_commit_url.split("/")[-1]}]({latest_commit_url})")
                     return
         except Exception as e:
             get_logger().exception(f"Failed to update persistent review, error: {e}")
