@@ -22,6 +22,7 @@ from starlette_context.middleware import RawContextMiddleware
 from pr_agent.agent.pr_agent import PRAgent, command2class
 from pr_agent.algo.utils import update_settings_from_args
 from pr_agent.config_loader import get_settings
+from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 
@@ -33,14 +34,18 @@ azure_devops_server = get_settings().get("azure_devops_server")
 WEBHOOK_USERNAME = azure_devops_server.get("webhook_username")
 WEBHOOK_PASSWORD = azure_devops_server.get("webhook_password")
 
-async def handle_request_comment( url: str, body: str, log_context: dict
-):
+async def handle_request_comment(url: str, body: str, thread_id: int, comment_id: int, log_context: dict):
     log_context["action"] = body
     log_context["api_url"] = url
-
     try:
         with get_logger().contextualize(**log_context):
-            await PRAgent().handle_request(url, body)
+            agent = PRAgent()
+            provider = get_git_provider_with_context(pr_url=url)
+            handled = await agent.handle_request(url, body, notify=lambda: provider.reply_to_thread(thread_id, "On it! ⏳", True))
+            # mark command comment as closed
+            if handled:
+                provider.set_thread_status(thread_id, "closed")
+                provider.remove_initial_comment()
     except Exception as e:
         get_logger().exception(f"Failed to handle webhook", artifact={"url": url, "body": body}, error=str(e))
 
@@ -83,7 +88,6 @@ async def _perform_commands_azure(commands_conf: str, agent: PRAgent, api_url: s
 
 
 async def handle_request_azure(data, log_context):
-    actions = []
     if data["eventType"] == "git.pullrequest.created":
         # API V1 (latest)
         pr_url = unquote(data["resource"]["_links"]["web"]["href"].replace("_apis/git/repositories", "_git"))
@@ -95,11 +99,16 @@ async def handle_request_azure(data, log_context):
             content=jsonable_encoder({"message": "webhook triggered successfully"})
         )
     elif data["eventType"] == "ms.vss-code.git-pullrequest-comment-event" and "content" in data["resource"]["comment"]:
-        if available_commands_rgx.match(data["resource"]["comment"]["content"]):
+        comment = data["resource"]["comment"]
+        if available_commands_rgx.match(comment["content"]):
             if(data["resourceVersion"] == "2.0"):
                 repo = data["resource"]["pullRequest"]["repository"]["webUrl"]
                 pr_url = unquote(f'{repo}/pullrequest/{data["resource"]["pullRequest"]["pullRequestId"]}')
-                actions = [data["resource"]["comment"]["content"]]
+                action = comment["content"]
+                thread_url = comment["_links"]["threads"]["href"]
+                thread_id = int(thread_url.split("/")[-1])
+                comment_id = int(comment["id"])
+                pass
             else:
                 # API V1 not supported as it does not contain the PR URL
                 return JSONResponse(
@@ -119,15 +128,14 @@ async def handle_request_azure(data, log_context):
     log_context["event"] = data["eventType"]
     log_context["api_url"] = pr_url
 
-    for action in actions:
-        try:
-            await handle_request_comment(pr_url, action, log_context)
-        except Exception as e:
-            get_logger().error("Azure DevOps Trigger failed. Error:" + str(e))
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=json.dumps({"message": "Internal server error"}),
-            )
+    try:
+        await handle_request_comment(pr_url, action, thread_id, comment_id, log_context)
+    except Exception as e:
+        get_logger().error("Azure DevOps Trigger failed. Error:" + str(e))
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=json.dumps({"message": "Internal server error"}),
+        )
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED, content=jsonable_encoder({"message": "webhook triggered successfully"})
     )

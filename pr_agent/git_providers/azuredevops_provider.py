@@ -117,6 +117,10 @@ class AzureDevopsProvider(GitProvider):
                 get_logger().warning(f"Azure failed to publish code suggestion, error: {e}")
         return True
 
+    def reply_to_comment_from_comment_id(self, comment_id: int, body: str, is_temporary: bool = False) -> Comment:
+        # comment_id is actually thread_id
+        return self.reply_to_thread(comment_id, body, is_temporary)
+
     def get_pr_description_full(self) -> str:
         return self.pr.description
 
@@ -537,6 +541,29 @@ class AzureDevopsProvider(GitProvider):
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
         return True
 
+    def set_like(self, thread_id: int, comment_id: int, create: bool = True):
+        if create:
+            self.azure_devops_client.create_like(self.repo_slug, self.pr_num, thread_id, comment_id, project=self.workspace_slug)
+        else:
+            self.azure_devops_client.delete_like(self.repo_slug, self.pr_num, thread_id, comment_id, project=self.workspace_slug)
+            
+    def set_thread_status(self, thread_id: int, status: str):
+        try:
+            self.azure_devops_client.update_thread(CommentThread(status=status), self.repo_slug, self.pr_num, thread_id, self.workspace_slug)
+        except Exception as e:
+            get_logger().exception(f"Failed to set thread status, error: {e}")
+            
+    def reply_to_thread(self, thread_id: int, body: str, is_temporary: bool = False) -> Comment:
+        try:
+            comment = Comment(content=body)
+            response = self.azure_devops_client.create_comment(comment, self.repo_slug, self.pr_num, thread_id, self.workspace_slug)
+            response.thread_id = thread_id
+            if is_temporary:
+                self.temp_comments.append(response)
+            return response
+        except Exception as e:
+            get_logger().exception(f"Failed to reply to thread, error: {e}")
+    
     @staticmethod
     def _parse_pr_url(pr_url: str) -> Tuple[str, str, int]:
         parsed_url = urlparse(pr_url)
