@@ -19,13 +19,9 @@ MAX_PR_DESCRIPTION_AZURE_LENGTH = 4000-1
 
 try:
     # noinspection PyUnresolvedReferences
-    # noinspection PyUnresolvedReferences
     from azure.devops.connection import Connection
     # noinspection PyUnresolvedReferences
-    from azure.devops.v7_1.git.models import (Comment, CommentThread,
-                                              GitPullRequest,
-                                              GitPullRequestIterationChanges,
-                                              GitVersionDescriptor)
+    from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient)
     # noinspection PyUnresolvedReferences
     from azure.identity import DefaultAzureCredential
     from msrest.authentication import BasicAuthentication
@@ -121,31 +117,29 @@ class AzureDevopsProvider(GitProvider):
                 get_logger().warning(f"Azure failed to publish code suggestion, error: {e}")
         return True
 
-
-
     def get_pr_description_full(self) -> str:
         return self.pr.description
 
-    def edit_comment(self, comment, body: str):
+    def edit_comment(self, comment: Comment, body: str):
         try:
             self.azure_devops_client.update_comment(
                 repository_id=self.repo_slug,
                 pull_request_id=self.pr_num,
-                thread_id=comment["thread_id"],
-                comment_id=comment["comment_id"],
+                thread_id=comment.thread_id,
+                comment_id=comment.id,
                 comment=Comment(content=body),
                 project=self.workspace_slug,
             )
         except Exception as e:
             get_logger().exception(f"Failed to edit comment, error: {e}")
 
-    def remove_comment(self, comment):
+    def remove_comment(self, comment: Comment):
         try:
             self.azure_devops_client.delete_comment(
                 repository_id=self.repo_slug,
                 pull_request_id=self.pr_num,
-                thread_id=comment["thread_id"],
-                comment_id=comment["comment_id"],
+                thread_id=comment.thread_id,
+                comment_id=comment.id,
                 project=self.workspace_slug,
             )
         except Exception as e:
@@ -378,7 +372,7 @@ class AzureDevopsProvider(GitProvider):
             get_logger().exception(f"Failed to get diff files, error: {e}")
             return []
 
-    def publish_comment(self, pr_comment: str, is_temporary: bool = False, thread_context=None):
+    def publish_comment(self, pr_comment: str, is_temporary: bool = False, thread_context=None) -> Comment:
         if is_temporary and not get_settings().config.publish_output_progress:
             get_logger().debug(f"Skipping publish_comment for temporary comment: {pr_comment}")
             return None
@@ -390,10 +384,11 @@ class AzureDevopsProvider(GitProvider):
             repository_id=self.repo_slug,
             pull_request_id=self.pr_num,
         )
-        response = {"thread_id": thread_response.id, "comment_id": thread_response.comments[0].id}
+        created_comment = thread_response.comments[0]
+        created_comment.thread_id = thread_response.id
         if is_temporary:
-            self.temp_comments.append(response)
-        return response
+            self.temp_comments.append(created_comment)
+        return created_comment
 
     def publish_description(self, pr_title: str, pr_body: str):
         if len(pr_body) > MAX_PR_DESCRIPTION_AZURE_LENGTH:
@@ -522,7 +517,7 @@ class AzureDevopsProvider(GitProvider):
     def get_user_id(self):
         return 0
 
-    def get_issue_comments(self):
+    def get_issue_comments(self) -> list[Comment]:
         threads = self.azure_devops_client.get_threads(repository_id=self.repo_slug, pull_request_id=self.pr_num, project=self.workspace_slug)
         threads.reverse()
         comment_list = []
@@ -562,7 +557,7 @@ class AzureDevopsProvider(GitProvider):
         return workspace_slug, repo_slug, pr_number
 
     @staticmethod
-    def _get_azure_devops_client():
+    def _get_azure_devops_client() -> GitClient:
         org = get_settings().azure_devops.get("org", None)
         pat = get_settings().azure_devops.get("pat", None)
 
