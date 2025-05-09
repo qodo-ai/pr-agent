@@ -21,7 +21,7 @@ try:
     # noinspection PyUnresolvedReferences
     from azure.devops.connection import Connection
     # noinspection PyUnresolvedReferences
-    from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient)
+    from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient, CommentThreadContext)
     # noinspection PyUnresolvedReferences
     from azure.identity import DefaultAzureCredential
     from msrest.authentication import BasicAuthentication
@@ -563,6 +563,13 @@ class AzureDevopsProvider(GitProvider):
             return response
         except Exception as e:
             get_logger().exception(f"Failed to reply to thread, error: {e}")
+    
+    def get_thread_context(self, thread_id: int) -> CommentThreadContext:
+        try:
+            thread = self.azure_devops_client.get_pull_request_thread(self.repo_slug, self.pr_num, thread_id, self.workspace_slug)
+            return thread.thread_context
+        except Exception as e:
+            get_logger().exception(f"Failed to set thread status, error: {e}")
     
     @staticmethod
     def _parse_pr_url(pr_url: str) -> Tuple[str, str, int]:

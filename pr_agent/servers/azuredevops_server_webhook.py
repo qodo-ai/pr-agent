@@ -23,6 +23,7 @@ from pr_agent.agent.pr_agent import PRAgent, command2class
 from pr_agent.algo.utils import update_settings_from_args
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider_with_context
+from pr_agent.git_providers.azuredevops_provider import AzureDevopsProvider
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 
@@ -41,6 +42,7 @@ async def handle_request_comment(url: str, body: str, thread_id: int, comment_id
         with get_logger().contextualize(**log_context):
             agent = PRAgent()
             provider = get_git_provider_with_context(pr_url=url)
+            body = handle_line_comment(body, thread_id, provider)
             handled = await agent.handle_request(url, body, notify=lambda: provider.reply_to_thread(thread_id, "On it! ⏳", True))
             # mark command comment as closed
             if handled:
@@ -49,6 +51,29 @@ async def handle_request_comment(url: str, body: str, thread_id: int, comment_id
     except Exception as e:
         get_logger().exception(f"Failed to handle webhook", artifact={"url": url, "body": body}, error=str(e))
 
+def handle_line_comment(body: str, thread_id: int, provider: AzureDevopsProvider):
+    if not '/ask' in body:
+        return body
+    thread_context = provider.get_thread_context(thread_id)
+    if not thread_context:
+        return body
+    
+    question = body.replace('/ask', '').strip()
+    path = thread_context.file_path
+    if thread_context.left_file_end or thread_context.left_file_start:
+        start_line = thread_context.left_file_start.line
+        end_line = thread_context.left_file_end.line
+        side = "left"
+    elif thread_context.right_file_end or thread_context.right_file_start:
+        start_line = thread_context.right_file_start.line
+        end_line = thread_context.right_file_end.line
+        side = "right"
+    else:
+        get_logger().info("No line range found in thread context", artifact={"thread_context": thread_context})
+        return body
+    body = f"/ask_line --line_start={start_line} --line_end={end_line} --side={side} --file_name={path} --comment_id={thread_id} {question}"
+    return body
+        
 
 # currently only basic auth is supported with azure webhooks
 # for this reason, https must be enabled to ensure the credentials are not sent in clear text
