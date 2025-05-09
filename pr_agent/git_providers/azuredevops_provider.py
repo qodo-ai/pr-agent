@@ -21,7 +21,7 @@ try:
     # noinspection PyUnresolvedReferences
     from azure.devops.connection import Connection
     # noinspection PyUnresolvedReferences
-    from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient, CommentThreadContext)
+    from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient, CommentThreadContext, CommentPosition)
     # noinspection PyUnresolvedReferences
     from azure.identity import DefaultAzureCredential
     from msrest.authentication import BasicAuthentication
@@ -73,40 +73,13 @@ class AzureDevopsProvider(GitProvider):
                                        f"relevant_lines_start is {relevant_lines_start}")
                 continue
 
-            if relevant_lines_end > relevant_lines_start:
-                post_parameters = {
-                    "body": body,
-                    "path": relevant_file,
-                    "line": relevant_lines_end,
-                    "start_line": relevant_lines_start,
-                    "start_side": "RIGHT",
-                }
-            else:  # API is different for single line comments
-                post_parameters = {
-                    "body": body,
-                    "path": relevant_file,
-                    "line": relevant_lines_start,
-                    "side": "RIGHT",
-                }
-            post_parameters_list.append(post_parameters)
-        if not post_parameters_list:
-            return False
-
-        for post_parameters in post_parameters_list:
+            thread_context = CommentThreadContext(
+                file_path=relevant_file,
+                right_file_start=CommentPosition(offset=1, line=relevant_lines_start),
+                right_file_end=CommentPosition(offset=1, line=relevant_lines_end))
+            comment = Comment(content=body, comment_type=1)
+            thread = CommentThread(comments=[comment], thread_context=thread_context)
             try:
-                comment = Comment(content=post_parameters["body"], comment_type=1)
-                thread = CommentThread(comments=[comment],
-                                       thread_context={
-                                           "filePath": post_parameters["path"],
-                                           "rightFileStart": {
-                                               "line": post_parameters["start_line"],
-                                               "offset": 1,
-                                           },
-                                           "rightFileEnd": {
-                                               "line": post_parameters["line"],
-                                               "offset": 1,
-                                           },
-                                       })
                 self.azure_devops_client.create_thread(
                     comment_thread=thread,
                     project=self.workspace_slug,
@@ -114,7 +87,7 @@ class AzureDevopsProvider(GitProvider):
                     pull_request_id=self.pr_num
                 )
             except Exception as e:
-                get_logger().warning(f"Azure failed to publish code suggestion, error: {e}")
+                get_logger().error(f"Azure failed to publish code suggestion, error: {e}", suggestion=suggestion)
         return True
 
     def reply_to_comment_from_comment_id(self, comment_id: int, body: str, is_temporary: bool = False) -> Comment:
