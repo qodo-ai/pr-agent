@@ -28,12 +28,12 @@ from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 router = APIRouter()
 available_commands_rgx = re.compile(r"^\/(" + "|".join(command2class.keys()) + r")\s*")
 azure_devops_server = get_settings().get("azure_devops_server")
-WEBHOOK_USERNAME = azure_devops_server.get("webhook_username")
-WEBHOOK_PASSWORD = azure_devops_server.get("webhook_password")
+WEBHOOK_USERNAME = azure_devops_server.get("webhook_username", None)
+WEBHOOK_PASSWORD = azure_devops_server.get("webhook_password", None)
 
 async def handle_request_comment(url: str, body: str, thread_id: int, comment_id: int, log_context: dict):
     log_context["action"] = body
@@ -78,14 +78,17 @@ def handle_line_comment(body: str, thread_id: int, provider: AzureDevopsProvider
 # currently only basic auth is supported with azure webhooks
 # for this reason, https must be enabled to ensure the credentials are not sent in clear text
 def authorize(credentials: HTTPBasicCredentials = Depends(security)):
-        is_user_ok = secrets.compare_digest(credentials.username, WEBHOOK_USERNAME)
-        is_pass_ok = secrets.compare_digest(credentials.password, WEBHOOK_PASSWORD)
-        if not (is_user_ok and is_pass_ok):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail='Incorrect username or password.',
-                headers={'WWW-Authenticate': 'Basic'},
-            )
+    if WEBHOOK_USERNAME is None or WEBHOOK_PASSWORD is None:
+        return
+    
+    is_user_ok = secrets.compare_digest(credentials.username, WEBHOOK_USERNAME)
+    is_pass_ok = secrets.compare_digest(credentials.password, WEBHOOK_PASSWORD)
+    if not (is_user_ok and is_pass_ok):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Incorrect username or password.',
+            headers={'WWW-Authenticate': 'Basic'},
+        )
 
 
 async def _perform_commands_azure(commands_conf: str, agent: PRAgent, api_url: str, log_context: dict):
