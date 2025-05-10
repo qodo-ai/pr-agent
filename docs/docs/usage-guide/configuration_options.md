@@ -39,7 +39,7 @@ Qodo Merge will know to remove the surrounding quotes when reading the configura
 
 `Platforms supported: GitHub, GitLab, Bitbucket, Azure DevOps`
 
-By uploading a local `.pr_agent.toml` file to the root of the repo's default branch, you can edit and customize any configuration parameter. Note that you need to upload `.pr_agent.toml` prior to creating a PR, in order for the configuration to take effect.
+By uploading a local `.pr_agent.toml` file to the root of the repo's default branch, you can edit and customize any configuration parameter. Note that you need to upload or update `.pr_agent.toml` before using the PR Agent tools (either at PR creation or via manual trigger) for the configuration to take effect.
 
 For example, if you set in `.pr_agent.toml`:
 
