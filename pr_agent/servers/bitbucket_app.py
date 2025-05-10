@@ -127,11 +127,22 @@ def should_process_pr_logic(data) -> bool:
         source_branch = pr_data.get("source", {}).get("branch", {}).get("name", "")
         target_branch = pr_data.get("destination", {}).get("branch", {}).get("name", "")
         sender = _get_username(data)
+        repo_full_name = pr_data.get("destination", {}).get("repository", {}).get("full_name", "")
+
+        print(f"DEBUG: repo_full_name={repo_full_name}, ignore_repos={get_settings().get('CONFIG.IGNORE_REPOSITORIES', [])}")
+        # logic to ignore PRs from specific repositories
+        ignore_repos = get_settings().get("CONFIG.IGNORE_REPOSITORIES", [])
+        if ignore_repos and repo_full_name:
+            if repo_full_name in ignore_repos:
+                print(f"DEBUG: Ignoring due to repo match: {repo_full_name}")
+                get_logger().info(f"Ignoring PR from repository '{repo_full_name}' due to 'config.ignore_repositories' setting")
+                return False
 
         # logic to ignore PRs from specific users
         ignore_pr_users = get_settings().get("CONFIG.IGNORE_PR_AUTHORS", [])
         if ignore_pr_users and sender:
             if sender in ignore_pr_users:
+                print(f"DEBUG: Ignoring due to user match: {sender}")
                 get_logger().info(f"Ignoring PR from user '{sender}' due to 'config.ignore_pr_authors' setting")
                 return False
 
@@ -141,6 +152,7 @@ def should_process_pr_logic(data) -> bool:
             if not isinstance(ignore_pr_title_re, list):
                 ignore_pr_title_re = [ignore_pr_title_re]
             if ignore_pr_title_re and any(re.search(regex, title) for regex in ignore_pr_title_re):
+                print(f"DEBUG: Ignoring due to title match: {title}")
                 get_logger().info(f"Ignoring PR with title '{title}' due to config.ignore_pr_title setting")
                 return False
 
@@ -148,15 +160,19 @@ def should_process_pr_logic(data) -> bool:
         ignore_pr_target_branches = get_settings().get("CONFIG.IGNORE_PR_TARGET_BRANCHES", [])
         if (ignore_pr_source_branches or ignore_pr_target_branches):
             if any(re.search(regex, source_branch) for regex in ignore_pr_source_branches):
+                print(f"DEBUG: Ignoring due to source branch match: {source_branch}")
                 get_logger().info(
                     f"Ignoring PR with source branch '{source_branch}' due to config.ignore_pr_source_branches settings")
                 return False
             if any(re.search(regex, target_branch) for regex in ignore_pr_target_branches):
+                print(f"DEBUG: Ignoring due to target branch match: {target_branch}")
                 get_logger().info(
                     f"Ignoring PR with target branch '{target_branch}' due to config.ignore_pr_target_branches settings")
                 return False
     except Exception as e:
+        print(f"DEBUG: Exception in should_process_pr_logic: {e}")
         get_logger().error(f"Failed 'should_process_pr_logic': {e}")
+    print("DEBUG: Returning True from should_process_pr_logic")
     return True
 
 
