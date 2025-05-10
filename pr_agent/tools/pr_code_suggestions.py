@@ -267,33 +267,23 @@ class PRCodeSuggestions:
                 up_to_commit_txt = f" up to commit {match.group(0)[4:-3].strip()}"
             return up_to_commit_txt
 
-        if isinstance(git_provider, AzureDevopsProvider): # get_latest_commit_url is not supported yet
-            if progress_response:
-                git_provider.edit_comment(progress_response, pr_comment)
-                new_comment = progress_response
-            else:
-                new_comment = git_provider.publish_comment(pr_comment)
-            return new_comment
-
         history_header = f"#### Previous suggestions\n"
-        last_commit_num = git_provider.get_latest_commit_url().split('/')[-1][:7]
+        last_commit_url = git_provider.get_latest_commit_url()
+        last_commit_num = last_commit_url.split('/')[-1][:7]
         if only_fold: # A user clicked on the 'self-review' checkbox
             text = get_settings().pr_code_suggestions.code_suggestions_self_review_text
             latest_suggestion_header = f"\n\n- [x]  {text}"
         else:
-            latest_suggestion_header = f"Latest suggestions up to {last_commit_num}"
-        latest_commit_html_comment = f"<!-- {last_commit_num} -->"
-        found_comment = None
+            latest_suggestion_header = f"Latest suggestions up to [{last_commit_num}]({last_commit_url})"
 
-        if max_previous_comments > 0:
-            try:
-                prev_comments = list(git_provider.get_issue_comments())
-                for comment in prev_comments:
-                    if comment.body.startswith(initial_header):
-                        prev_suggestions = comment.body
-                        found_comment = comment
-                        comment_url = git_provider.get_comment_url(comment)
+        try:
+            prev_comments = list(git_provider.get_issue_comments())
+            for comment in prev_comments:
+                if comment.body.startswith(initial_header):
+                    prev_suggestions = comment.body
+                    comment_url = git_provider.get_comment_url(comment)
 
+                    if max_previous_comments > 0:
                         if history_header.strip() not in comment.body:
                             # no history section
                             # extract everything between <table> and </table> in comment.body including <table> and </table>
@@ -312,7 +302,7 @@ class PRCodeSuggestions:
 
                             new_suggestion_table = pr_comment.replace(initial_header, "").strip()
 
-                            pr_comment_updated = f"{initial_header}\n{latest_commit_html_comment}\n\n"
+                            pr_comment_updated = f"{initial_header}\n\n"
                             pr_comment_updated += f"{latest_suggestion_header}\n{new_suggestion_table}\n\n___\n\n"
                             pr_comment_updated += f"{history_header}{prev_suggestion_table}\n"
                         else:
@@ -341,28 +331,31 @@ class PRCodeSuggestions:
 
                             new_suggestion_table = pr_comment.replace(initial_header, "").strip()
 
-                            pr_comment_updated = f"{initial_header}\n"
-                            pr_comment_updated += f"{latest_commit_html_comment}\n\n"
+                            pr_comment_updated = f"{initial_header}\n\n"
                             pr_comment_updated += f"{latest_suggestion_header}\n\n{new_suggestion_table}\n\n"
                             pr_comment_updated += "___\n\n"
                             pr_comment_updated += f"{history_header}\n"
                             pr_comment_updated += f"{prev_suggestion_table}\n"
+                    else:
+                        # do not keep history => replace entire comment
+                        body = pr_comment.replace(initial_header, "").strip()
+                        pr_comment_updated = f"{initial_header}\n\n{body}\n\n"
 
-                        get_logger().info(f"Persistent mode - updating comment {comment_url} to latest {name} message")
-                        if progress_response:  # publish to 'progress_response' comment, because it refreshes immediately
-                            git_provider.edit_comment(progress_response, pr_comment_updated)
-                            git_provider.remove_comment(comment)
-                            comment = progress_response
-                        else:
-                            git_provider.edit_comment(comment, pr_comment_updated)
-                        return comment
-            except Exception as e:
-                get_logger().exception(f"Failed to update persistent review, error: {e}")
-                pass
+                    get_logger().info(f"Persistent mode - updating comment {comment_url} to latest {name} message")
+                    if progress_response:  # publish to 'progress_response' comment, because it refreshes immediately
+                        git_provider.edit_comment(progress_response, pr_comment_updated)
+                        git_provider.remove_comment(comment)
+                        comment = progress_response
+                    else:
+                        git_provider.edit_comment(comment, pr_comment_updated)
+                    return comment
+        except Exception as e:
+            get_logger().exception(f"Failed to update persistent review, error: {e}")
+            pass
 
         # if we are here, we did not find a previous comment to update
         body = pr_comment.replace(initial_header, "").strip()
-        pr_comment = f"{initial_header}\n\n{latest_commit_html_comment}\n\n{body}\n\n"
+        pr_comment = f"{initial_header}\n\n{body}\n\n"
         if progress_response:
             git_provider.edit_comment(progress_response, pr_comment)
             new_comment = progress_response
