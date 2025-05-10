@@ -507,10 +507,10 @@ class PRDescription:
         ai_type = self.data.get('type')
         if ai_type and not re.search(r'<!--\s*pr_agent:type\s*-->', body):
             if isinstance(ai_type, list):
-                pr_types = [f"{ai_header}{t}" for t in ai_type]
-                pr_type = ','.join(pr_types)
+                pr_type = ', '.join(str(t) for t in ai_type)
             else:
-                pr_type = f"{ai_header}{ai_type}"
+                pr_type = ai_type
+            pr_type = f"{ai_header}{pr_type}"
             body = body.replace('pr_agent:type', pr_type)
 
         ai_summary = self.data.get('description')
