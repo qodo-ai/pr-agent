@@ -4,10 +4,13 @@
 #
 # Use this page: 'https://qodo-merge-docs.qodo.ai/ai_search/' to ask questions about the configuration options.
 
-[config]
+
 # models
-model="o4-mini"
-fallback_models=["gpt-4.1"]
+[config] # in configuration.toml 
+model="openrouter/anthropic/claude-3.7-sonnet"
+fallback_models=["openrouter/deepseek/deepseek-chat"]
+custom_model_max_tokens=20000
+
 #model_reasoning="o4-mini" # dedictated reasoning model for self-reflection
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
 # CLI
