@@ -11,6 +11,7 @@ from pr_agent.git_providers.git_provider import GitProvider
 from pr_agent.git_providers.github_provider import GithubProvider
 from pr_agent.git_providers.gitlab_provider import GitLabProvider
 from pr_agent.git_providers.local_git_provider import LocalGitProvider
+from pr_agent.git_providers.gitea_provider import GiteaProvider
 
 _GIT_PROVIDERS = {
     'github': GithubProvider,
@@ -21,6 +22,7 @@ _GIT_PROVIDERS = {
     'codecommit': CodeCommitProvider,
     'local': LocalGitProvider,
     'gerrit': GerritProvider,
+    'gitea': GiteaProvider,
 }
 
 
