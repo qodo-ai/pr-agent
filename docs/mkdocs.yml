@@ -41,6 +41,7 @@ nav:
     - 💎 Similar Code: 'tools/similar_code.md'
     - 💎 Implement: 'tools/implement.md'
     - 💎 Scan Repo Discussions: 'tools/scan_repo_discussions.md'
+    - 💎 Repo Statistics: 'tools/repo_statistics.md'
   - Core Abilities:
       - 'core-abilities/index.md'
       - Auto best practices: 'core-abilities/auto_best_practices.md'

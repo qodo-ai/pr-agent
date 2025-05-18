@@ -48,6 +48,7 @@ PR-Agent and Qodo Merge offers extensive pull request functionalities across var
 |       | [Test](https://qodo-merge-docs.qodo.ai/tools/test/) 💎                                                  |   ✅   |   ✅   |           |              |
 |       | [Implement](https://qodo-merge-docs.qodo.ai/tools/implement/) 💎                                        |   ✅   |   ✅   |    ✅     |              |
 |       | [Scan Repo Discussions](https://qodo-merge-docs.qodo.ai/tools/scan_repo_discussions/) 💎                |   ✅   |        |           |              |
+|       | [Repo Statistics](https://qodo-merge-docs.qodo.ai/tools/repo_statistics/) 💎                            |   ✅   |        |           |              |
 |       | [Auto-Approve](https://qodo-merge-docs.qodo.ai/tools/improve/?h=auto#auto-approval) 💎                  |   ✅   |   ✅   |    ✅     |              |
 |       |                                                                                                         |        |        |           |              |
 | USAGE | [CLI](https://qodo-merge-docs.qodo.ai/usage-guide/automations_and_usage/#local-repo-cli)                |   ✅   |   ✅   |    ✅     |      ✅      |

@@ -3,7 +3,7 @@
 Here is a list of Qodo Merge tools, each with a dedicated page that explains how to use it:
 
 | Tool                                                                                     | Description                                                                                                                                 |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+|------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
 | **[PR Description (`/describe`](./describe.md))**                                        | Automatically generating PR description - title, type, summary, code walkthrough and labels                                                 |
 | **[PR Review (`/review`](./review.md))**                                                 | Adjustable feedback about the PR, possible issues, security concerns, review effort and more                                                |
 | **[Code Suggestions (`/improve`](./improve.md))**                                        | Code suggestions for improving the PR                                                                                                       |
@@ -20,5 +20,6 @@ Here is a list of Qodo Merge tools, each with a dedicated page that explains how
 | **💎 [CI Feedback (`/checks ci_job`](./ci_feedback.md))**                                | Automatically generates feedback and analysis for a failed CI job                                                                           |
 | **💎 [Implement (`/implement`](./implement.md))**                                        | Generates implementation code from review suggestions                                                                                       |
 | **💎 [Scan Repo Discussions (`/scan_repo_discussions`](./scan_repo_discussions.md))**    | Generates `best_practices.md` file based on previous discussions in the repository                                                          |
+| **💎 [Repo Statistics (`/repo_statistics`](./repo_statistics.md))**                      | Provides repository statistics on time to merge and time to first comment                                                                   |
 
 Note that the tools marked with 💎 are available only for Qodo Merge users.
