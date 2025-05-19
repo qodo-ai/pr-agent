@@ -11,10 +11,8 @@ It calculates key metrics that help teams establish a baseline of their PR workf
 
 ### Metrics Analyzed
 
-- **Median time to merge:** The median time it takes for PRs to be merged after opening
-- **Average time to merge:** The average time it takes for PRs to be merged after opening
-- **Median time to first comment:** The median time it takes to get the first comment on a PR
-- **Average time to first comment:** The average time it takes to get the first comment on a PR
+- **Time to merge:** The median and average time it takes for PRs to be merged after opening
+- **Time to first comment:** The median and average time it takes to get the first comment on a PR
 
 
 ### Usage
