@@ -67,6 +67,7 @@ PR-Agent and Qodo Merge offers extensive pull request functionalities across var
 |       | [Impact Evaluation](https://qodo-merge-docs.qodo.ai/core-abilities/impact_evaluation/) 💎               |   ✅   |   ✅   |           |              | 
 |       | [Code Validation 💎](https://qodo-merge-docs.qodo.ai/core-abilities/code_validation/)                   |   ✅   |   ✅   |    ✅     |      ✅      |
 |       | [Auto Best Practices 💎](https://qodo-merge-docs.qodo.ai/core-abilities/auto_best_practices/)                     |   ✅   |      |         |            |
+|       | [Incremental Update 💎](https://qodo-merge-docs.qodo.ai/core-abilities/incremental_update/)                   |   ✅   |      |         |            |
 !!! note "💎 means Qodo Merge only"
       All along the documentation, 💎 marks a feature available only in [Qodo Merge](https://www.codium.ai/pricing/){:target="_blank"}, and not in the open-source version.
 

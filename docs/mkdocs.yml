@@ -49,6 +49,7 @@ nav:
       - Dynamic context: 'core-abilities/dynamic_context.md'
       - Fetching ticket context: 'core-abilities/fetching_ticket_context.md'
       - Impact evaluation: 'core-abilities/impact_evaluation.md'
+      - Incremental Update: 'core-abilities/incremental_update.md'
       - Interactivity: 'core-abilities/interactivity.md'
       - Local and global metadata: 'core-abilities/metadata.md'
       - RAG context enrichment: 'core-abilities/rag_context_enrichment.md'

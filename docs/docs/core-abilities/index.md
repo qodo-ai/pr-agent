@@ -8,6 +8,7 @@ Qodo Merge utilizes a variety of core abilities to provide a comprehensive and e
 - [Dynamic context](https://qodo-merge-docs.qodo.ai/core-abilities/dynamic_context/)
 - [Fetching ticket context](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/)
 - [Impact evaluation](https://qodo-merge-docs.qodo.ai/core-abilities/impact_evaluation/)
+- [Incremental Update](https://qodo-merge-docs.qodo.ai/core-abilities/incremental_update/)
 - [Interactivity](https://qodo-merge-docs.qodo.ai/core-abilities/interactivity/)
 - [Local and global metadata](https://qodo-merge-docs.qodo.ai/core-abilities/metadata/)
 - [RAG context enrichment](https://qodo-merge-docs.qodo.ai/core-abilities/rag_context_enrichment/)
