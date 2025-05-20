@@ -81,6 +81,7 @@ class PRReviewer:
             "language": self.main_language,
             "diff": "",  # empty diff for initial calculation
             "num_pr_files": self.git_provider.get_num_of_files(),
+            "num_max_findings": get_settings().pr_reviewer.num_max_findings,
             "require_score": get_settings().pr_reviewer.require_score_review,
             "require_tests": get_settings().pr_reviewer.require_tests_review,
             "require_estimate_effort_to_review": get_settings().pr_reviewer.require_estimate_effort_to_review,

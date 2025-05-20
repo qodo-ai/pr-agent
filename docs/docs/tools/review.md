@@ -70,6 +70,10 @@ extra_instructions = "..."
         <td><b>enable_help_text</b></td>
         <td>If set to true, the tool will display a help text in the comment. Default is true.</td>
       </tr>
+      <tr>
+        <td><b>num_max_findings</b></td>
+        <td>Number of maximum returned findings. Default is 3.</td>
+      </tr>
     </table>
 
 !!! example "Enable\\disable specific sub-sections"
@@ -112,7 +116,7 @@ extra_instructions = "..."
       </tr>
       <tr>
         <td><b>enable_review_labels_effort</b></td>
-        <td>If set to true, the tool will publish a 'Review effort [1-5]: x' label. Default is true.</td>
+        <td>If set to true, the tool will publish a 'Review effort x/5' label (1–5 scale). Default is true.</td>
       </tr>
     </table>
 
@@ -141,7 +145,7 @@ extra_instructions = "..."
     The `review` tool can auto-generate two specific types of labels for a PR:
 
     - a `possible security issue` label that detects if a possible [security issue](https://github.com/Codium-ai/pr-agent/blob/tr/user_description/pr_agent/settings/pr_reviewer_prompts.toml#L136) exists in the PR code (`enable_review_labels_security` flag)
-    - a `Review effort [1-5]: x` label, where x is the estimated effort to review the PR (`enable_review_labels_effort` flag)
+    - a `Review effort x/5` label, where x is the estimated effort to review the PR on a 1–5 scale (`enable_review_labels_effort` flag)
 
     Both modes are useful, and we recommended to enable them.
 
