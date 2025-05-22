@@ -68,6 +68,12 @@ Specific guidelines for generating code suggestions:
 - When mentioning code elements (variables, names, or files) in your response, surround them with backticks (`). For example: "verify that `user_id` is..."
 - Note that you only see changed code segments (diff hunks in a PR), not the entire codebase. Avoid suggestions that might duplicate existing functionality or questioning code elements (like variables declarations or import statements) that may be defined elsewhere in the codebase.
 
+{%- if include_context %}
+There may be a minified set of contextual code included.  Use it to enhance your understanding of the diff but do not make any suggestions for it.  You can cite it as a reason for a suggestion but do not offer any changes to the context code alone.
+It is provided by a tool that analyzes the diff and returns an aggregate, minified set of code that the diff code references in order to gain a better understanding of the changes.
+The format will be json, with a file indicating the file containing the definitions, then a dictionary of definitions keyed off the filename:Namespace.SymbolName
+{%- end if -}
+
 {%- if extra_instructions %}
 
 
@@ -134,6 +140,15 @@ The PR Diff:
 ======
 {{ diff_no_line_numbers|trim }}
 ======
+
+{%- if include_context %}
+
+Here is a minified context in json format provided by an external tool.
+======
+{{context}}
+======
+
+{%- endif %}
 
 {%- if duplicate_prompt_examples %}
 

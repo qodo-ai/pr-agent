@@ -1,0 +1,12 @@
+[csharp_code_context_service]
+# Enable or disable the C# context fetching feature globally
+enabled = true
+
+# Default depth for the code analysis (integer, e.g., 1 to 10)
+default_depth = 1 # Or whatever default you prefer
+
+# Default mode for analysis ("Full" or "Minified")
+default_mode = "Minified"
+
+# Timeout for API calls to your C# service in seconds
+timeout = 180 # Analysis might take time, set a generous timeout

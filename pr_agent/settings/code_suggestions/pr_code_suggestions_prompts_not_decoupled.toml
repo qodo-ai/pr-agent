@@ -129,6 +129,14 @@ The PR Diff:
 {{ diff_no_line_numbers|trim }}
 ======
 
+{%- if include_context %}
+
+Here is a minified context in json format provided by an external tool (keyed by file path on the tool server).  It is the minimal code required to understand the code that the diffs interact with and does NOT necessarily represent the exact code from the codebase.  Use it to enrich your understanding of the diff but do not take it verbatim as the actual source code and do not offer any suggestions for it.
+======
+{{ context|trim }}
+======
+
+{%- endif %}
 {%- if duplicate_prompt_examples %}
 
 

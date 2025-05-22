@@ -28,9 +28,9 @@ skip_keys = []
 custom_reasoning_model = false # when true, disables system messages and temperature controls for models that don't support chat-style inputs
 response_language="en-US" # Language locales code for PR responses in ISO 3166 and ISO 639 format (e.g., "en-US", "it-IT", "zh-CN", ...)
 # token limits
-max_description_tokens = 500
-max_commits_tokens = 500
-max_model_tokens = 32000 # Limits the maximum number of tokens that can be used by any model, regardless of the model's default capabilities.
+max_description_tokens = 1000
+max_commits_tokens = 1000
+max_model_tokens = 94000 # Limits the maximum number of tokens that can be used by any model, regardless of the model's default capabilities.
 custom_model_max_tokens=-1 # for models not in the default list
 model_token_count_estimate_factor=0.3 # factor to increase the token count estimate, in order to reduce likelihood of model failure due to too many tokens - applicable only when requesting an accurate estimate.
 # patch extension logic
@@ -76,14 +76,14 @@ require_score_review=false
 require_tests_review=true
 require_estimate_effort_to_review=true
 require_can_be_split_review=false
-require_security_review=true
-require_ticket_analysis_review=true
+require_security_review=false
+require_ticket_analysis_review=false
 # general options
 persistent_comment=true
 extra_instructions = ""
 final_update_message = true
 # review labels
-enable_review_labels_security=true
+enable_review_labels_security=false
 enable_review_labels_effort=true
 # specific configurations for incremental review (/review -i)
 require_all_thresholds_for_incremental_review=false
@@ -125,11 +125,11 @@ use_conversation_history=true
 
 
 [pr_code_suggestions] # /improve #
-max_context_tokens=24000
+max_context_tokens=94000
 #
-commitable_code_suggestions = false
+commitable_code_suggestions = true
 dual_publishing_score_threshold=-1 # -1 to disable, [0-10] to set the threshold (>=) for publishing a code suggestion both in a table and as commitable
-focus_only_on_problems=true
+focus_only_on_problems=false
 #
 extra_instructions = ""
 enable_help_text=false
@@ -140,13 +140,13 @@ publish_output_no_suggestions=true
 # enable to apply suggestion 💎
 apply_suggestions_checkbox=true
 # suggestions scoring
-suggestions_score_threshold=0 # [0-10]| recommend not to set this value above 8, since above it may clip highly relevant suggestions
+suggestions_score_threshold=5 # [0-10]| recommend not to set this value above 8, since above it may clip highly relevant suggestions
 new_score_mechanism=true
 new_score_mechanism_th_high=9
 new_score_mechanism_th_medium=7
 # params for '/improve --extended' mode
 auto_extended_mode=true
-num_code_suggestions_per_chunk=4
+num_code_suggestions_per_chunk=12
 max_number_of_calls = 3
 parallel_calls = true
 

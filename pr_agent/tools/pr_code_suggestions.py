@@ -16,7 +16,8 @@ from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.algo.git_patch_processing import decouple_and_convert_to_hunks_with_lines_numbers
 from pr_agent.algo.pr_processing import (add_ai_metadata_to_diff_files,
                                          get_pr_diff, get_pr_multi_diffs,
-                                         retry_with_fallback_models)
+                                         retry_with_fallback_models,
+                                         get_pr_context)
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, load_yaml, replace_code_tags,
                                  show_relevant_configurations, get_max_tokens, clip_tokens, get_model)
@@ -80,6 +81,8 @@ class PRCodeSuggestions:
             "focus_only_on_problems": get_settings().get("pr_code_suggestions.focus_only_on_problems", False),
             "date": datetime.now().strftime('%Y-%m-%d'),
             'duplicate_prompt_examples': get_settings().config.get('duplicate_prompt_examples', False),
+            "include_context": get_settings().get("csharp_code_context_service.enabled", False),
+            "context": "" # context empty for initial calculation
         }
 
         if get_settings().pr_code_suggestions.get("decouple_hunks", True):
@@ -121,6 +124,7 @@ class PRCodeSuggestions:
             # if not self.is_extended:
             #     data = await retry_with_fallback_models(self._prepare_prediction, model_type=ModelType.REGULAR)
             # else:
+            get_logger().info('Preparing predicitions')
             data = await retry_with_fallback_models(self.prepare_prediction_main, model_type=ModelType.REGULAR)
             if not data:
                 data = {"code_suggestions": []}
@@ -395,9 +399,13 @@ class PRCodeSuggestions:
         variables = copy.deepcopy(self.vars)
         variables["diff"] = patches_diff  # update diff
         variables["diff_no_line_numbers"] = patches_diff_no_line_number  # update diff
+        variables["context"] = self.context_data
         environment = Environment(undefined=StrictUndefined)
         system_prompt = environment.from_string(self.pr_code_suggestions_prompt_system).render(variables)
         user_prompt = environment.from_string(get_settings().pr_code_suggestions_prompt.user).render(variables)
+        
+        get_logger().info(f"Rendered user prompt:\n{user_prompt}")
+
         response, finish_reason = await self.ai_handler.chat_completion(
             model=model, temperature=get_settings().config.temperature, system=system_prompt, user=user_prompt)
         if not get_settings().config.publish_output:
@@ -675,8 +683,9 @@ class PRCodeSuggestions:
 
     async def prepare_prediction_main(self, model: str) -> dict:
         # get PR diff
+        get_logger().info('Fetching diff...')
         if get_settings().pr_code_suggestions.decouple_hunks:
-            self.patches_diff_list = get_pr_multi_diffs(self.git_provider,
+            self.patches_diff_list = await get_pr_multi_diffs(self.git_provider,
                                                         self.token_handler,
                                                         model,
                                                         max_calls=get_settings().pr_code_suggestions.max_number_of_calls,
@@ -685,7 +694,7 @@ class PRCodeSuggestions:
 
         else:
             # non-decoupled hunks
-            self.patches_diff_list_no_line_numbers = get_pr_multi_diffs(self.git_provider,
+            self.patches_diff_list_no_line_numbers = await get_pr_multi_diffs(self.git_provider,
                                                                         self.token_handler,
                                                                         model,
                                                                         max_calls=get_settings().pr_code_suggestions.max_number_of_calls,
@@ -694,11 +703,19 @@ class PRCodeSuggestions:
                 self.patches_diff_list_no_line_numbers, model)
             if not self.patches_diff_list:
                 # fallback to decoupled hunks
-                self.patches_diff_list = get_pr_multi_diffs(self.git_provider,
+                self.patches_diff_list = await get_pr_multi_diffs(self.git_provider,
                                                             self.token_handler,
                                                             model,
                                                             max_calls=get_settings().pr_code_suggestions.max_number_of_calls,
                                                             add_line_numbers=True)  # decouple hunk with line numbers
+
+        if get_settings().csharp_code_context_service.enabled:
+            get_logger().info('Fetching context...')
+            self.context_data = await get_pr_context(self.git_provider)
+            get_logger().info(f"Got context: {self.context_data}")
+        else:
+            get_logger().info('Context fetch is disabled')
+            self.context_data = ""
 
         if self.patches_diff_list:
             get_logger().info(f"Number of PR chunk calls: {len(self.patches_diff_list)}")
@@ -925,7 +942,10 @@ class PRCodeSuggestions:
                          'num_code_suggestions': len(suggestion_list),
                          'prev_suggestions_str': prev_suggestions_str,
                          "is_ai_metadata": get_settings().get("config.enable_ai_metadata", False),
-                         'duplicate_prompt_examples': get_settings().config.get('duplicate_prompt_examples', False)}
+                         'duplicate_prompt_examples': get_settings().config.get('duplicate_prompt_examples', False),
+                         "include_context": get_settings().get("csharp_code_context_service.enabled", False),
+                         "context": self.context_data
+                         }
             environment = Environment(undefined=StrictUndefined)
 
             if dedicated_prompt:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import traceback
+import json
 from typing import Callable, List, Tuple
 
 from github import RateLimitExceededException
@@ -16,6 +17,9 @@ from pr_agent.algo.utils import ModelType, clip_tokens, get_max_tokens, get_mode
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers.git_provider import GitProvider
 from pr_agent.log import get_logger
+
+# Import the new client function
+from pr_agent.algo.csharp_context_client import get_csharp_minimal_context
 
 DELETED_FILES_ = "Deleted files:\n"
 
@@ -35,7 +39,7 @@ def cap_and_log_extra_lines(value, direction) -> int:
     return value
 
 
-def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
+async def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
                 model: str,
                 add_line_numbers_to_hunks: bool = False,
                 disable_extra_lines: bool = False,
@@ -63,6 +67,35 @@ def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
             get_logger().info(f"PR main language: {pr_languages[0]['language']}")
         except Exception as e:
             pass
+
+    csharp_minimal_contexts_map = {}
+    if get_settings().csharp_code_context_service.get("enabled", False):
+        # Check if there are any C# files in the PR to avoid unnecessary calls
+        is_cs_pr = any(
+            hasattr(f, 'filename') and f.filename and f.filename.endswith(".cs")
+            for lang_group in pr_languages
+            for f in lang_group.get('files', [])
+        )
+        if is_cs_pr:
+            try:
+                owner, repo_name = git_provider.repo.split('/', 1) # Make sure git_provider.repo is in 'owner/repo' format
+                pr_number = git_provider.pr_num # Make sure git_provider.pr_num holds the PR number
+                
+                # The PR agent's GitHub token needs to be passed.
+                github_user_token = get_settings().get("GITHUB.USER_TOKEN", None)
+                if not github_user_token and get_settings().config.git_provider == "github":
+                     get_logger().warning("GITHUB.USER_TOKEN not set; C# service might fail if it needs to clone a private repo.")
+                
+                get_logger().info(f"Requesting C# context for PR: {owner}/{repo_name}#{pr_number}")
+                csharp_minimal_contexts_map = await get_csharp_minimal_context(owner, repo_name, pr_number, github_user_token)
+                if csharp_minimal_contexts_map is None: # Handle API call failure or disabled service
+                    csharp_minimal_contexts_map = {} 
+                get_logger().info(f"C# Context Map (first 5 keys): {list(csharp_minimal_contexts_map.keys())[:5]}")
+
+
+            except Exception as e:
+                get_logger().error(f"Failed to get C# context from API: {e}", exc_info=True)
+                csharp_minimal_contexts_map = {}
 
     # generate a standard diff string, with patch extension
     patches_extended, total_tokens, patches_extended_tokens = pr_generate_extended_diff(
@@ -367,8 +400,44 @@ def _get_all_deployments(all_models: List[str]) -> List[str]:
         all_deployments = [deployment_id] * len(all_models)
     return all_deployments
 
+async def get_pr_context(git_provider: GitProvider):
+    diff_files = git_provider.get_diff_files()
+    # Sort files by main language
+    pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)
+    csharp_minimal_contexts_map = {}
+    if get_settings().csharp_code_context_service.get("enabled", False):
+        # Check if there are any C# files in the PR to avoid unnecessary calls
+        is_cs_pr = any(
+            hasattr(f, 'filename') and f.filename and f.filename.endswith(".cs")
+            for lang_group in pr_languages
+            for f in lang_group.get('files', [])
+        )
+        if is_cs_pr:
+            get_logger().info("csharp_code_context_service is enabled and this diff is a csharp one")
+            try:
+                owner, repo_name = git_provider.repo.split('/', 1) # Make sure git_provider.repo is in 'owner/repo' format
+                pr_number = git_provider.pr_num # Make sure git_provider.pr_num holds the PR number
+                
+                # The PR agent's GitHub token needs to be passed.
+                github_user_token = get_settings().get("GITHUB.USER_TOKEN", None)
+                if not github_user_token and get_settings().config.git_provider == "github":
+                     get_logger().warning("GITHUB.USER_TOKEN not set; C# service might fail if it needs to clone a private repo.")
+                
+                get_logger().info(f"Requesting C# context for PR: {owner}/{repo_name}#{pr_number}")
+                csharp_minimal_contexts_map = await get_csharp_minimal_context(owner, repo_name, pr_number, github_user_token)
+                if csharp_minimal_contexts_map is None: # Handle API call failure or disabled service
+                    csharp_minimal_contexts_map = {} 
+                get_logger().info(f"C# Context Map (first 5 keys): {list(csharp_minimal_contexts_map.keys())[:5]}")
 
-def get_pr_multi_diffs(git_provider: GitProvider,
+            except Exception as e:
+                get_logger().error(f"Failed to get C# context from API: {e}", exc_info=True)
+                csharp_minimal_contexts_map = {}
+    
+    # If mergedResults is a dict-like key instead of an attribute, use:
+    merged_results = csharp_minimal_contexts_map.get("mergedResults", {})
+    return json.dumps(merged_results, ensure_ascii=False, separators=(",", ":"), indent=4)
+
+async def get_pr_multi_diffs(git_provider: GitProvider,
                        token_handler: TokenHandler,
                        model: str,
                        max_calls: int = 5,
