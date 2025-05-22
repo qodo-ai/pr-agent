@@ -945,12 +945,66 @@ def clip_tokens(text: str, max_tokens: int, add_three_dots=True, num_input_token
     """
     Clip the number of tokens in a string to a maximum number of tokens.
 
+    This function limits text to a specified token count by calculating the approximate
+    character-to-token ratio and truncating the text accordingly. A safety factor of 0.9
+    (10% reduction) is applied to ensure the result stays within the token limit.
+
     Args:
-        text (str): The string to clip.
+        text (str): The string to clip. If empty or None, returns the input unchanged.
         max_tokens (int): The maximum number of tokens allowed in the string.
-        add_three_dots (bool, optional): A boolean indicating whether to add three dots at the end of the clipped
+                         If negative, returns an empty string.
+        add_three_dots (bool, optional): Whether to add "\\n...(truncated)" at the end
+                                       of the clipped text to indicate truncation.
+                                       Defaults to True.
+        num_input_tokens (int, optional): Pre-computed number of tokens in the input text.
+                                        If provided, skips token encoding step for efficiency.
+                                        If None, tokens will be counted using TokenEncoder.
+                                        Defaults to None.
+        delete_last_line (bool, optional): Whether to remove the last line from the
+                                         clipped content before adding truncation indicator.
+                                         Useful for ensuring clean breaks at line boundaries.
+                                         Defaults to False.
+
     Returns:
-        str: The clipped string.
+        str: The clipped string. Returns original text if:
+             - Text is empty/None
+             - Token count is within limit
+             - An error occurs during processing
+
+             Returns empty string if max_tokens <= 0.
+
+    Examples:
+        Basic usage:
+        >>> text = "This is a sample text that might be too long"
+        >>> result = clip_tokens(text, max_tokens=10)
+        >>> print(result)
+        This is a sample...
+        (truncated)
+
+        Without truncation indicator:
+        >>> result = clip_tokens(text, max_tokens=10, add_three_dots=False)
+        >>> print(result)
+        This is a sample
+
+        With pre-computed token count:
+        >>> result = clip_tokens(text, max_tokens=5, num_input_tokens=15)
+        >>> print(result)
+        This...
+        (truncated)
+
+        With line deletion:
+        >>> multiline_text = "Line 1\\nLine 2\\nLine 3"
+        >>> result = clip_tokens(multiline_text, max_tokens=3, delete_last_line=True)
+        >>> print(result)
+        Line 1
+        Line 2
+        ...
+        (truncated)
+
+    Notes:
+        The function uses a safety factor of 0.9 (10% reduction) to ensure the
+        result stays within the token limit, as character-to-token ratios can vary.
+        If token encoding fails, the original text is returned with a warning logged.
     """
     if not text:
         return text
