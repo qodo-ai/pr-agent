@@ -23,7 +23,7 @@ _GIT_PROVIDERS = {
     'codecommit': CodeCommitProvider,
     'local': LocalGitProvider,
     'gerrit': GerritProvider,
-    'gitea': GiteaProvider,
+    'gitea': GiteaProvider
 }
 
 
