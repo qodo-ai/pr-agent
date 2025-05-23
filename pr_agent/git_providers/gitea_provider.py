@@ -231,26 +231,28 @@ class GiteaProvider(GitProvider):
             return None
 
         comment = self.limit_output_characters(comment, self.max_comment_chars)
-        reponse = self.repo_api.create_comment(
+        response = self.repo_api.create_comment(
             owner=self.owner,
             repo=self.repo,
             index=index,
             comment=comment
         )
 
-        if not reponse:
+        if not response:
             self.logger.error("Failed to publish comment")
             return None
 
         if is_temporary:
             self.temp_comments.append(comment)
 
-        self.comments_list.append({
+        comment_obj = {
             "is_temporary": is_temporary,
             "comment": comment,
-            "comment_id": reponse.id if isinstance(reponse, tuple) else reponse.id
-        })
+            "comment_id": response.id if isinstance(response, tuple) else response.id
+        }
+        self.comments_list.append(comment_obj)
         self.logger.info("Comment published")
+        return comment_obj
 
     def edit_comment(self, comment, body : str):
         body = self.limit_output_characters(body, self.max_comment_chars)
@@ -646,7 +648,7 @@ class GiteaProvider(GitProvider):
             return
 
         try:
-            comment_id = comment.get("comment_id")
+            comment_id = comment.get("comment_id") if isinstance(comment, dict) else comment.id
             if not comment_id:
                 self.logger.error("Comment ID not found")
                 return None
@@ -656,7 +658,7 @@ class GiteaProvider(GitProvider):
                 comment_id=comment_id
             )
 
-            if self.comments_list:
+            if self.comments_list and comment in self.comments_list:
                 self.comments_list.remove(comment)
 
             self.logger.info(f"Comment removed successfully: {comment}")
@@ -668,6 +670,8 @@ class GiteaProvider(GitProvider):
         """Remove the initial comment"""
         for comment in self.comments_list:
             try:
+                if not comment.get("is_temporary"):
+                    continue
                 self.remove_comment(comment)
             except Exception as e:
                 self.logger.error(f"Error removing comment: {e}")
