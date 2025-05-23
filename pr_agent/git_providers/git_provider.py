@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 # enum EDIT_TYPE (ADDED, DELETED, MODIFIED, RENAMED)
-from typing import Optional
+import os
+import shutil
+import subprocess
+from typing import Optional, Tuple
 
 from pr_agent.algo.types import FilePatchInfo
 from pr_agent.algo.utils import Range, process_description
@@ -13,6 +16,75 @@ class GitProvider(ABC):
     @abstractmethod
     def is_supported(self, capability: str) -> bool:
         pass
+
+    #Given a url (issues or PR/MR) - get the .git repo url to which they belong. Needs to be implemented by the provider.
+    def get_git_repo_url(self, issues_or_pr_url: str) -> str:
+        get_logger().warning("Not implemented! Returning empty url")
+        return ""
+
+    # Given a git repo url, return prefix and suffix of the provider in order to view a given file belonging to that repo. Needs to be implemented by the provider.
+    # For example: For a git: https://git_provider.com/MY_PROJECT/MY_REPO.git and desired branch: <MY_BRANCH> then it should return ('https://git_provider.com/projects/MY_PROJECT/repos/MY_REPO/.../<MY_BRANCH>', '?=<SOME HEADER>')
+    # so that to properly view the file: docs/readme.md -> <PREFIX>/docs/readme.md<SUFFIX> -> https://git_provider.com/projects/MY_PROJECT/repos/MY_REPO/<MY_BRANCH>/docs/readme.md?=<SOME HEADER>)
+    def get_canonical_url_parts(self, repo_git_url:str, desired_branch:str) -> Tuple[str, str]:
+        get_logger().warning("Not implemented! Returning empty prefix and suffix")
+        return ("", "")
+
+
+    #Clone related API
+    #An object which ensures deletion of a cloned repo, once it becomes out of scope.
+    # Example usage:
+    #    with TemporaryDirectory() as tmp_dir:
+    #            returned_obj: GitProvider.ScopedClonedRepo = self.git_provider.clone(self.repo_url, tmp_dir, remove_dest_folder=False)
+    #            print(returned_obj.path) #Use returned_obj.path.
+    #    #From this point, returned_obj.path may be deleted at any point and therefore must not be used.
+    class ScopedClonedRepo(object):
+        def __init__(self, dest_folder):
+            self.path = dest_folder
+
+        def __del__(self):
+            if self.path and os.path.exists(self.path):
+                shutil.rmtree(self.path, ignore_errors=True)
+
+    #Method to allow implementors to manipulate the repo url to clone (such as embedding tokens in the url string). Needs to be implemented by the provider.
+    def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        get_logger().warning("Not implemented! Returning None")
+        return None
+
+    # Does a shallow clone, using a forked process to support a timeout guard.
+    # In case operation has failed, it is expected to throw an exception as this method does not return a value.
+    def _clone_inner(self, repo_url: str, dest_folder: str, operation_timeout_in_seconds: int=None) -> None:
+        #The following ought to be equivalent to:
+        # #Repo.clone_from(repo_url, dest_folder)
+        # , but with throwing an exception upon timeout.
+        # Note: This can only be used in context that supports using pipes.
+        subprocess.run([
+            "git", "clone",
+            "--filter=blob:none",
+            "--depth", "1",
+            repo_url, dest_folder
+        ], check=True,  # check=True will raise an exception if the command fails
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=operation_timeout_in_seconds)
+
+    CLONE_TIMEOUT_SEC = 20
+    # Clone a given url to a destination folder. If successful, returns an object that wraps the destination folder,
+    # deleting it once it is garbage collected. See: GitProvider.ScopedClonedRepo for more details.
+    def clone(self, repo_url_to_clone: str, dest_folder: str, remove_dest_folder: bool = True,
+              operation_timeout_in_seconds: int=CLONE_TIMEOUT_SEC) -> ScopedClonedRepo|None:
+        returned_obj = None
+        clone_url = self._prepare_clone_url_with_token(repo_url_to_clone)
+        if not clone_url:
+            get_logger().error("Clone failed: Unable to obtain url to clone.")
+            return returned_obj
+        try:
+            if remove_dest_folder and os.path.exists(dest_folder) and os.path.isdir(dest_folder):
+                shutil.rmtree(dest_folder)
+            self._clone_inner(clone_url, dest_folder, operation_timeout_in_seconds)
+            returned_obj = GitProvider.ScopedClonedRepo(dest_folder)
+        except Exception as e:
+            get_logger().exception(f"Clone failed: Could not clone url.",
+                artifact={"error": str(e), "url": clone_url, "dest_folder": dest_folder})
+        finally:
+            return returned_obj
 
     @abstractmethod
     def get_files(self) -> list:
@@ -61,7 +133,7 @@ class GitProvider(ABC):
     def reply_to_comment_from_comment_id(self, comment_id: int, body: str):
         pass
 
-    def get_pr_description(self, full: bool = True, split_changes_walkthrough=False) -> str or tuple:
+    def get_pr_description(self, full: bool = True, split_changes_walkthrough=False) -> str | tuple:
         from pr_agent.algo.utils import clip_tokens
         from pr_agent.config_loader import get_settings
         max_tokens_description = get_settings().get("CONFIG.MAX_DESCRIPTION_TOKENS", None)
@@ -156,7 +228,7 @@ class GitProvider(ABC):
                                    update_header: bool = True,
                                    name='review',
                                    final_update_message=True):
-        self.publish_comment(pr_comment)
+        return self.publish_comment(pr_comment)
 
     def publish_persistent_comment_full(self, pr_comment: str,
                                    initial_header: str,
@@ -178,14 +250,13 @@ class GitProvider(ABC):
                     # response = self.mr.notes.update(comment.id, {'body': pr_comment_updated})
                     self.edit_comment(comment, pr_comment_updated)
                     if final_update_message:
-                        self.publish_comment(
+                        return self.publish_comment(
                             f"**[Persistent {name}]({comment_url})** updated to latest commit {latest_commit_url}")
-                    return
+                    return comment
         except Exception as e:
             get_logger().exception(f"Failed to update persistent review, error: {e}")
             pass
-        self.publish_comment(pr_comment)
-
+        return self.publish_comment(pr_comment)
 
     @abstractmethod
     def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str, original_suggestion=None):
@@ -213,6 +284,9 @@ class GitProvider(ABC):
 
     def get_comment_url(self, comment) -> str:
         return ""
+
+    def get_review_thread_comments(self, comment_id: int) -> list[dict]:
+        pass
 
     #### labels operations ####
     @abstractmethod

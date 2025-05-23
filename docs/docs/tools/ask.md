@@ -2,6 +2,7 @@
 
 The `ask` tool answers questions about the PR, based on the PR code changes. Make sure to be specific and clear in your questions.
 It can be invoked manually by commenting on any PR:
+
 ```
 /ask "..."
 ```
@@ -15,6 +16,7 @@ It can be invoked manually by commenting on any PR:
 ## Ask lines
 
 You can run `/ask` on specific lines of code in the PR from the PR's diff view. The tool will answer questions based on the code changes in the selected lines.
+
 - Click on the '+' sign next to the line number to select the line.
 - To select multiple lines, click on the '+' sign of the first line and then hold and drag to select the rest of the lines.
 - write `/ask "..."` in the comment box and press `Add single comment` button.
@@ -28,11 +30,13 @@ Note that the tool does not have "memory" of previous questions, and answers eac
 You can also ask questions about images that appear in the comment, where the entire PR code will be used as context.
 <br>
 The basic syntax is:
+
 ```
 /ask "..."
 
 [Image](https://real_link_to_image)
 ```
+
 where `https://real_link_to_image` is the direct link to the image.
 
 Note that GitHub has a built-in mechanism of pasting images in comments. However, pasted image does not provide a direct link.
@@ -54,6 +58,5 @@ To get a direct link to an image, we recommend using the following scheme:
 4\. Post the comment, and receive the answer:
 
 ![Ask image5](https://codium.ai/images/pr_agent/ask_images5.png){width=512}
-
 
 See a full video tutorial [here](https://codium.ai/images/pr_agent/ask_image_video.mov)

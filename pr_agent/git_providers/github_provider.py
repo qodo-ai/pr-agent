@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
+from github.Issue import Issue
 from github import AppAuthentication, Auth, Github, GithubException
 from retry import retry
 from starlette_context import context
@@ -42,6 +43,7 @@ class GithubProvider(GitProvider):
         self.repo = None
         self.pr_num = None
         self.pr = None
+        self.issue_main = None
         self.github_user_id = None
         self.diff_files = None
         self.git_files = None
@@ -51,8 +53,28 @@ class GithubProvider(GitProvider):
             self.pr_commits = list(self.pr.get_commits())
             self.last_commit_id = self.pr_commits[-1]
             self.pr_url = self.get_pr_url() # pr_url for github actions can be as api.github.com, so we need to get the url from the pr object
-        else:
+        elif pr_url and 'issue' in pr_url: #url is an issue
+            self.issue_main = self._get_issue_handle(pr_url)
+        else: #Instantiated the provider without a PR / Issue
             self.pr_commits = None
+
+    def _get_issue_handle(self, issue_url) -> Optional[Issue]:
+        repo_name, issue_number = self._parse_issue_url(issue_url)
+        if not repo_name or not issue_number:
+            get_logger().error(f"Given url: {issue_url} is not a valid issue.")
+            return None
+        # else: Check if can get a valid Repo handle:
+        try:
+            repo_obj = self.github_client.get_repo(repo_name)
+            if not repo_obj:
+                get_logger().error(f"Given url: {issue_url}, belonging to owner/repo: {repo_name} does "
+                                   f"not have a valid repository: {self.get_git_repo_url(issue_url)}")
+                return None
+            # else: Valid repo handle:
+            return repo_obj.get_issue(issue_number)
+        except Exception as e:
+            get_logger().exception(f"Failed to get an issue object for issue: {issue_url}, belonging to owner/repo: {repo_name}")
+            return None
 
     def get_incremental_commits(self, incremental=IncrementalPR(False)):
         self.incremental = incremental
@@ -62,6 +84,63 @@ class GithubProvider(GitProvider):
 
     def is_supported(self, capability: str) -> bool:
         return True
+
+    def _get_owner_and_repo_path(self, given_url: str) -> str:
+        try:
+            repo_path = None
+            if 'issues' in given_url:
+                repo_path, _ = self._parse_issue_url(given_url)
+            elif 'pull' in given_url:
+                repo_path, _ = self._parse_pr_url(given_url)
+            elif given_url.endswith('.git'):
+                parsed_url = urlparse(given_url)
+                repo_path = (parsed_url.path.split('.git')[0])[1:] # /<owner>/<repo>.git -> <owner>/<repo>
+            if not repo_path:
+                get_logger().error(f"url is neither an issues url nor a PR url nor a valid git url: {given_url}. Returning empty result.")
+                return ""
+            return repo_path
+        except Exception as e:
+            get_logger().exception(f"unable to parse url: {given_url}. Returning empty result.")
+            return ""
+
+    def get_git_repo_url(self, issues_or_pr_url: str) -> str:
+        repo_path = self._get_owner_and_repo_path(issues_or_pr_url) #Return: <OWNER>/<REPO>
+        if not repo_path or repo_path not in issues_or_pr_url:
+            get_logger().error(f"Unable to retrieve owner/path from url: {issues_or_pr_url}")
+            return ""
+        return f"{self.base_url_html}/{repo_path}.git" #https://github.com / <OWNER>/<REPO>.git
+
+    # Given a git repo url, return prefix and suffix of the provider in order to view a given file belonging to that repo.
+    # Example: https://github.com/qodo-ai/pr-agent.git and branch: v0.8 -> prefix: "https://github.com/qodo-ai/pr-agent/blob/v0.8", suffix: ""
+    # In case git url is not provided, provider will use PR context (which includes branch) to determine the prefix and suffix.
+    def get_canonical_url_parts(self, repo_git_url:str, desired_branch:str) -> Tuple[str, str]:
+        owner = None
+        repo = None
+        scheme_and_netloc = None
+
+        if repo_git_url or self.issue_main: #Either user provided an external git url, which may be different than what this provider was initialized with, or an issue:
+            desired_branch = desired_branch if repo_git_url else self.issue_main.repository.default_branch
+            html_url = repo_git_url if repo_git_url else self.issue_main.html_url
+            parsed_git_url = urlparse(html_url)
+            scheme_and_netloc = parsed_git_url.scheme + "://" + parsed_git_url.netloc
+            repo_path = self._get_owner_and_repo_path(html_url)
+            if repo_path.count('/') == 1: #Has to have the form <owner>/<repo>
+                owner, repo = repo_path.split('/')
+            else:
+                get_logger().error(f"Invalid repo_path: {repo_path} from url: {html_url}")
+                return ("", "")
+
+        if (not owner or not repo) and self.repo: #"else" - User did not provide an external git url, or not an issue, use self.repo object
+            owner, repo = self.repo.split('/')
+            scheme_and_netloc = self.base_url_html
+            desired_branch = self.repo_obj.default_branch
+        if not all([scheme_and_netloc, owner, repo]): #"else": Not invoked from a PR context,but no provided git url for context
+            get_logger().error(f"Unable to get canonical url parts since missing context (PR or explicit git url)")
+            return ("", "")
+
+        prefix = f"{scheme_and_netloc}/{owner}/{repo}/blob/{desired_branch}"
+        suffix = ""  # github does not add a suffix
+        return (prefix, suffix)
 
     def get_pr_url(self) -> str:
         return self.pr.html_url
@@ -290,10 +369,19 @@ class GithubProvider(GitProvider):
         self.publish_persistent_comment_full(pr_comment, initial_header, update_header, name, final_update_message)
 
     def publish_comment(self, pr_comment: str, is_temporary: bool = False):
+        if not self.pr and not self.issue_main:
+            get_logger().error("Cannot publish a comment if missing PR/Issue context")
+            return None
+
         if is_temporary and not get_settings().config.publish_output_progress:
             get_logger().debug(f"Skipping publish_comment for temporary comment: {pr_comment}")
             return None
         pr_comment = self.limit_output_characters(pr_comment, self.max_comment_chars)
+
+        # In case this is an issue, can publish the comment on the issue.
+        if self.issue_main:
+            return self.issue_main.create_comment(pr_comment)
+
         response = self.pr.create_issue_comment(pr_comment)
         if hasattr(response, "user") and hasattr(response.user, "login"):
             self.github_user_id = response.user.login
@@ -339,7 +427,41 @@ class GithubProvider(GitProvider):
                 self._publish_inline_comments_fallback_with_verification(comments)
             except Exception as e:
                 get_logger().error(f"Failed to publish inline code comments fallback, error: {e}")
-                raise e
+                raise e    
+    
+    def get_review_thread_comments(self, comment_id: int) -> list[dict]:
+        """
+        Retrieves all comments in the same thread as the given comment.
+        
+        Args:
+            comment_id: Review comment ID
+                
+        Returns:
+            List of comments in the same thread
+        """
+        try:
+            # Fetch all comments with a single API call
+            all_comments = list(self.pr.get_comments())
+            
+            # Find the target comment by ID
+            target_comment = next((c for c in all_comments if c.id == comment_id), None)
+            if not target_comment:
+                return []
+        
+            # Get root comment id
+            root_comment_id = target_comment.raw_data.get("in_reply_to_id", target_comment.id)
+            # Build the thread - include the root comment and all replies to it
+            thread_comments = [
+                c for c in all_comments if
+                c.id == root_comment_id or c.raw_data.get("in_reply_to_id") == root_comment_id
+            ]
+        
+        
+            return thread_comments
+                
+        except Exception as e:
+            get_logger().exception(f"Failed to get review comments for an inline ask command", artifact={"comment_id": comment_id, "error": e})
+            return []
 
     def _publish_inline_comments_fallback_with_verification(self, comments: list[dict]):
         """
@@ -677,11 +799,11 @@ class GithubProvider(GitProvider):
     def _parse_issue_url(self, issue_url: str) -> Tuple[str, int]:
         parsed_url = urlparse(issue_url)
 
-        if 'github.com' not in parsed_url.netloc:
-            raise ValueError("The provided URL is not a valid GitHub URL")
+        if parsed_url.path.startswith('/api/v3'): #Check if came from github app
+            parsed_url = urlparse(issue_url.replace("/api/v3", ""))
 
         path_parts = parsed_url.path.strip('/').split('/')
-        if 'api.github.com' in parsed_url.netloc:
+        if 'api.github.com' in parsed_url.netloc or '/api/v3' in issue_url: #Check if came from github app
             if len(path_parts) < 5 or path_parts[3] != 'issues':
                 raise ValueError("The provided URL does not appear to be a GitHub ISSUE URL")
             repo_name = '/'.join(path_parts[1:3])
@@ -703,9 +825,9 @@ class GithubProvider(GitProvider):
         return repo_name, issue_number
 
     def _get_github_client(self):
-        deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
-
-        if deployment_type == 'app':
+        self.deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
+        self.auth = None
+        if self.deployment_type == 'app':
             try:
                 private_key = get_settings().github.private_key
                 app_id = get_settings().github.app_id
@@ -715,16 +837,19 @@ class GithubProvider(GitProvider):
                 raise ValueError("GitHub app installation ID is required when using GitHub app deployment")
             auth = AppAuthentication(app_id=app_id, private_key=private_key,
                                      installation_id=self.installation_id)
-            return Github(app_auth=auth, base_url=self.base_url)
-
-        if deployment_type == 'user':
+            self.auth = auth
+        elif self.deployment_type == 'user':
             try:
                 token = get_settings().github.user_token
             except AttributeError as e:
                 raise ValueError(
                     "GitHub token is required when using user deployment. See: "
                     "https://github.com/Codium-ai/pr-agent#method-2-run-from-source") from e
-            return Github(auth=Auth.Token(token), base_url=self.base_url)
+            self.auth = Auth.Token(token)
+        if self.auth:
+            return Github(auth=self.auth, base_url=self.base_url)
+        else:
+            raise ValueError("Could not authenticate to GitHub")
 
     def _get_repo(self):
         if hasattr(self, 'repo_obj') and \
@@ -1064,3 +1189,37 @@ class GithubProvider(GitProvider):
                 get_logger().error(f"Failed to process patch for committable comment, error: {e}")
         return code_suggestions_copy
 
+    #Clone related
+    def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        scheme = "https://"
+
+        #For example, to clone:
+        #https://github.com/Codium-ai/pr-agent-pro.git
+        #Need to embed inside the github token:
+        #https://<token>@github.com/Codium-ai/pr-agent-pro.git
+
+        github_token = self.auth.token
+        github_base_url = self.base_url_html
+        if not all([github_token, github_base_url]):
+            get_logger().error("Either missing auth token or missing base url")
+            return None
+        if scheme not in github_base_url:
+            get_logger().error(f"Base url: {github_base_url} is missing prefix: {scheme}")
+            return None
+        github_com = github_base_url.split(scheme)[1]  # e.g. 'github.com' or github.<org>.com
+        if not github_com:
+            get_logger().error(f"Base url: {github_base_url} has an empty base url")
+            return None
+        if github_com not in repo_url_to_clone:
+            get_logger().error(f"url to clone: {repo_url_to_clone} does not contain {github_com}")
+            return None
+        repo_full_name = repo_url_to_clone.split(github_com)[-1]
+        if not repo_full_name:
+            get_logger().error(f"url to clone: {repo_url_to_clone} is malformed")
+            return None
+
+        clone_url = scheme
+        if self.deployment_type == 'app':
+            clone_url += "git:"
+        clone_url += f"{github_token}@{github_com}{repo_full_name}"
+        return clone_url

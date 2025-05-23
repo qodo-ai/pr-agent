@@ -5,8 +5,8 @@ from pr_agent.algo.pr_processing import pr_generate_extended_diff
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import load_large_diff
 from pr_agent.config_loader import get_settings
-get_settings().set("CONFIG.CLI_MODE", True)
-get_settings().config.allow_dynamic_context = False
+get_settings(use_context=False).set("CONFIG.CLI_MODE", True)
+get_settings(use_context=False).config.allow_dynamic_context = False
 
 
 class TestExtendPatch:
@@ -61,15 +61,15 @@ class TestExtendPatch:
         original_file_str = 'line1\nline2\nline3\nline4\nline5\nline6'
         patch_str = '@@ -2,3 +2,3 @@ init()\n-line2\n+new_line2\n line3\n line4\n@@ -4,1 +4,1 @@ init2()\n-line4\n+new_line4'  # noqa: E501
         num_lines = 1
-        original_allow_dynamic_context = get_settings().config.allow_dynamic_context
+        original_allow_dynamic_context = get_settings(use_context=False).config.allow_dynamic_context
 
-        get_settings().config.allow_dynamic_context = False
+        get_settings(use_context=False).config.allow_dynamic_context = False
         expected_output = '\n@@ -1,5 +1,5 @@ init()\n line1\n-line2\n+new_line2\n line3\n line4\n line5\n\n@@ -3,3 +3,3 @@ init2()\n line3\n-line4\n+new_line4\n line5' # noqa: E501
         actual_output = extend_patch(original_file_str, patch_str,
                                      patch_extra_lines_before=num_lines, patch_extra_lines_after=num_lines)
         assert actual_output == expected_output
 
-        get_settings().config.allow_dynamic_context = True
+        get_settings(use_context=False).config.allow_dynamic_context = True
         expected_output = '\n@@ -1,5 +1,5 @@ init()\n line1\n-line2\n+new_line2\n line3\n line4\n line5\n\n@@ -3,3 +3,3 @@ init2()\n line3\n-line4\n+new_line4\n line5' # noqa: E501
         actual_output = extend_patch(original_file_str, patch_str,
                                      patch_extra_lines_before=num_lines, patch_extra_lines_after=num_lines)
@@ -152,8 +152,8 @@ class TestExtendedPatchMoreLines:
         # Check that with no extra lines, the patches are the same as the original patches
         p0 = patches_extended_no_extra_lines[0].strip()
         p1 = patches_extended_no_extra_lines[1].strip()
-        assert p0 == "## File: 'file1'\n" + pr_languages[0]['files'][0].patch.strip()
-        assert p1 == "## File: 'file2'\n" + pr_languages[0]['files'][1].patch.strip()
+        assert p0 == "## File: 'file1'\n\n" + pr_languages[0]['files'][0].patch.strip()
+        assert p1 == "## File: 'file2'\n\n" + pr_languages[0]['files'][1].patch.strip()
 
         patches_extended_with_extra_lines, total_tokens, patches_extended_tokens = pr_generate_extended_diff(
             pr_languages, token_handler, add_line_numbers_to_hunks=False,

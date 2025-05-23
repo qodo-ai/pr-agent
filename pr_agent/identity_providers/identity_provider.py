@@ -10,7 +10,7 @@ class Eligibility(Enum):
 
 class IdentityProvider(ABC):
     @abstractmethod
-    def verify_eligibility(self, git_provider, git_provier_id, pr_url):
+    def verify_eligibility(self, git_provider, git_provider_id, pr_url):
         pass
 
     @abstractmethod

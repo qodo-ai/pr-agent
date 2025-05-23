@@ -57,6 +57,47 @@ class GitLabProvider(GitProvider):
             return False
         return True
 
+    def _get_project_path_from_pr_or_issue_url(self, pr_or_issue_url: str) -> str:
+        repo_project_path = None
+        if 'issues' in pr_or_issue_url:
+            #replace 'issues' with 'merge_requests', since gitlab provider does not support issue urls, just to get the git repo url:
+            pr_or_issue_url = pr_or_issue_url.replace('issues', 'merge_requests')
+        if 'merge_requests' in pr_or_issue_url:
+            repo_project_path, _ = self._parse_merge_request_url(pr_or_issue_url)
+        if not repo_project_path:
+            get_logger().error(f"url is not a valid merge requests url: {pr_or_issue_url}")
+            return ""
+        return repo_project_path
+
+    def get_git_repo_url(self, issues_or_pr_url: str) -> str:
+        provider_url = issues_or_pr_url
+        repo_path = self._get_project_path_from_pr_or_issue_url(provider_url)
+        if not repo_path or repo_path not in issues_or_pr_url:
+            get_logger().error(f"Unable to retrieve project path from url: {issues_or_pr_url}")
+            return ""
+        return f"{issues_or_pr_url.split(repo_path)[0]}{repo_path}.git"
+
+    # Given a git repo url, return prefix and suffix of the provider in order to view a given file belonging to that repo.
+    # Example: https://gitlab.com/codiumai/pr-agent.git and branch: t1 -> prefix: "https://gitlab.com/codiumai/pr-agent/-/blob/t1", suffix: "?ref_type=heads"
+    # In case git url is not provided, provider will use PR context (which includes branch) to determine the prefix and suffix.
+    def get_canonical_url_parts(self, repo_git_url:str=None, desired_branch:str=None) -> Tuple[str, str]:
+        repo_path = ""
+        if not repo_git_url and not self.pr_url:
+            get_logger().error("Cannot get canonical URL parts: missing either context PR URL or a repo GIT URL")
+            return ("", "")
+        if not repo_git_url: #Use PR url as context
+            repo_path = self._get_project_path_from_pr_or_issue_url(self.pr_url)
+            try:
+                desired_branch = self.gl.projects.get(self.id_project).default_branch
+            except Exception as e:
+                get_logger().exception(f"Cannot get PR: {self.pr_url} default branch. Tried project ID: {self.id_project}")
+                return ("", "")
+        else: #Use repo git url
+            repo_path = repo_git_url.split('.git')[0].split('.com/')[-1]
+        prefix = f"{self.gitlab_url}/{repo_path}/-/blob/{desired_branch}"
+        suffix = "?ref_type=heads"  # gitlab cloud adds this suffix. gitlab server does not, but it is harmless.
+        return (prefix, suffix)
+
     @property
     def pr(self):
         '''The GitLab terminology is merge request (MR) instead of pull request (PR)'''
@@ -478,7 +519,8 @@ class GitLabProvider(GitProvider):
 
     def get_repo_settings(self):
         try:
-            contents = self.gl.projects.get(self.id_project).files.get(file_path='.pr_agent.toml', ref=self.mr.target_branch).decode()
+            main_branch = self.gl.projects.get(self.id_project).default_branch
+            contents = self.gl.projects.get(self.id_project).files.get(file_path='.pr_agent.toml', ref=main_branch).decode()
             return contents
         except Exception:
             return ""
@@ -597,3 +639,24 @@ class GitLabProvider(GitProvider):
                 get_logger().info(f"Failed adding line link, error: {e}")
 
         return ""
+    #Clone related
+    def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        if "gitlab." not in repo_url_to_clone:
+            get_logger().error(f"Repo URL: {repo_url_to_clone} is not a valid gitlab URL.")
+            return None
+        (scheme, base_url) = repo_url_to_clone.split("gitlab.")
+        access_token = self.gl.oauth_token
+        if not all([scheme, access_token, base_url]):
+            get_logger().error(f"Either no access token found, or repo URL: {repo_url_to_clone} "
+                               f"is missing prefix: {scheme} and/or base URL: {base_url}.")
+            return None
+
+        #Note that the ""official"" method found here:
+        # https://docs.gitlab.com/user/profile/personal_access_tokens/#clone-repository-using-personal-access-token
+        # requires a username, which may not be applicable.
+        # The following solution is taken from: https://stackoverflow.com/questions/25409700/using-gitlab-token-to-clone-without-authentication/35003812#35003812
+        # For example: For repo url: https://gitlab.codium-inc.com/qodo/autoscraper.git
+        # Then to clone one will issue: 'git clone https://oauth2:<access token>@gitlab.codium-inc.com/qodo/autoscraper.git'
+
+        clone_url = f"{scheme}oauth2:{access_token}@gitlab.{base_url}"
+        return clone_url

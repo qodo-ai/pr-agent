@@ -1,4 +1,6 @@
-FROM python:3.12.3 AS base
+FROM python:3.12.10-slim AS base
+
+RUN apt update && apt install --no-install-recommends -y git curl && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 ADD pyproject.toml .

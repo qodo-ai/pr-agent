@@ -21,7 +21,7 @@ from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.servers.utils import verify_signature
 
-setup_logger(fmt=LoggingFormat.JSON, level="DEBUG")
+setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
 
 

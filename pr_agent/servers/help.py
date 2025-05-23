@@ -6,6 +6,7 @@ class HelpMessage:
                 "> - **/improve [--extended]**: Suggest code improvements. Extended mode provides a higher quality feedback.   \n" \
                 "> - **/ask \\<QUESTION\\>**: Ask a question about the PR.   \n" \
                 "> - **/update_changelog**: Update the changelog based on the PR's contents.   \n" \
+                "> - **/help_docs \\<QUESTION\\>**: Given a path to documentation (either for this repository or for a given one), ask a question.   \n" \
                 "> - **/add_docs** 💎: Generate docstring for new components introduced in the PR.   \n" \
                 "> - **/generate_labels** 💎: Generate labels for the PR based on the PR's contents.   \n" \
                 "> - **/analyze** 💎: Automatically analyzes the PR, and presents changes walkthrough for each component.   \n\n" \
@@ -200,4 +201,18 @@ some_config2=...
 
         output += f"\n\nSee the improve [usage page](https://pr-agent-docs.codium.ai/tools/improve/) for a comprehensive guide on using this tool.\n\n"
 
+        return output
+
+
+    @staticmethod
+    def get_help_docs_usage_guide():
+        output = "**Overview:**\n"
+        output += """\
+The help docs tool, named `help_docs`, answers a question based on a given relative path of documentation, either from the repository of this merge request or from a given one."
+It can be invoked manually by commenting on any PR:
+```
+/help_docs "..."
+```
+"""
+        output += f"\n\nSee the [help_docs usage](https://pr-agent-docs.codium.ai/tools/help_docs/) page for a comprehensive guide on using this tool.\n\n"
         return output

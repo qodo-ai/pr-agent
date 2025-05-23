@@ -1,12 +1,11 @@
 import os
-
 import litellm
 import openai
 import requests
 from litellm import acompletion
 from tenacity import retry, retry_if_exception_type, stop_after_attempt
 
-from pr_agent.algo import NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS
+from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.utils import ReasoningEffort, get_version
 from pr_agent.config_loader import get_settings
@@ -31,6 +30,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         self.azure = False
         self.api_base = None
         self.repetition_penalty = None
+        
         if get_settings().get("OPENAI.KEY", None):
             openai.api_key = get_settings().openai.key
             litellm.openai_key = get_settings().openai.key
@@ -41,11 +41,6 @@ class LiteLLMAIHandler(BaseAiHandler):
             os.environ["AWS_ACCESS_KEY_ID"] = get_settings().aws.AWS_ACCESS_KEY_ID
             os.environ["AWS_SECRET_ACCESS_KEY"] = get_settings().aws.AWS_SECRET_ACCESS_KEY
             os.environ["AWS_REGION_NAME"] = get_settings().aws.AWS_REGION_NAME
-        if get_settings().get("litellm.use_client"):
-            litellm_token = get_settings().get("litellm.LITELLM_TOKEN")
-            assert litellm_token, "LITELLM_TOKEN is required"
-            os.environ["LITELLM_TOKEN"] = litellm_token
-            litellm.use_client = True
         if get_settings().get("LITELLM.DROP_PARAMS", None):
             litellm.drop_params = get_settings().litellm.drop_params
         if get_settings().get("LITELLM.SUCCESS_CALLBACK", None):
@@ -64,6 +59,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.api_version = get_settings().openai.api_version
         if get_settings().get("OPENAI.API_BASE", None):
             litellm.api_base = get_settings().openai.api_base
+            self.api_base = get_settings().openai.api_base
         if get_settings().get("ANTHROPIC.KEY", None):
             litellm.anthropic_key = get_settings().anthropic.key
         if get_settings().get("COHERE.KEY", None):
@@ -72,6 +68,8 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.api_key = get_settings().groq.key
         if get_settings().get("REPLICATE.KEY", None):
             litellm.replicate_key = get_settings().replicate.key
+        if get_settings().get("XAI.KEY", None):
+            litellm.api_key = get_settings().xai.key
         if get_settings().get("HUGGINGFACE.KEY", None):
             litellm.huggingface_key = get_settings().huggingface.key
         if get_settings().get("HUGGINGFACE.API_BASE", None) and 'huggingface' in get_settings().config.model:
@@ -96,6 +94,43 @@ class LiteLLMAIHandler(BaseAiHandler):
         if get_settings().get("DEEPSEEK.KEY", None):
             os.environ['DEEPSEEK_API_KEY'] = get_settings().get("DEEPSEEK.KEY")
 
+        # Support deepinfra models
+        if get_settings().get("DEEPINFRA.KEY", None):
+            os.environ['DEEPINFRA_API_KEY'] = get_settings().get("DEEPINFRA.KEY")
+
+        # Support mistral models
+        if get_settings().get("MISTRAL.KEY", None):
+            os.environ["MISTRAL_API_KEY"] = get_settings().get("MISTRAL.KEY")
+        
+        # Support codestral models
+        if get_settings().get("CODESTRAL.KEY", None):
+            os.environ["CODESTRAL_API_KEY"] = get_settings().get("CODESTRAL.KEY")
+
+        # Check for Azure AD configuration
+        if get_settings().get("AZURE_AD.CLIENT_ID", None):
+            self.azure = True
+            # Generate access token using Azure AD credentials from settings
+            access_token = self._get_azure_ad_token()
+            litellm.api_key = access_token
+            openai.api_key = access_token
+            
+            # Set API base from settings
+            self.api_base = get_settings().azure_ad.api_base
+            litellm.api_base = self.api_base
+            openai.api_base = self.api_base
+
+        # Support for Openrouter models
+        if get_settings().get("OPENROUTER.KEY", None):
+            openrouter_api_key = get_settings().get("OPENROUTER.KEY", None)
+            os.environ["OPENROUTER_API_KEY"] = openrouter_api_key
+            litellm.api_key = openrouter_api_key
+            openai.api_key = openrouter_api_key
+
+            openrouter_api_base = get_settings().get("OPENROUTER.API_BASE", "https://openrouter.ai/api/v1")
+            os.environ["OPENROUTER_API_BASE"] = openrouter_api_base
+            self.api_base = openrouter_api_base
+            litellm.api_base = openrouter_api_base
+
         # Models that only use user meessage
         self.user_message_only_models = USER_MESSAGE_ONLY_MODELS
 
@@ -104,6 +139,29 @@ class LiteLLMAIHandler(BaseAiHandler):
 
         # Models that support reasoning effort
         self.support_reasoning_models = SUPPORT_REASONING_EFFORT_MODELS
+
+        # Models that support extended thinking
+        self.claude_extended_thinking_models = CLAUDE_EXTENDED_THINKING_MODELS
+
+    def _get_azure_ad_token(self):
+        """
+        Generates an access token using Azure AD credentials from settings.
+        Returns:
+            str: The access token
+        """
+        from azure.identity import ClientSecretCredential
+        try:
+            credential = ClientSecretCredential(
+                tenant_id=get_settings().azure_ad.tenant_id,
+                client_id=get_settings().azure_ad.client_id,
+                client_secret=get_settings().azure_ad.client_secret
+            )
+            # Get token for Azure OpenAI service
+            token = credential.get_token("https://cognitiveservices.azure.com/.default")
+            return token.token
+        except Exception as e:
+            get_logger().error(f"Failed to get Azure AD token: {e}")
+            raise
 
     def prepare_logs(self, response, system, user, resp, finish_reason):
         response_log = response.dict().copy()
@@ -116,6 +174,43 @@ class LiteLLMAIHandler(BaseAiHandler):
         else:
             response_log['main_pr_language'] = 'unknown'
         return response_log
+
+    def _configure_claude_extended_thinking(self, model: str, kwargs: dict) -> dict:
+        """
+        Configure Claude extended thinking parameters if applicable.
+
+        Args:
+            model (str): The AI model being used
+            kwargs (dict): The keyword arguments for the model call
+
+        Returns:
+            dict: Updated kwargs with extended thinking configuration
+        """
+        extended_thinking_budget_tokens = get_settings().config.get("extended_thinking_budget_tokens", 2048)
+        extended_thinking_max_output_tokens = get_settings().config.get("extended_thinking_max_output_tokens", 4096)
+
+        # Validate extended thinking parameters
+        if not isinstance(extended_thinking_budget_tokens, int) or extended_thinking_budget_tokens <= 0:
+            raise ValueError(f"extended_thinking_budget_tokens must be a positive integer, got {extended_thinking_budget_tokens}")
+        if not isinstance(extended_thinking_max_output_tokens, int) or extended_thinking_max_output_tokens <= 0:
+            raise ValueError(f"extended_thinking_max_output_tokens must be a positive integer, got {extended_thinking_max_output_tokens}")
+        if extended_thinking_max_output_tokens < extended_thinking_budget_tokens:
+            raise ValueError(f"extended_thinking_max_output_tokens ({extended_thinking_max_output_tokens}) must be greater than or equal to extended_thinking_budget_tokens ({extended_thinking_budget_tokens})")
+
+        kwargs["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": extended_thinking_budget_tokens
+        }
+        if get_settings().config.verbosity_level >= 2:
+            get_logger().info(f"Adding max output tokens {extended_thinking_max_output_tokens} to model {model}, extended thinking budget tokens: {extended_thinking_budget_tokens}")
+        kwargs["max_tokens"] = extended_thinking_max_output_tokens
+
+        # temperature may only be set to 1 when thinking is enabled
+        if get_settings().config.verbosity_level >= 2:
+            get_logger().info("Temperature may only be set to 1 when thinking is enabled with claude models.")
+        kwargs["temperature"] = 1
+
+        return kwargs
 
     def add_litellm_callbacks(selfs, kwargs) -> dict:
         captured_extra = []
@@ -242,6 +337,10 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"Adding reasoning_effort with value {reasoning_effort} to model {model}.")
                 kwargs["reasoning_effort"] = reasoning_effort
 
+            # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
+            if (model in self.claude_extended_thinking_models) and get_settings().config.get("enable_claude_extended_thinking", False):
+                kwargs = self._configure_claude_extended_thinking(model, kwargs)
+
             if get_settings().litellm.get("enable_callbacks", False):
                 kwargs = self.add_litellm_callbacks(kwargs)
 
@@ -264,19 +363,19 @@ class LiteLLMAIHandler(BaseAiHandler):
                 except json.JSONDecodeError as e:
                     raise ValueError(f"LITELLM.EXTRA_HEADERS contains invalid JSON: {str(e)}")
                 kwargs["extra_headers"] = litellm_extra_headers
-            
+
             get_logger().debug("Prompts", artifact={"system": system, "user": user})
-            
+
             if get_settings().config.verbosity_level >= 2:
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
-                
+
             response = await acompletion(**kwargs)
-        except (openai.APIError, openai.APITimeoutError) as e:
-            get_logger().warning(f"Error during LLM inference: {e}")
-            raise
         except (openai.RateLimitError) as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")
+            raise
+        except (openai.APIError, openai.APITimeoutError) as e:
+            get_logger().warning(f"Error during LLM inference: {e}")
             raise
         except (Exception) as e:
             get_logger().warning(f"Unknown error during LLM inference: {e}")

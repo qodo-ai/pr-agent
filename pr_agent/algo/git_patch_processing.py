@@ -102,20 +102,20 @@ def process_patch_lines(patch_str, original_file_str, patch_extra_lines_before, 
                             lines_before_original = file_original_lines[extended_start1 - 1:start1 - 1]
                             lines_before_new = file_new_lines[extended_start2 - 1:start2 - 1]
                             found_header = False
-                            if lines_before_original == lines_before_new: # Making sure no changes from a previous hunk
-                                for i, line, in enumerate(lines_before_original):
-                                    if section_header in line:
+                            for i, line in enumerate(lines_before_original):
+                                if section_header in line:
+                                    # Update start and size in one line each
+                                    extended_start1, extended_start2 = extended_start1 + i, extended_start2 + i
+                                    extended_size1, extended_size2 = extended_size1 - i, extended_size2 - i
+                                    lines_before_original_dynamic_context = lines_before_original[i:]
+                                    lines_before_new_dynamic_context = lines_before_new[i:]
+                                    if lines_before_original_dynamic_context == lines_before_new_dynamic_context:
+                                        # get_logger().debug(f"found dynamic context match for section header: {section_header}")
                                         found_header = True
-                                        # Update start and size in one line each
-                                        extended_start1, extended_start2 = extended_start1 + i, extended_start2 + i
-                                        extended_size1, extended_size2 = extended_size1 - i, extended_size2 - i
-                                        # get_logger().debug(f"Found section header in line {i} before the hunk")
                                         section_header = ''
-                                        break
-                            else:
-                                get_logger().debug(f"Extra lines before hunk are different in original and new file - dynamic context",
-                                                   artifact={"lines_before_original": lines_before_original,
-                                                             "lines_before_new": lines_before_new})
+                                    else:
+                                        pass  # its ok to be here. We cant apply dynamic context if the lines are different if 'old' and 'new' hunks
+                                    break
 
                             if not found_header:
                                 # get_logger().debug(f"Section header not found in the extra lines before the hunk")
@@ -130,14 +130,26 @@ def process_patch_lines(patch_str, original_file_str, patch_extra_lines_before, 
                         if file_new_lines:
                             delta_lines_new = [f' {line}' for line in file_new_lines[extended_start2 - 1:start2 - 1]]
                             if delta_lines_original != delta_lines_new:
-                                get_logger().debug(f"Extra lines before hunk are different in original and new file",
-                                                   artifact={"delta_lines_original": delta_lines_original,
-                                                             "delta_lines_new": delta_lines_new})
-                                extended_start1 = start1
-                                extended_size1 = size1
-                                extended_start2 = start2
-                                extended_size2 = size2
-                                delta_lines_original = []
+                                found_mini_match = False
+                                for i in range(len(delta_lines_original)):
+                                    if delta_lines_original[i:] == delta_lines_new[i:]:
+                                        delta_lines_original = delta_lines_original[i:]
+                                        delta_lines_new = delta_lines_new[i:]
+                                        extended_start1 += i
+                                        extended_size1 -= i
+                                        extended_start2 += i
+                                        extended_size2 -= i
+                                        found_mini_match = True
+                                        break
+                                if not found_mini_match:
+                                    extended_start1 = start1
+                                    extended_size1 = size1
+                                    extended_start2 = start2
+                                    extended_size2 = size2
+                                    delta_lines_original = []
+                                    # get_logger().debug(f"Extra lines before hunk are different in original and new file",
+                                    #                    artifact={"delta_lines_original": delta_lines_original,
+                                    #                              "delta_lines_new": delta_lines_new})
 
                         #  logic to remove section header if its in the extra delta lines (in dynamic context, this is also done)
                         if section_header and not allow_dynamic_context:
@@ -285,7 +297,7 @@ def handle_patch_deletions(patch: str, original_file_content_str: str,
     return patch
 
 
-def convert_to_hunks_with_lines_numbers(patch: str, file) -> str:
+def decouple_and_convert_to_hunks_with_lines_numbers(patch: str, file) -> str:
     """
     Convert a given patch string into a string with line numbers for each hunk, indicating the new and old content of
     the file.
@@ -317,11 +329,17 @@ __old hunk__
         line6
            ...
     """
-    # if the file was deleted, return a message indicating that the file was deleted
-    if hasattr(file, 'edit_type') and file.edit_type == EDIT_TYPE.DELETED:
-        return f"\n\n## File '{file.filename.strip()}' was deleted\n"
 
-    patch_with_lines_str = f"\n\n## File: '{file.filename.strip()}'\n"
+    # Add a header for the file
+    if file:
+        # if the file was deleted, return a message indicating that the file was deleted
+        if hasattr(file, 'edit_type') and file.edit_type == EDIT_TYPE.DELETED:
+            return f"\n\n## File '{file.filename.strip()}' was deleted\n"
+
+        patch_with_lines_str = f"\n\n## File: '{file.filename.strip()}'\n"
+    else:
+        patch_with_lines_str = ""
+
     patch_lines = patch.splitlines()
     RE_HUNK_HEADER = re.compile(
         r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@[ ]?(.*)")

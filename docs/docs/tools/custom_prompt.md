@@ -1,4 +1,5 @@
 ## Overview
+
 The `custom_prompt` tool scans the PR code changes, and automatically generates suggestions for improving the PR code.
 It shares similarities with the `improve` tool, but with one main difference: the `custom_prompt` tool will **only propose suggestions that follow specific guidelines defined by the prompt** in: `pr_custom_prompt.prompt` configuration.
 
@@ -17,7 +18,7 @@ The code suggestions should focus only on the following:
 
 With a [configuration file](../usage-guide/automations_and_usage.md#github-app), use the following template:
 
-```
+```toml
 [pr_custom_prompt]
 prompt="""\
 The suggestions should focus only on the following:
@@ -33,7 +34,8 @@ You might benefit from several trial-and-error iterations, until you get the cor
 ## Example usage
 
 Here is an example of a possible prompt, defined in the configuration file:
-```
+
+```toml
 [pr_custom_prompt]
 prompt="""\
 The code suggestions should focus only on the following:
@@ -53,6 +55,6 @@ Results obtained with the prompt above:
 
 - `prompt`: the prompt for the tool. It should be a multi-line string.
 
-- `num_code_suggestions_per_chunk`: number of code suggestions provided by the 'custom_prompt' tool, per chunk. Default is 4.
+- `num_code_suggestions_per_chunk`: number of code suggestions provided by the 'custom_prompt' tool, per chunk. Default is 3.
 
 - `enable_help_text`: if set to true, the tool will display a help text in the comment. Default is true.

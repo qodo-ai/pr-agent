@@ -30,11 +30,12 @@ from pr_agent.config_loader import get_settings, global_settings
 from pr_agent.log import get_logger
 
 
-def get_weak_model() -> str:
-    if get_settings().get("config.model_weak"):
+def get_model(model_type: str = "model_weak") -> str:
+    if model_type == "model_weak" and get_settings().get("config.model_weak"):
         return get_settings().config.model_weak
+    elif model_type == "model_reasoning" and get_settings().get("config.model_reasoning"):
+        return get_settings().config.model_reasoning
     return get_settings().config.model
-
 
 class Range(BaseModel):
     line_start: int  # should be 0-indexed
@@ -45,6 +46,7 @@ class Range(BaseModel):
 class ModelType(str, Enum):
     REGULAR = "regular"
     WEAK = "weak"
+    REASONING = "reasoning"
 
 class PRReviewHeader(str, Enum):
     REGULAR = "## PR Reviewer Guide"
@@ -704,12 +706,14 @@ def _fix_key_value(key: str, value: str):
 
 
 def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", last_key="") -> dict:
+    response_text_original = copy.deepcopy(response_text)
     response_text = response_text.strip('\n').removeprefix('```yaml').rstrip().removesuffix('```')
     try:
         data = yaml.safe_load(response_text)
     except Exception as e:
         get_logger().warning(f"Initial failure to parse AI prediction: {e}")
-        data = try_fix_yaml(response_text, keys_fix_yaml=keys_fix_yaml, first_key=first_key, last_key=last_key)
+        data = try_fix_yaml(response_text, keys_fix_yaml=keys_fix_yaml, first_key=first_key, last_key=last_key,
+                            response_text_original=response_text_original)
         if not data:
             get_logger().error(f"Failed to parse AI prediction after fallbacks",
                                artifact={'response_text': response_text})
@@ -723,11 +727,13 @@ def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", l
 def try_fix_yaml(response_text: str,
                  keys_fix_yaml: List[str] = [],
                  first_key="",
-                 last_key="",) -> dict:
+                 last_key="",
+                 response_text_original="") -> dict:
     response_text_lines = response_text.split('\n')
 
-    keys_yaml = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:', 'improved code:']
+    keys_yaml = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:', 'improved code:', 'label:']
     keys_yaml = keys_yaml + keys_fix_yaml
+
     # first fallback - try to convert 'relevant line: ...' to relevant line: |-\n        ...'
     response_text_lines_copy = response_text_lines.copy()
     for i in range(0, len(response_text_lines_copy)):
@@ -742,9 +748,32 @@ def try_fix_yaml(response_text: str,
     except:
         pass
 
-    # second fallback - try to extract only range from first ```yaml to ````
-    snippet_pattern = r'```(yaml)?[\s\S]*?```'
+    # 1.5 fallback - try to convert '|' to '|2'. Will solve cases of indent decreasing during the code
+    response_text_copy = copy.deepcopy(response_text)
+    response_text_copy = response_text_copy.replace('|\n', '|2\n')
+    try:
+        data = yaml.safe_load(response_text_copy)
+        get_logger().info(f"Successfully parsed AI prediction after replacing | with |2")
+        return data
+    except:
+        # if it fails, we can try to add spaces to the lines that are not indented properly, and contain '}'.
+        response_text_lines_copy = response_text_copy.split('\n')
+        for i in range(0, len(response_text_lines_copy)):
+            initial_space = len(response_text_lines_copy[i]) - len(response_text_lines_copy[i].lstrip())
+            if initial_space == 2 and '|2' not in response_text_lines_copy[i] and '}' in response_text_lines_copy[i]:
+                response_text_lines_copy[i] = '    ' + response_text_lines_copy[i].lstrip()
+        try:
+            data = yaml.safe_load('\n'.join(response_text_lines_copy))
+            get_logger().info(f"Successfully parsed AI prediction after replacing | with |2 and adding spaces")
+            return data
+        except:
+            pass
+
+    # second fallback - try to extract only range from first ```yaml to the last ```
+    snippet_pattern = r'```yaml([\s\S]*?)```(?=\s*$|")'
     snippet = re.search(snippet_pattern, '\n'.join(response_text_lines_copy))
+    if not snippet:
+        snippet = re.search(snippet_pattern, response_text_original) # before we removed the "```"
     if snippet:
         snippet_text = snippet.group()
         try:
@@ -796,15 +825,46 @@ def try_fix_yaml(response_text: str,
     except:
         pass
 
-    # sixth fallback - try to remove last lines
-    for i in range(1, len(response_text_lines)):
-        response_text_lines_tmp = '\n'.join(response_text_lines[:-i])
+    # sixth fallback - replace tabs with spaces
+    if '\t' in response_text:
+        response_text_copy = copy.deepcopy(response_text)
+        response_text_copy = response_text_copy.replace('\t', '    ')
         try:
-            data = yaml.safe_load(response_text_lines_tmp)
-            get_logger().info(f"Successfully parsed AI prediction after removing {i} lines")
+            data = yaml.safe_load(response_text_copy)
+            get_logger().info(f"Successfully parsed AI prediction after replacing tabs with spaces")
             return data
         except:
             pass
+
+    # seventh fallback - add indent for sections of code blocks
+    response_text_copy = copy.deepcopy(response_text)
+    response_text_copy_lines = response_text_copy.split('\n')
+    start_line = -1
+    for i, line in enumerate(response_text_copy_lines):
+        if 'existing_code:' in line or 'improved_code:' in line:
+            start_line = i
+        elif line.endswith(': |') or line.endswith(': |-') or line.endswith(': |2') or line.endswith(':'):
+            start_line = -1
+        elif start_line != -1:
+            response_text_copy_lines[i] = '    ' + line
+    response_text_copy = '\n'.join(response_text_copy_lines)
+    try:
+        data = yaml.safe_load(response_text_copy)
+        get_logger().info(f"Successfully parsed AI prediction after adding indent for sections of code blocks")
+        return data
+    except:
+        pass
+
+    # # sixth fallback - try to remove last lines
+    # for i in range(1, len(response_text_lines)):
+    #     response_text_lines_tmp = '\n'.join(response_text_lines[:-i])
+    #     try:
+    #         data = yaml.safe_load(response_text_lines_tmp)
+    #         get_logger().info(f"Successfully parsed AI prediction after removing {i} lines")
+    #         return data
+    #     except:
+    #         pass
+
 
 
 def set_custom_labels(variables, git_provider=None):
@@ -873,6 +933,7 @@ def get_max_tokens(model):
     elif settings.config.custom_model_max_tokens > 0:
         max_tokens_model = settings.config.custom_model_max_tokens
     else:
+        get_logger().error(f"Model {model} is not defined in MAX_TOKENS in ./pr_agent/algo/__init__.py and no custom_model_max_tokens is set")
         raise Exception(f"Ensure {model} is defined in MAX_TOKENS in ./pr_agent/algo/__init__.py or set a positive value for it in config.custom_model_max_tokens")
 
     if settings.config.max_model_tokens and settings.config.max_model_tokens > 0:

@@ -140,11 +140,15 @@ class PRUpdateChangelog:
         return new_file_content, answer
 
     def _push_changelog_update(self, new_file_content, answer):
+        if get_settings().pr_update_changelog.get("skip_ci_on_push", True):
+            commit_message = "[skip ci] Update CHANGELOG.md"
+        else:
+            commit_message = "Update CHANGELOG.md"
         self.git_provider.create_or_update_pr_file(
             file_path="CHANGELOG.md",
             branch=self.git_provider.get_pr_branch(),
             contents=new_file_content,
-            message="[skip ci] Update CHANGELOG.md",
+            message=commit_message,
         )
 
         sleep(5)  # wait for the file to be updated

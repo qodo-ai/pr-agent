@@ -40,6 +40,7 @@ The GITHUB_TOKEN secret is automatically created by GitHub.
 When you open your next PR, you should see a comment from `github-actions` bot with a review of your PR, and instructions on how to use the rest of the tools.
 
 4) You may configure Qodo Merge by adding environment variables under the env section corresponding to any configurable property in the [configuration](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml) file. Some examples:
+
 ```yaml
       env:
         # ... previous environment values
@@ -47,9 +48,11 @@ When you open your next PR, you should see a comment from `github-actions` bot w
         PR_REVIEWER.REQUIRE_TESTS_REVIEW: "false" # Disable tests review
         PR_CODE_SUGGESTIONS.NUM_CODE_SUGGESTIONS: 6 # Increase number of code suggestions
 ```
+
 See detailed usage instructions in the [USAGE GUIDE](https://qodo-merge-docs.qodo.ai/usage-guide/automations_and_usage/#github-action)
 
 ### Using a specific release
+
 !!! tip ""
     if you want to pin your action to a specific release (v0.23 for example) for stability reasons, use:
     ```yaml
@@ -72,6 +75,7 @@ See detailed usage instructions in the [USAGE GUIDE](https://qodo-merge-docs.qod
     ```
 
 ### Action for GitHub enterprise server
+
 !!! tip ""
     To use the action with a GitHub enterprise server, add an environment variable `GITHUB.BASE_URL` with the API URL of your GitHub server.
 
@@ -82,10 +86,10 @@ See detailed usage instructions in the [USAGE GUIDE](https://qodo-merge-docs.qod
             GITHUB.BASE_URL: "https://github.mycompany.com/api/v3"
     ```
 
-
 ---
 
 ## Run as a GitHub App
+
 Allowing you to automate the review process on your private or public repositories.
 
 1) Create a GitHub App from the [Github Developer Portal](https://docs.github.com/en/developers/apps/creating-a-github-app).
@@ -102,7 +106,7 @@ Allowing you to automate the review process on your private or public repositori
 
 2) Generate a random secret for your app, and save it for later. For example, you can use:
 
-```
+```bash
 WEBHOOK_SECRET=$(python -c "import secrets; print(secrets.token_hex(10))")
 ```
 
@@ -113,28 +117,29 @@ WEBHOOK_SECRET=$(python -c "import secrets; print(secrets.token_hex(10))")
 
 4) Clone this repository:
 
-```
+```bash
 git clone https://github.com/Codium-ai/pr-agent.git
 ```
 
 5) Copy the secrets template file and fill in the following:
 
-```
+```bash
 cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
 # Edit .secrets.toml file
 ```
 
-   - Your OpenAI key.
-   - Copy your app's private key to the private_key field.
-   - Copy your app's ID to the app_id field.
-   - Copy your app's webhook secret to the webhook_secret field.
-   - Set deployment_type to 'app' in [configuration.toml](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml)
+- Your OpenAI key.
+- Copy your app's private key to the private_key field.
+- Copy your app's ID to the app_id field.
+- Copy your app's webhook secret to the webhook_secret field.
+- Set deployment_type to 'app' in [configuration.toml](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml)
 
     > The .secrets.toml file is not copied to the Docker image by default, and is only used for local development.
     > If you want to use the .secrets.toml file in your Docker image, you can add remove it from the .dockerignore file.
     > In most production environments, you would inject the secrets file as environment variables or as mounted volumes.
     > For example, in order to inject a secrets file as a volume in a Kubernetes environment you can update your pod spec to include the following,
     > assuming you have a secret named `pr-agent-settings` with a key named `.secrets.toml`:
+
     ```
            volumes:
             - name: settings-volume
@@ -152,7 +157,7 @@ cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
 
 6) Build a Docker image for the app and optionally push it to a Docker repository. We'll use Dockerhub as an example:
 
-    ```
+    ```bash
     docker build . -t codiumai/pr-agent:github_app --target github_app -f docker/Dockerfile
     docker push codiumai/pr-agent:github_app  # Push to your Docker repository
     ```
@@ -180,14 +185,18 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 
 1. Follow steps 1-5 from [here](#run-as-a-github-app).
 2. Build a docker image that can be used as a lambda function
+
     ```shell
     docker buildx build --platform=linux/amd64 . -t codiumai/pr-agent:serverless -f docker/Dockerfile.lambda
    ```
+
 3. Push image to ECR
+
     ```shell
-	docker tag codiumai/pr-agent:serverless <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
-	docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    docker tag codiumai/pr-agent:serverless <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
     ```
+
 4. Create a lambda function that uses the uploaded image. Set the lambda timeout to be at least 3m.
 5. Configure the lambda function to have a Function URL.
 6. In the environment variables of the Lambda function, specify `AZURE_DEVOPS_CACHE_DIR` to a writable location such as /tmp. (see [link](https://github.com/Codium-ai/pr-agent/pull/450#issuecomment-1840242269))
@@ -201,28 +210,27 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 Not all features have been added to CodeCommit yet.  As of right now, CodeCommit has been implemented to run the Qodo Merge CLI on the command line, using AWS credentials stored in environment variables.  (More features will be added in the future.)  The following is a set of instructions to have Qodo Merge do a review of your CodeCommit pull request from the command line:
 
 1. Create an IAM user that you will use to read CodeCommit pull requests and post comments
-    * Note: That user should have CLI access only, not Console access
+    - Note: That user should have CLI access only, not Console access
 2. Add IAM permissions to that user, to allow access to CodeCommit (see IAM Role example below)
 3. Generate an Access Key for your IAM user
 4. Set the Access Key and Secret using environment variables (see Access Key example below)
 5. Set the `git_provider` value to `codecommit` in the `pr_agent/settings/configuration.toml` settings file
 6. Set the `PYTHONPATH` to include your `pr-agent` project directory
-    * Option A: Add `PYTHONPATH="/PATH/TO/PROJECTS/pr-agent` to your `.env` file
-    * Option B: Set `PYTHONPATH` and run the CLI in one command, for example:
-        * `PYTHONPATH="/PATH/TO/PROJECTS/pr-agent python pr_agent/cli.py [--ARGS]`
+    - Option A: Add `PYTHONPATH="/PATH/TO/PROJECTS/pr-agent` to your `.env` file
+    - Option B: Set `PYTHONPATH` and run the CLI in one command, for example:
+        - `PYTHONPATH="/PATH/TO/PROJECTS/pr-agent python pr_agent/cli.py [--ARGS]`
 
 ---
-
 
 #### AWS CodeCommit IAM Role Example
 
 Example IAM permissions to that user to allow access to CodeCommit:
 
-* Note: The following is a working example of IAM permissions that has read access to the repositories and write access to allow posting comments
-* Note: If you only want pr-agent to review your pull requests, you can tighten the IAM permissions further, however this IAM example will work, and allow the pr-agent to post comments to the PR
-* Note: You may want to replace the `"Resource": "*"` with your list of repos, to limit access to only those repos
+- Note: The following is a working example of IAM permissions that has read access to the repositories and write access to allow posting comments
+- Note: If you only want pr-agent to review your pull requests, you can tighten the IAM permissions further, however this IAM example will work, and allow the pr-agent to post comments to the PR
+- Note: You may want to replace the `"Resource": "*"` with your list of repos, to limit access to only those repos
 
-```
+```json
 {
     "Version": "2012-10-17",
     "Statement": [

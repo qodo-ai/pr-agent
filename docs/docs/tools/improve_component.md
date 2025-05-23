@@ -1,12 +1,13 @@
 ## Overview
+
 The `improve_component` tool generates code suggestions for a specific code component that changed in the PR.
 it can be invoked manually by commenting on any PR:
+
 ```
 /improve_component component_name
 ```
 
 To get a list of the components that changed in the PR and choose the relevant component interactively, use the [`analyze`](./analyze.md) tool.
-
 
 ## Example usage
 
@@ -23,6 +24,7 @@ The tool will generate code suggestions for the selected component (if no compon
     - This tool can also be triggered interactively by using the [`analyze`](./analyze.md) tool.
 
 ## Configuration options
+
 - `num_code_suggestions`: number of code suggestions to provide. Default is 4
 - `extra_instructions`: Optional extra instructions to the tool. For example: "focus on ...".
 - `file`: in case there are several components with the same name, you can specify the relevant file.

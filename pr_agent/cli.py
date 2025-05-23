@@ -22,6 +22,7 @@ def set_parser():
     - cli.py --pr_url=... ask "write me a poem about this PR"
     - cli.py --pr_url=... reflect
     - cli.py --issue_url=... similar_issue
+    - cli.py --pr_url/--issue_url= help_docs [<asked question>]
 
     Supported commands:
     - review / review_pr - Add a review that includes a summary of the PR and specific suggestions for improvement.
@@ -40,6 +41,8 @@ def set_parser():
     - add_docs
 
     - generate_labels
+    
+    - help_docs - Ask a question, from either an issue or PR context, on a given repo (current context or a different one)
 
 
     Configuration:
@@ -83,7 +86,13 @@ def run(inargs=None, args=None):
         if get_settings().litellm.get("enable_callbacks", False):
             # There may be additional events on the event queue from the run above. If there are give them time to complete.
             get_logger().debug("Waiting for event queue to complete")
-            await asyncio.wait([task for task in asyncio.all_tasks() if task is not asyncio.current_task()])
+            tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+            if tasks:
+                _, pending = await asyncio.wait(tasks, timeout=30)
+                if pending:
+                    get_logger().warning(
+                        f"{len(pending)} callback tasks({[task.get_coro() for task in pending]}) did not complete within timeout"
+                    )
 
         return result
 

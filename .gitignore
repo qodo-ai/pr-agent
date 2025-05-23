@@ -2,6 +2,7 @@
 .lsp/
 .vscode/
 .env
+.venv/
 venv/
 pr_agent/settings/.secrets.toml
 __pycache__
@@ -11,3 +12,4 @@ build/
 .DS_Store
 docs/.cache/
 .qodo
+poetry.lock

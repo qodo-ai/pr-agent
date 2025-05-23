@@ -29,14 +29,36 @@ class BitbucketProvider(GitProvider):
         self, pr_url: Optional[str] = None, incremental: Optional[bool] = False
     ):
         s = requests.Session()
-        try:
-            bearer = context.get("bitbucket_bearer_token", None)
-            s.headers["Authorization"] = f"Bearer {bearer}"
-        except Exception:
-            s.headers[
-                "Authorization"
-            ] = f'Bearer {get_settings().get("BITBUCKET.BEARER_TOKEN", None)}'
         s.headers["Content-Type"] = "application/json"
+
+        self.auth_type = get_settings().get("BITBUCKET.AUTH_TYPE", "bearer")
+
+        try:
+            def get_token(token_name, auth_type_name):
+                token = get_settings().get(f"BITBUCKET.{token_name.upper()}", None)
+                if not token:
+                    raise ValueError(f"{auth_type_name} auth requires a token")
+                return token
+
+            if self.auth_type == "basic":
+                self.basic_token = get_token("basic_token", "Basic")
+                s.headers["Authorization"] = f"Basic {self.basic_token}"
+            elif self.auth_type == "bearer":
+                try:
+                    self.bearer_token = context.get("bitbucket_bearer_token", None)
+                except:
+                    self.bearer_token = None
+
+                if not self.bearer_token:
+                    self.bearer_token = get_token("bearer_token", "Bearer")
+                s.headers["Authorization"] = f"Bearer {self.bearer_token}"
+            else:
+                 raise ValueError(f"Unsupported auth_type: {self.auth_type}")
+
+        except Exception as e:
+            get_logger().exception(f"Failed to initialize Bitbucket authentication: {e}")
+            raise
+
         self.headers = s.headers
         self.bitbucket_client = Cloud(session=s)
         self.max_comment_length = 31000
@@ -66,6 +88,37 @@ class BitbucketProvider(GitProvider):
             return contents
         except Exception:
             return ""
+
+    def get_git_repo_url(self, pr_url: str=None) -> str: #bitbucket does not support issue url, so ignore param
+        try:
+            parsed_url = urlparse(self.pr_url)
+            return f"{parsed_url.scheme}://{parsed_url.netloc}/{self.workspace_slug}/{self.repo_slug}.git"
+        except Exception as e:
+            get_logger().exception(f"url is not a valid merge requests url: {self.pr_url}")
+            return ""
+
+    # Given a git repo url, return prefix and suffix of the provider in order to view a given file belonging to that repo.
+    # Example: git clone git clone https://bitbucket.org/codiumai/pr-agent.git and branch: main -> prefix: "https://bitbucket.org/codiumai/pr-agent/src/main", suffix: ""
+    # In case git url is not provided, provider will use PR context (which includes branch) to determine the prefix and suffix.
+    def get_canonical_url_parts(self, repo_git_url:str=None, desired_branch:str=None) -> Tuple[str, str]:
+        scheme_and_netloc = None
+        if repo_git_url:
+            parsed_git_url = urlparse(repo_git_url)
+            scheme_and_netloc = parsed_git_url.scheme + "://" + parsed_git_url.netloc
+            repo_path = parsed_git_url.path.split('.git')[0][1:] #/<workspace>/<repo>.git -> <workspace>/<repo>
+            if repo_path.count('/') != 1:
+                get_logger().error(f"repo_git_url is not a valid git repo url: {repo_git_url}")
+                return ("", "")
+            workspace_name, project_name = repo_path.split('/')
+        else:
+            desired_branch = self.get_repo_default_branch()
+            parsed_pr_url = urlparse(self.pr_url)
+            scheme_and_netloc = parsed_pr_url.scheme + "://" + parsed_pr_url.netloc
+            workspace_name, project_name = (self.workspace_slug, self.repo_slug)
+        prefix = f"{scheme_and_netloc}/{workspace_name}/{project_name}/src/{desired_branch}"
+        suffix = "" #None
+        return (prefix, suffix)
+
 
     def publish_code_suggestions(self, code_suggestions: list) -> bool:
         """
@@ -436,6 +489,16 @@ class BitbucketProvider(GitProvider):
     def get_pr_branch(self):
         return self.pr.source_branch
 
+    # This function attempts to get the default branch of the repository. As a fallback, uses the PR destination branch.
+    # Note: Must be running from a PR context.
+    def get_repo_default_branch(self):
+        try:
+            url_repo = f"https://api.bitbucket.org/2.0/repositories/{self.workspace_slug}/{self.repo_slug}/"
+            response_repo = requests.request("GET", url_repo, headers=self.headers).json()
+            return response_repo['mainbranch']['name']
+        except:
+            return self.pr.destination_branch
+
     def get_pr_owner_id(self) -> str | None:
         return self.workspace_slug
 
@@ -457,7 +520,7 @@ class BitbucketProvider(GitProvider):
         return True
 
     @staticmethod
-    def _parse_pr_url(pr_url: str) -> Tuple[str, int]:
+    def _parse_pr_url(pr_url: str) -> Tuple[str, int, int]:
         parsed_url = urlparse(pr_url)
 
         if "bitbucket.org" not in parsed_url.netloc:
@@ -559,3 +622,26 @@ class BitbucketProvider(GitProvider):
     # bitbucket does not support labels
     def get_pr_labels(self, update=False):
         pass
+    #Clone related
+    def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        if "bitbucket.org" not in repo_url_to_clone:
+            get_logger().error("Repo URL is not a valid bitbucket URL.")
+            return None
+
+        (scheme, base_url) = repo_url_to_clone.split("bitbucket.org")
+        if not all([scheme, base_url]):
+            get_logger().error(f"repo_url_to_clone: {repo_url_to_clone} is not a valid bitbucket URL.")
+            return None
+
+        if self.auth_type == "basic":
+            # Basic auth with token
+            clone_url = f"{scheme}x-token-auth:{self.basic_token}@bitbucket.org{base_url}"
+        elif self.auth_type == "bearer":
+            # Bearer token
+            clone_url = f"{scheme}x-token-auth:{self.bearer_token}@bitbucket.org{base_url}"
+        else:
+            # This case should ideally not be reached if __init__ validates auth_type
+            get_logger().error(f"Unsupported or uninitialized auth_type: {getattr(self, 'auth_type', 'N/A')}. Returning None")
+            return None
+
+        return clone_url

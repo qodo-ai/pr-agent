@@ -1,6 +1,6 @@
 # Contributing to PR-Agent
 
-Thank you for your interest in contributing to the PR-Agent project! 
+Thank you for your interest in contributing to the PR-Agent project!
 
 ## Getting Started
 

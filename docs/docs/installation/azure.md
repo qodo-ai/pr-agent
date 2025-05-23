@@ -1,6 +1,8 @@
 ## Azure DevOps Pipeline
+
 You can use a pre-built Action Docker image to run PR-Agent as an Azure devops pipeline.
 add the following file to your repository under `azure-pipelines.yml`:
+
 ```yaml
 # Opt out of CI triggers
 trigger: none
@@ -49,6 +51,7 @@ stages:
         openai__key: $(OPENAI_KEY)
       displayName: 'Run Qodo Merge'
 ```
+
 This script will run Qodo Merge on every new merge request, with the `improve`, `review`, and `describe` commands.
 Note that you need to export the `azure_devops__pat` and `OPENAI_KEY` variables in the Azure DevOps pipeline settings (Pipelines -> Library -> + Variable group):
 
@@ -61,7 +64,8 @@ Make sure to give pipeline permissions to the `pr_agent` variable group.
 ## Azure DevOps from CLI
 
 To use Azure DevOps provider use the following settings in configuration.toml:
-```
+
+```toml
 [config]
 git_provider="azure"
 ```
@@ -74,7 +78,8 @@ If PAT was chosen, you can assign the value in .secrets.toml.
 If DefaultAzureCredential was chosen, you can assigned the additional env vars like AZURE_CLIENT_SECRET directly,
 or use managed identity/az cli (for local development) without any additional configuration.
 in any case, 'org' value must be assigned in .secrets.toml:
-```
+
+```toml
 [azure_devops]
 org = "https://dev.azure.com/YOUR_ORGANIZATION/"
 # pat = "YOUR_PAT_TOKEN" needed only if using PAT for authentication
@@ -85,11 +90,12 @@ org = "https://dev.azure.com/YOUR_ORGANIZATION/"
 To trigger from an Azure webhook, you need to manually [add a webhook](https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops).
 Use the "Pull request created" type to trigger a review, or "Pull request commented on" to trigger any supported comment with /<command> <args> comment on the relevant PR. Note that for the "Pull request commented on" trigger, only API v2.0 is supported.
 
-
 For webhook security, create a sporadic username/password pair and configure the webhook username and password on both the server and Azure DevOps webhook. These will be sent as basic Auth data by the webhook with each request:
-```
+
+```toml
 [azure_devops_server]
 webhook_username = "<basic auth user>"
 webhook_password = "<basic auth password>"
 ```
+
 > :warning: **Ensure that the webhook endpoint is only accessible over HTTPS** to mitigate the risk of credential interception when using basic authentication.

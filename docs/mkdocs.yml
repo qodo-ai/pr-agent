@@ -20,6 +20,7 @@ nav:
     - Managing Mail Notifications: 'usage-guide/mail_notifications.md'
     - Changing a Model: 'usage-guide/changing_a_model.md'
     - Additional Configurations: 'usage-guide/additional_configurations.md'
+    - Frequently Asked Questions: 'faq/index.md'
     - 💎 Qodo Merge Models: 'usage-guide/qodo_merge_models.md'
   - Tools:
     - 'tools/index.md'
@@ -28,7 +29,7 @@ nav:
     - Improve: 'tools/improve.md'
     - Ask: 'tools/ask.md'
     - Update Changelog: 'tools/update_changelog.md'
-    - Similar Issues: 'tools/similar_issues.md'
+    - Help Docs: 'tools/help_docs.md'
     - Help: 'tools/help.md'
     - 💎 Analyze: 'tools/analyze.md'
     - 💎 Test: 'tools/test.md'
@@ -39,25 +40,30 @@ nav:
     - 💎 CI Feedback: 'tools/ci_feedback.md'
     - 💎 Similar Code: 'tools/similar_code.md'
     - 💎 Implement: 'tools/implement.md'
+    - 💎 Scan Repo Discussions: 'tools/scan_repo_discussions.md'
   - Core Abilities:
       - 'core-abilities/index.md'
-      - Fetching ticket context: 'core-abilities/fetching_ticket_context.md'
       - Auto best practices: 'core-abilities/auto_best_practices.md'
-      - Local and global metadata: 'core-abilities/metadata.md'
-      - Dynamic context: 'core-abilities/dynamic_context.md'
-      - Self-reflection: 'core-abilities/self_reflection.md'
-      - Impact evaluation: 'core-abilities/impact_evaluation.md'
-      - Interactivity: 'core-abilities/interactivity.md'
+      - Code validation: 'core-abilities/code_validation.md'
       - Compression strategy: 'core-abilities/compression_strategy.md'
-      - Code-oriented YAML: 'core-abilities/code_oriented_yaml.md'
+      - Dynamic context: 'core-abilities/dynamic_context.md'
+      - Fetching ticket context: 'core-abilities/fetching_ticket_context.md'
+      - Impact evaluation: 'core-abilities/impact_evaluation.md'
+      - Incremental Update: 'core-abilities/incremental_update.md'
+      - Interactivity: 'core-abilities/interactivity.md'
+      - Local and global metadata: 'core-abilities/metadata.md'
+      - RAG context enrichment: 'core-abilities/rag_context_enrichment.md'
+      - Self-reflection: 'core-abilities/self_reflection.md'
       - Static code analysis: 'core-abilities/static_code_analysis.md'
-      - Code Fine-tuning Benchmark: 'finetuning_benchmark/index.md'
   - Chrome Extension:
       - Qodo Merge Chrome Extension: 'chrome-extension/index.md'
       - Features: 'chrome-extension/features.md'
       - Data Privacy: 'chrome-extension/data_privacy.md'
-  - FAQ:
-      - FAQ: 'faq/index.md'
+      - Options: 'chrome-extension/options.md'
+  - PR Benchmark:
+      - PR Benchmark: 'pr_benchmark/index.md'
+  - Recent Updates:
+      - Recent Updates: 'recent_updates/index.md'
   - AI Docs Search: 'ai_search/index.md'
 #  - Code Fine-tuning Benchmark: 'finetuning_benchmark/index.md'
 
@@ -79,7 +85,6 @@ theme:
     - content.tabs.link
     - content.code.annotation
     - content.code.copy
-    - content.tabs.link
   language: en
   custom_dir: overrides
 
@@ -147,6 +152,8 @@ markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
   - toc:
       title: On this page
       toc_depth: 3

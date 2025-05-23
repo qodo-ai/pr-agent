@@ -1,6 +1,6 @@
 # Security Policy
 
-PR-Agent is an open-source tool to help efficiently review and handle pull requests. Qodo Merge is a paid version of PR-Agent, designed for companies and teams that require additional features and capabilities. 
+PR-Agent is an open-source tool to help efficiently review and handle pull requests. Qodo Merge is a paid version of PR-Agent, designed for companies and teams that require additional features and capabilities.
 
 This document describes the security policy of PR-Agent. For Qodo Merge's security policy, see [here](https://qodo-merge-docs.qodo.ai/overview/data_privacy/#qodo-merge).
 
@@ -9,12 +9,12 @@ This document describes the security policy of PR-Agent. For Qodo Merge's securi
 When using PR-Agent with your OpenAI (or other LLM provider) API key, the security relationship is directly between you and the provider. We do not send your code to Qodo servers.
 
 Types of [self-hosted solutions](https://qodo-merge-docs.qodo.ai/installation):
+
 - Locally
 - GitHub integration
 - GitLab integration
 - BitBucket integration
 - Azure DevOps integration
-
 
 ## PR-Agent Supported Versions
 
@@ -25,6 +25,7 @@ This section outlines which versions of PR-Agent are currently supported with se
 #### Latest Version
 
 For the most recent updates, use our latest Docker image which is automatically built nightly:
+
 ```yaml
 uses: qodo-ai/pr-agent@main
 ```
@@ -46,6 +47,7 @@ steps:
 #### Enhanced Security with Docker Digest
 
 For maximum security, you can specify the Docker image using its digest:
+
 ```yaml
 steps:
   - name: PR Agent action step

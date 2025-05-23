@@ -29,7 +29,7 @@ __old hunk__
 @@ ... @@ def func2():
 __new hunk__
  unchanged code line4
-+new code line5 removed
++new code line5 added
  unchanged code line6
 
 ## File: 'src/file2.py'
@@ -44,7 +44,8 @@ __new hunk__
 - If available, an AI-generated summary will appear and provide a high-level overview of the file changes. Note that this summary may not be fully accurate or complete.
 {%- endif %}
 - When quoting variables, names or file paths from the code, use backticks (`) instead of single quote (').
-
+- Note that you only see changed code segments (diff hunks in a PR), not the entire codebase. Avoid suggestions that might duplicate existing functionality or questioning code elements (like variables declarations or import statements) that may be defined elsewhere in the codebase.
+- Also note that if the code ends at an opening brace or statement that begins a new scope (like 'if', 'for', 'try'), don't treat it as incomplete. Instead, acknowledge the visible scope boundary and analyze only the code shown.
 
 {%- if extra_instructions %}
 
@@ -66,8 +67,8 @@ class SubPR(BaseModel):
 
 class KeyIssuesComponentLink(BaseModel):
     relevant_file: str = Field(description="The full file path of the relevant file")
-    issue_header: str = Field(description="One or two word title for the the issue. For example: 'Possible Bug', etc.")
-    issue_content: str = Field(description="A short and concise summary of what should be further inspected and validated during the PR review process for this issue. Do not reference line numbers in this field.")
+    issue_header: str = Field(description="One or two word title for the issue. For example: 'Possible Bug', etc.")
+    issue_content: str = Field(description="A short and concise summary of what should be further inspected and validated during the PR review process for this issue. Do not mention line numbers in this field.")
     start_line: int = Field(description="The start line that corresponds to this issue in the relevant file")
     end_line: int = Field(description="The end line that corresponds to this issue in the relevant file")
 
@@ -97,7 +98,7 @@ class Review(BaseModel):
 {%- if question_str %}
     insights_from_user_answers: str = Field(description="shortly summarize the insights you gained from the user's answers to the questions")
 {%- endif %}
-    key_issues_to_review: List[KeyIssuesComponentLink] = Field("A short and diverse list (0-3 issues) of high-priority bugs, problems or performance concerns introduced in the PR code, which the PR reviewer should further focus on and validate during the review process.")
+    key_issues_to_review: List[KeyIssuesComponentLink] = Field("A short and diverse list (0-{{ num_max_findings }} issues) of high-priority bugs, problems or performance concerns introduced in the PR code, which the PR reviewer should further focus on and validate during the review process.")
 {%- if require_security_review %}
     security_concerns: str = Field(description="Does this PR code introduce possible vulnerabilities such as exposure of sensitive information (e.g., API keys, secrets, passwords), or security concerns like SQL injection, XSS, CSRF, and others ? Answer 'No' (without explaining why) if there are no possible issues. If there are security concerns or issues, start your answer with a short header, such as: 'Sensitive information exposure: ...', 'SQL injection: ...' etc. Explain your answer. Be specific and give examples if possible")
 {%- endif %}

@@ -13,7 +13,7 @@ from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 
-setup_logger(fmt=LoggingFormat.JSON, level="DEBUG")
+setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 NOTIFICATION_URL = "https://api.github.com/notifications"
 
 

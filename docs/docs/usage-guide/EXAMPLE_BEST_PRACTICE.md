@@ -1,7 +1,8 @@
 ## Recommend Python Best Practices
+
 This document outlines a series of recommended best practices for Python development. These guidelines aim to improve code quality, maintainability, and readability.
 
-###  Imports
+### Imports
 
 Use  `import`  statements for packages and modules only, not for individual types, classes, or functions.
 
@@ -9,16 +10,16 @@ Use  `import`  statements for packages and modules only, not for individual type
 
 Reusability mechanism for sharing code from one module to another.
 
-####  Decision
+#### Decision
 
--   Use  `import x`  for importing packages and modules.
--   Use  `from x import y`  where  `x`  is the package prefix and  `y`  is the module name with no prefix.
--   Use  `from x import y as z`  in any of the following circumstances:
-    -   Two modules named  `y`  are to be imported.
-    -   `y`  conflicts with a top-level name defined in the current module.
-    -   `y`  conflicts with a common parameter name that is part of the public API (e.g.,  `features`).
-    -   `y`  is an inconveniently long name, or too generic in the context of your code
--   Use  `import y as z`  only when  `z`  is a standard abbreviation (e.g.,  `import numpy as np`).
+- Use  `import x`  for importing packages and modules.
+- Use  `from x import y`  where  `x`  is the package prefix and  `y`  is the module name with no prefix.
+- Use  `from x import y as z`  in any of the following circumstances:
+  - Two modules named  `y`  are to be imported.
+  - `y`  conflicts with a top-level name defined in the current module.
+  - `y`  conflicts with a common parameter name that is part of the public API (e.g.,  `features`).
+  - `y`  is an inconveniently long name, or too generic in the context of your code
+- Use  `import y as z`  only when  `z`  is a standard abbreviation (e.g.,  `import numpy as np`).
 
 For example the module  `sound.effects.echo`  may be imported as follows:
 
@@ -35,13 +36,13 @@ Do not use relative names in imports. Even if the module is in the same package,
 
 Exemptions from this rule:
 
--   Symbols from the following modules are used to support static analysis and type checking:
-    -   [`typing`  module](https://google.github.io/styleguide/pyguide.html#typing-imports)
-    -   [`collections.abc`  module](https://google.github.io/styleguide/pyguide.html#typing-imports)
-    -   [`typing_extensions`  module](https://github.com/python/typing_extensions/blob/main/README.md)
--   Redirects from the  [six.moves module](https://six.readthedocs.io/#module-six.moves).
+- Symbols from the following modules are used to support static analysis and type checking:
+  - [`typing`  module](https://google.github.io/styleguide/pyguide.html#typing-imports)
+  - [`collections.abc`  module](https://google.github.io/styleguide/pyguide.html#typing-imports)
+  - [`typing_extensions`  module](https://github.com/python/typing_extensions/blob/main/README.md)
+- Redirects from the  [six.moves module](https://six.readthedocs.io/#module-six.moves).
 
-###  Packages
+### Packages
 
 Import each module using the full pathname location of the module.
 
@@ -85,6 +86,7 @@ No:
 The directory the main binary is located in should not be assumed to be in  `sys.path`  despite that happening in some environments. This being the case, code should assume that  `import jodie`  refers to a third-party or top-level package named  `jodie`, not a local  `jodie.py`.
 
 ### Default Iterators and Operators
+
 Use default iterators and operators for types that support them, like lists, dictionaries, and files.
 
 #### Definition
@@ -125,7 +127,7 @@ Okay in most cases.
 
 You can specify values for variables at the end of a function’s parameter list, e.g.,  `def foo(a, b=0):`. If  `foo`  is called with only one argument,  `b`  is set to 0. If it is called with two arguments,  `b`  has the value of the second argument.
 
-####  Decision
+#### Decision
 
 Okay to use with the following caveat:
 
@@ -158,7 +160,6 @@ No:  def foo(a, b: Mapping = {}):  # Could still get passed to unchecked code.
 
 ### True/False Evaluations
 
-
 Use the “implicit” false if possible, e.g.,  `if foo:`  rather than  `if foo != []:`
 
 ### Lexical Scoping
@@ -175,10 +176,10 @@ def get_adder(summand1: float) -> Callable[[float], float]:
 
     return adder
 ```
+
 #### Decision
 
 Okay to use.
-
 
 ### Threading
 

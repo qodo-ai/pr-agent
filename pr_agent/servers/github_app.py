@@ -24,7 +24,7 @@ from pr_agent.identity_providers.identity_provider import Eligibility
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.servers.utils import DefaultDictWithTimeout, verify_signature
 
-setup_logger(fmt=LoggingFormat.JSON, level="DEBUG")
+setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 build_number_path = os.path.join(base_path, "build_number.txt")
 if os.path.exists(build_number_path):
@@ -64,7 +64,7 @@ async def get_body(request):
     try:
         body = await request.json()
     except Exception as e:
-        get_logger().error("Error parsing request body", e)
+        get_logger().error("Error parsing request body", artifact={'error': e})
         raise HTTPException(status_code=400, detail="Error parsing request body") from e
     webhook_secret = getattr(get_settings().github, 'webhook_secret', None)
     if webhook_secret:
@@ -107,7 +107,7 @@ async def handle_comments_on_pr(body: Dict[str, Any],
                 comment_body = handle_line_comments(body, comment_body)
                 disable_eyes = True
         except Exception as e:
-            get_logger().error(f"Failed to handle line comments: {e}")
+            get_logger().error("Failed to get log context", artifact={'error': e})
     else:
         return {}
     log_context["api_url"] = api_url
@@ -138,7 +138,7 @@ async def handle_new_pr_opened(body: Dict[str, Any],
         # logic to ignore PRs with specific titles (e.g. "[Auto] ...")
         apply_repo_settings(api_url)
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
-                await _perform_auto_commands_github("pr_commands", agent, body, api_url, log_context)
+            await _perform_auto_commands_github("pr_commands", agent, body, api_url, log_context)
         else:
             get_logger().info(f"User {sender=} is not eligible to process PR {api_url=}")
 
@@ -196,8 +196,8 @@ async def handle_push_trigger_for_new_commits(body: Dict[str, Any],
 
     try:
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
-                get_logger().info(f"Performing incremental review for {api_url=} because of {event=} and {action=}")
-                await _perform_auto_commands_github("push_commands", agent, body, api_url, log_context)
+            get_logger().info(f"Performing incremental review for {api_url=} because of {event=} and {action=}")
+            await _perform_auto_commands_github("push_commands", agent, body, api_url, log_context)
 
     finally:
         # release the waiting task block
@@ -233,7 +233,7 @@ def get_log_context(body, event, action, build_number):
                        "request_id": uuid.uuid4().hex, "build_number": build_number, "app_name": app_name,
                         "repo": repo, "git_org": git_org, "installation_id": installation_id}
     except Exception as e:
-        get_logger().error("Failed to get log context", e)
+        get_logger().error(f"Failed to get log context", artifact={'error': e})
         log_context = {}
     return log_context, sender, sender_id, sender_type
 
@@ -258,6 +258,14 @@ def should_process_pr_logic(body) -> bool:
         source_branch = pull_request.get("head", {}).get("ref", "")
         target_branch = pull_request.get("base", {}).get("ref", "")
         sender = body.get("sender", {}).get("login")
+        repo_full_name = body.get("repository", {}).get("full_name", "")
+
+        # logic to ignore PRs from specific repositories
+        ignore_repos = get_settings().get("CONFIG.IGNORE_REPOSITORIES", [])
+        if ignore_repos and repo_full_name:
+            if any(re.search(regex, repo_full_name) for regex in ignore_repos):
+                get_logger().info(f"Ignoring PR from repository '{repo_full_name}' due to 'config.ignore_repositories' setting")
+                return False
 
         # logic to ignore PRs from specific users
         ignore_pr_users = get_settings().get("CONFIG.IGNORE_PR_AUTHORS", [])
@@ -310,16 +318,20 @@ async def handle_request(body: Dict[str, Any], event: str):
         event: The GitHub event type (e.g. "pull_request", "issue_comment", etc.).
     """
     action = body.get("action")  # "created", "opened", "reopened", "ready_for_review", "review_requested", "synchronize"
+    get_logger().debug(f"Handling request with event: {event}, action: {action}")
     if not action:
+        get_logger().debug(f"No action found in request body, exiting handle_request")
         return {}
     agent = PRAgent()
     log_context, sender, sender_id, sender_type = get_log_context(body, event, action, build_number)
 
     # logic to ignore PRs opened by bot, PRs with specific titles, labels, source branches, or target branches
     if is_bot_user(sender, sender_type) and 'check_run' not in body:
+        get_logger().debug(f"Request ignored: bot user detected")
         return {}
     if action != 'created' and 'check_run' not in body:
         if not should_process_pr_logic(body):
+            get_logger().debug(f"Request ignored: PR logic filtering")
             return {}
 
     if 'check_run' in body:  # handle failed checks

@@ -1,37 +1,42 @@
 To run PR-Agent locally, you first need to acquire two keys:
 
-1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 (or a key for other [language models](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/), if you prefer).
+1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/), if you prefer).
 2. A personal access token from your Git platform (GitHub, GitLab, BitBucket) with repo scope. GitHub token, for example, can be issued from [here](https://github.com/settings/tokens){:target="_blank"}
-
 
 ## Using Docker image
 
-A list of the relevant tools can be found in the [tools guide](../tools/ask.md).
+A list of the relevant tools can be found in the [tools guide](../tools/).
 
 To invoke a tool (for example `review`), you can run PR-Agent directly from the Docker image. Here's how:
 
 - For GitHub:
-    ```
+
+    ```bash
     docker run --rm -it -e OPENAI.KEY=<your key> -e GITHUB.USER_TOKEN=<your token> codiumai/pr-agent:latest --pr_url <pr_url> review
     ```
+
     If you are using GitHub enterprise server, you need to specify the custom url as variable.
     For example, if your GitHub server is at `https://github.mycompany.com`, add the following to the command:
-    ```
+
+    ```bash
     -e GITHUB.BASE_URL=https://github.mycompany.com/api/v3
     ```
 
 - For GitLab:
-    ```
+
+    ```bash
     docker run --rm -it -e OPENAI.KEY=<your key> -e CONFIG.GIT_PROVIDER=gitlab -e GITLAB.PERSONAL_ACCESS_TOKEN=<your token> codiumai/pr-agent:latest --pr_url <pr_url> review
     ```
 
     If you have a dedicated GitLab instance, you need to specify the custom url as variable:
-    ```
+
+    ```bash
     -e GITLAB.URL=<your gitlab instance url>
     ```
 
 - For BitBucket:
-    ```
+
+    ```bash
     docker run --rm -it -e CONFIG.GIT_PROVIDER=bitbucket -e OPENAI.KEY=$OPENAI_API_KEY -e BITBUCKET.BEARER_TOKEN=$BITBUCKET_BEARER_TOKEN codiumai/pr-agent:latest --pr_url=<pr_url> review
     ```
 
@@ -46,7 +51,7 @@ The `<TABLE>` refers to a table/section in a configuration file and `<KEY>=<VALU
 For example, suppose you want to run `pr_agent` that connects to a self-hosted GitLab instance similar to an example above.
 You can define the environment variables in a plain text file named `.env` with the following content:
 
-```
+```bash
 CONFIG__GIT_PROVIDER="gitlab"
 GITLAB__URL="<your url>"
 GITLAB__PERSONAL_ACCESS_TOKEN="<your token>"
@@ -76,7 +81,7 @@ Same goes for other providers, make sure to check the [documentation](https://qo
 
 Install the package:
 
-```
+```bash
 pip install pr-agent
 ```
 
@@ -109,18 +114,17 @@ if __name__ == '__main__':
     main()
 ```
 
-
 ## Run from source
 
 1. Clone this repository:
 
-```
+```bash
 git clone https://github.com/Codium-ai/pr-agent.git
 ```
 
 2. Navigate to the `/pr-agent` folder and install the requirements in your favorite virtual environment:
 
-```
+```bash
 pip install -e .
 ```
 
@@ -128,7 +132,7 @@ pip install -e .
 
 3. Copy the secrets template file and fill in your OpenAI key and your GitHub user token:
 
-```
+```bash
 cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
 chmod 600 pr_agent/settings/.secrets.toml
 # Edit .secrets.toml file
@@ -136,7 +140,7 @@ chmod 600 pr_agent/settings/.secrets.toml
 
 4. Run the cli.py script:
 
-```
+```bash
 python3 -m pr_agent.cli --pr_url <pr_url> review
 python3 -m pr_agent.cli --pr_url <pr_url> ask <your question>
 python3 -m pr_agent.cli --pr_url <pr_url> describe
@@ -148,6 +152,7 @@ python3 -m pr_agent.cli --issue_url <issue_url> similar_issue
 ```
 
 [Optional] Add the pr_agent folder to your PYTHONPATH
-```
+
+```bash
 export PYTHONPATH=$PYTHONPATH:<PATH to pr_agent folder>
 ```

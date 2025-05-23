@@ -1,10 +1,10 @@
-FROM public.ecr.aws/lambda/python:3.10
+FROM public.ecr.aws/lambda/python:3.12
 
-RUN yum update -y && \
-    yum install -y gcc python3-devel git && \
-    yum clean all
+RUN dnf update -y && \
+    dnf install -y gcc python3-devel git && \
+    dnf clean all
 
-ADD pyproject.toml requirements.txt .
+ADD pyproject.toml requirements.txt ./
 RUN pip install --no-cache-dir . && rm pyproject.toml
 RUN pip install --no-cache-dir mangum==0.17.0
 COPY pr_agent/ ${LAMBDA_TASK_ROOT}/pr_agent/

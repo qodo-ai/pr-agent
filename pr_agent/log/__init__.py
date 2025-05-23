@@ -1,6 +1,7 @@
+import os
+os.environ["AUTO_CAST_FOR_DYNACONF"] = "false"
 import json
 import logging
-import os
 import sys
 from enum import Enum
 

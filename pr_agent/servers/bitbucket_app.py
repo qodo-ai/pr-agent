@@ -25,7 +25,7 @@ from pr_agent.identity_providers.identity_provider import Eligibility
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.secret_providers import get_secret_provider
 
-setup_logger(fmt=LoggingFormat.JSON, level="DEBUG")
+setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
 secret_provider = get_secret_provider() if get_settings().get("CONFIG.SECRET_PROVIDER") else None
 
@@ -127,6 +127,14 @@ def should_process_pr_logic(data) -> bool:
         source_branch = pr_data.get("source", {}).get("branch", {}).get("name", "")
         target_branch = pr_data.get("destination", {}).get("branch", {}).get("name", "")
         sender = _get_username(data)
+        repo_full_name = pr_data.get("destination", {}).get("repository", {}).get("full_name", "")
+
+        # logic to ignore PRs from specific repositories
+        ignore_repos = get_settings().get("CONFIG.IGNORE_REPOSITORIES", [])
+        if repo_full_name and ignore_repos:
+            if any(re.search(regex, repo_full_name) for regex in ignore_repos):
+                get_logger().info(f"Ignoring PR from repository '{repo_full_name}' due to 'config.ignore_repositories' setting")
+                return False
 
         # logic to ignore PRs from specific users
         ignore_pr_users = get_settings().get("CONFIG.IGNORE_PR_AUTHORS", [])

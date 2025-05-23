@@ -7,7 +7,8 @@ This approach balances providing sufficient context for accurate analysis, while
 ## Introduction
 
 Pull request code changes are retrieved in a unified diff format, showing three lines of context before and after each modified section, with additions marked by '+' and deletions by '-'.
-```
+
+```diff
 @@ -12,5 +12,5 @@ def func1():
  code line that already existed in the file...
  code line that already existed in the file...
@@ -24,7 +25,6 @@ Pull request code changes are retrieved in a unified diff format, showing three 
 
 This unified diff format can be challenging for AI models to interpret accurately, as it provides limited context for understanding the full scope of code changes.
 The presentation of code using '+', '-', and ' ' symbols to indicate additions, deletions, and unchanged lines respectively also differs from the standard code formatting typically used to train AI models.
-
 
 ## Challenges of expanding the context window
 
@@ -43,6 +43,7 @@ Pull requests often encompass multiple changes across many files, potentially sp
 - Increased context expands the token count, increasing processing time and cost, and may prevent the model from processing the entire pull request in a single pass.
 
 ## Asymmetric and dynamic context
+
 To address these challenges, Qodo Merge employs an **asymmetric** and **dynamic** context strategy, providing the model with more focused and relevant context information for each code change.
 
 **Asymmetric:**
@@ -62,7 +63,8 @@ To prevent overwhelming the model with excessive context, we impose a limit on t
 This balance allows for comprehensive understanding while maintaining efficiency and limiting context token usage.
 
 ## Appendix - relevant configuration options
-```
+
+```toml
 [config]
 patch_extension_skip_types =[".md",".txt"]  # Skip files with these extensions when trying to extend the context
 allow_dynamic_context=true                  # Allow dynamic context extension

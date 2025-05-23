@@ -1,15 +1,12 @@
 `Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
-
 For optimal functionality of Qodo Merge, we recommend enabling a wiki for each repository where Qodo Merge is installed. The wiki serves several important purposes:
 
 **Key Wiki Features: 💎**
 
 - Storing a [configuration file](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/#wiki-configuration-file)
-- Defining a [`best_practices.md`](https://qodo-merge-docs.qodo.ai/tools/improve/#best-practices) file
 - Track [accepted suggestions](https://qodo-merge-docs.qodo.ai/tools/improve/#suggestion-tracking)
 - Facilitates learning over time by creating an [auto_best_practices.md](https://qodo-merge-docs.qodo.ai/core-abilities/auto_best_practices) file
-
 
 **Setup Instructions (GitHub):**
 
@@ -26,8 +23,8 @@ To enable a wiki for your repository:
 ### Why Wiki?
 
 - Your code (and its derivatives, including accepted code suggestions) is yours. Qodo Merge will never store it on external servers.
-- Repository changes typically require pull requests, which create overhead and are time-consuming. This process is too cumbersome for auto data aggregation, and is not very convenient even for managing frequently updated content like configuration files and best practices.
+- Repository changes typically require pull requests, which create overhead and are time-consuming. This process is too cumbersome for auto data aggregation, and is not very convenient even for managing frequently updated content like configuration files.
 - A repository wiki page provides an ideal balance:
-    - It lives within your repository, making it suitable for code-related documentation
-    - It enables quick updates without the overhead of pull requests
-    - It maintains full Git version control, allowing you to track changes over time.
+  - It lives within your repository, making it suitable for code-related documentation
+  - It enables quick updates without the overhead of pull requests
+  - It maintains full Git version control, allowing you to track changes over time.

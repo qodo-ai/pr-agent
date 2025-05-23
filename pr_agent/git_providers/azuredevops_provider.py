@@ -19,13 +19,9 @@ MAX_PR_DESCRIPTION_AZURE_LENGTH = 4000-1
 
 try:
     # noinspection PyUnresolvedReferences
-    # noinspection PyUnresolvedReferences
     from azure.devops.connection import Connection
     # noinspection PyUnresolvedReferences
-    from azure.devops.v7_1.git.models import (Comment, CommentThread,
-                                              GitPullRequest,
-                                              GitPullRequestIterationChanges,
-                                              GitVersionDescriptor)
+    from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient, CommentThreadContext, CommentPosition)
     # noinspection PyUnresolvedReferences
     from azure.identity import DefaultAzureCredential
     from msrest.authentication import BasicAuthentication
@@ -77,40 +73,13 @@ class AzureDevopsProvider(GitProvider):
                                        f"relevant_lines_start is {relevant_lines_start}")
                 continue
 
-            if relevant_lines_end > relevant_lines_start:
-                post_parameters = {
-                    "body": body,
-                    "path": relevant_file,
-                    "line": relevant_lines_end,
-                    "start_line": relevant_lines_start,
-                    "start_side": "RIGHT",
-                }
-            else:  # API is different for single line comments
-                post_parameters = {
-                    "body": body,
-                    "path": relevant_file,
-                    "line": relevant_lines_start,
-                    "side": "RIGHT",
-                }
-            post_parameters_list.append(post_parameters)
-        if not post_parameters_list:
-            return False
-
-        for post_parameters in post_parameters_list:
+            thread_context = CommentThreadContext(
+                file_path=relevant_file,
+                right_file_start=CommentPosition(offset=1, line=relevant_lines_start),
+                right_file_end=CommentPosition(offset=1, line=relevant_lines_end))
+            comment = Comment(content=body, comment_type=1)
+            thread = CommentThread(comments=[comment], thread_context=thread_context)
             try:
-                comment = Comment(content=post_parameters["body"], comment_type=1)
-                thread = CommentThread(comments=[comment],
-                                       thread_context={
-                                           "filePath": post_parameters["path"],
-                                           "rightFileStart": {
-                                               "line": post_parameters["start_line"],
-                                               "offset": 1,
-                                           },
-                                           "rightFileEnd": {
-                                               "line": post_parameters["line"],
-                                               "offset": 1,
-                                           },
-                                       })
                 self.azure_devops_client.create_thread(
                     comment_thread=thread,
                     project=self.workspace_slug,
@@ -118,34 +87,36 @@ class AzureDevopsProvider(GitProvider):
                     pull_request_id=self.pr_num
                 )
             except Exception as e:
-                get_logger().warning(f"Azure failed to publish code suggestion, error: {e}")
+                get_logger().error(f"Azure failed to publish code suggestion, error: {e}", suggestion=suggestion)
         return True
 
-
+    def reply_to_comment_from_comment_id(self, comment_id: int, body: str, is_temporary: bool = False) -> Comment:
+        # comment_id is actually thread_id
+        return self.reply_to_thread(comment_id, body, is_temporary)
 
     def get_pr_description_full(self) -> str:
         return self.pr.description
 
-    def edit_comment(self, comment, body: str):
+    def edit_comment(self, comment: Comment, body: str):
         try:
             self.azure_devops_client.update_comment(
                 repository_id=self.repo_slug,
                 pull_request_id=self.pr_num,
-                thread_id=comment["thread_id"],
-                comment_id=comment["comment_id"],
+                thread_id=comment.thread_id,
+                comment_id=comment.id,
                 comment=Comment(content=body),
                 project=self.workspace_slug,
             )
         except Exception as e:
             get_logger().exception(f"Failed to edit comment, error: {e}")
 
-    def remove_comment(self, comment):
+    def remove_comment(self, comment: Comment):
         try:
             self.azure_devops_client.delete_comment(
                 repository_id=self.repo_slug,
                 pull_request_id=self.pr_num,
-                thread_id=comment["thread_id"],
-                comment_id=comment["comment_id"],
+                thread_id=comment.thread_id,
+                comment_id=comment.id,
                 project=self.workspace_slug,
             )
         except Exception as e:
@@ -176,10 +147,6 @@ class AzureDevopsProvider(GitProvider):
             return []
 
     def is_supported(self, capability: str) -> bool:
-        if capability in [
-            "get_issue_comments",
-        ]:
-            return False
         return True
 
     def set_pr(self, pr_url: str):
@@ -378,22 +345,30 @@ class AzureDevopsProvider(GitProvider):
             get_logger().exception(f"Failed to get diff files, error: {e}")
             return []
 
-    def publish_comment(self, pr_comment: str, is_temporary: bool = False, thread_context=None):
+    def publish_comment(self, pr_comment: str, is_temporary: bool = False, thread_context=None) -> Comment:
         if is_temporary and not get_settings().config.publish_output_progress:
             get_logger().debug(f"Skipping publish_comment for temporary comment: {pr_comment}")
             return None
         comment = Comment(content=pr_comment)
-        thread = CommentThread(comments=[comment], thread_context=thread_context, status=5)
+        thread = CommentThread(comments=[comment], thread_context=thread_context, status="closed")
         thread_response = self.azure_devops_client.create_thread(
             comment_thread=thread,
             project=self.workspace_slug,
             repository_id=self.repo_slug,
             pull_request_id=self.pr_num,
         )
-        response = {"thread_id": thread_response.id, "comment_id": thread_response.comments[0].id}
+        created_comment = thread_response.comments[0]
+        created_comment.thread_id = thread_response.id
         if is_temporary:
-            self.temp_comments.append(response)
-        return response
+            self.temp_comments.append(created_comment)
+        return created_comment
+
+    def publish_persistent_comment(self, pr_comment: str,
+                                   initial_header: str,
+                                   update_header: bool = True,
+                                   name='review',
+                                   final_update_message=True):
+        return self.publish_persistent_comment_full(pr_comment, initial_header, update_header, name, final_update_message)
 
     def publish_description(self, pr_title: str, pr_body: str):
         if len(pr_body) > MAX_PR_DESCRIPTION_AZURE_LENGTH:
@@ -437,7 +412,6 @@ class AzureDevopsProvider(GitProvider):
 
     def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str, original_suggestion=None):
         self.publish_inline_comments([self.create_inline_comment(body, relevant_file, relevant_line_in_file)])
-
 
     def create_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str,
                               absolute_position: int = None):
@@ -522,7 +496,7 @@ class AzureDevopsProvider(GitProvider):
     def get_user_id(self):
         return 0
 
-    def get_issue_comments(self):
+    def get_issue_comments(self) -> list[Comment]:
         threads = self.azure_devops_client.get_threads(repository_id=self.repo_slug, pull_request_id=self.pr_num, project=self.workspace_slug)
         threads.reverse()
         comment_list = []
@@ -540,30 +514,59 @@ class AzureDevopsProvider(GitProvider):
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
         return True
 
+    def set_like(self, thread_id: int, comment_id: int, create: bool = True):
+        if create:
+            self.azure_devops_client.create_like(self.repo_slug, self.pr_num, thread_id, comment_id, project=self.workspace_slug)
+        else:
+            self.azure_devops_client.delete_like(self.repo_slug, self.pr_num, thread_id, comment_id, project=self.workspace_slug)
+            
+    def set_thread_status(self, thread_id: int, status: str):
+        try:
+            self.azure_devops_client.update_thread(CommentThread(status=status), self.repo_slug, self.pr_num, thread_id, self.workspace_slug)
+        except Exception as e:
+            get_logger().exception(f"Failed to set thread status, error: {e}")
+            
+    def reply_to_thread(self, thread_id: int, body: str, is_temporary: bool = False) -> Comment:
+        try:
+            comment = Comment(content=body)
+            response = self.azure_devops_client.create_comment(comment, self.repo_slug, self.pr_num, thread_id, self.workspace_slug)
+            response.thread_id = thread_id
+            if is_temporary:
+                self.temp_comments.append(response)
+            return response
+        except Exception as e:
+            get_logger().exception(f"Failed to reply to thread, error: {e}")
+    
+    def get_thread_context(self, thread_id: int) -> CommentThreadContext:
+        try:
+            thread = self.azure_devops_client.get_pull_request_thread(self.repo_slug, self.pr_num, thread_id, self.workspace_slug)
+            return thread.thread_context
+        except Exception as e:
+            get_logger().exception(f"Failed to set thread status, error: {e}")
+    
     @staticmethod
     def _parse_pr_url(pr_url: str) -> Tuple[str, str, int]:
         parsed_url = urlparse(pr_url)
-
         path_parts = parsed_url.path.strip("/").split("/")
-        if "pullrequest" not in path_parts:
-            raise ValueError(
-                "The provided URL does not appear to be a Azure DevOps PR URL"
-            )
-        if len(path_parts) == 6:  # "https://dev.azure.com/organization/project/_git/repo/pullrequest/1"
-            workspace_slug = path_parts[1]
-            repo_slug = path_parts[3]
-            pr_number = int(path_parts[5])
-        elif len(path_parts) == 5:  # 'https://organization.visualstudio.com/project/_git/repo/pullrequest/1'
-            workspace_slug = path_parts[0]
-            repo_slug = path_parts[2]
-            pr_number = int(path_parts[4])
-        else:
-            raise ValueError("The provided URL does not appear to be a Azure DevOps PR URL")
+        num_parts = len(path_parts)
+        if num_parts < 5:
+            raise ValueError("The provided URL has insufficient path components for an Azure DevOps PR URL")
+        
+        # Verify that the second-to-last path component is "pullrequest"
+        if path_parts[num_parts - 2] != "pullrequest":
+            raise ValueError("The provided URL does not follow the expected Azure DevOps PR URL format")
+
+        workspace_slug = path_parts[num_parts - 5]
+        repo_slug = path_parts[num_parts - 3]
+        try:
+            pr_number = int(path_parts[num_parts - 1])
+        except ValueError as e:
+            raise ValueError("Cannot parse PR number in the provided URL") from e
 
         return workspace_slug, repo_slug, pr_number
 
     @staticmethod
-    def _get_azure_devops_client():
+    def _get_azure_devops_client() -> GitClient:
         org = get_settings().azure_devops.get("org", None)
         pat = get_settings().azure_devops.get("pat", None)
 
@@ -615,7 +618,7 @@ class AzureDevopsProvider(GitProvider):
             return pr_id
         except Exception as e:
             if get_settings().config.verbosity_level >= 2:
-                get_logger().info(f"Failed to get pr id, error: {e}")
+                get_logger().info(f"Failed to get PR id, error: {e}")
             return ""
 
     def publish_file_comments(self, file_comments: list) -> bool:
@@ -623,3 +626,13 @@ class AzureDevopsProvider(GitProvider):
 
     def get_line_link(self, relevant_file: str, relevant_line_start: int, relevant_line_end: int = None) -> str:
         return self.pr_url+f"?_a=files&path={relevant_file}"
+
+    def get_comment_url(self, comment) -> str:
+        return self.pr_url + "?discussionId=" + str(comment.thread_id)
+
+    def get_latest_commit_url(self) -> str:
+        commits = self.azure_devops_client.get_pull_request_commits(self.repo_slug, self.pr_num, self.workspace_slug)
+        last = commits[0]
+        url = self.azure_devops_client.normalized_url + "/" + self.workspace_slug + "/_git/" + self.repo_slug + "/commit/" + last.commit_id
+        return url
+    

@@ -17,8 +17,8 @@ Qodo Merge constructs a comprehensive context for each pull request, incorporati
 <img src="https://codium.ai/images/pr_agent/pr_chat_1.png" width="768">
 <img src="https://codium.ai/images/pr_agent/pr_chat_2.png" width="768">
 
-
 ### Toolbar extension
+
 With Qodo Merge Chrome extension, it's [easier than ever](https://www.youtube.com/watch?v=gT5tli7X4H4) to interactively configure and experiment with the different tools and configuration options.
 
 For private repositories, after you found the setup that works for you, you can also easily export it as a persistent configuration file, and use it for automatic commands.
@@ -37,14 +37,12 @@ For example, you can choose to present only message from Qodo Merge, or filter t
 
 <img src="https://codium.ai/images/pr_agent/pr_agent_filters2.png" width="256">
 
-
 ### Enhanced code suggestions
 
 Qodo Merge Chrome extension adds the following capabilities to code suggestions tool's comments:
 
 - Auto-expand the table when you are viewing a code block, to avoid clipping.
 - Adding a "quote-and-reply" button, that enables to address and comment on a specific suggestion (for example, asking the author to fix the issue)
-
 
 <img src="https://codium.ai/images/pr_agent/chrome_extension_code_suggestion1.png" width="512">
 

@@ -81,6 +81,7 @@ class PRReviewer:
             "language": self.main_language,
             "diff": "",  # empty diff for initial calculation
             "num_pr_files": self.git_provider.get_num_of_files(),
+            "num_max_findings": get_settings().pr_reviewer.num_max_findings,
             "require_score": get_settings().pr_reviewer.require_score_review,
             "require_tests": get_settings().pr_reviewer.require_tests_review,
             "require_estimate_effort_to_review": get_settings().pr_reviewer.require_estimate_effort_to_review,
@@ -229,6 +230,10 @@ class PRReviewer:
                          first_key=first_key, last_key=last_key)
         github_action_output(data, 'review')
 
+        if 'review' not in data:
+            get_logger().exception("Failed to parse review data", artifact={"data": data})
+            return ""
+
         # move data['review'] 'key_issues_to_review' key to the end of the dictionary
         if 'key_issues_to_review' in data['review']:
             key_issues_to_review = data['review'].pop('key_issues_to_review')
@@ -312,7 +317,9 @@ class PRReviewer:
             get_logger().exception(f"Failed to remove previous review comment, error: {e}")
 
     def _can_run_incremental_review(self) -> bool:
-        """Checks if we can run incremental review according the various configurations and previous review"""
+        """
+        Checks if we can run incremental review according the various configurations and previous review.
+        """
         # checking if running is auto mode but there are no new commits
         if self.is_auto and not self.incremental.first_new_commit_sha:
             get_logger().info(f"Incremental review is enabled for {self.pr_url} but there are no new commits")

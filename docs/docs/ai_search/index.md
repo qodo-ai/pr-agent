@@ -4,10 +4,10 @@
         Search through our documentation using AI-powered natural language queries.
     </p>
     <div class="search-container">
-        <input 
-            type="text" 
-            id="searchInput" 
-            class="search-input" 
+        <input
+            type="text"
+            id="searchInput"
+            class="search-input"
             placeholder="Enter your search term..."
         >
         <button id="searchButton" class="search-button">Search</button>
@@ -206,13 +206,13 @@ window.addEventListener('load', function() {
         const resultsContainer = document.getElementById('results');
         const spinner = document.getElementById('spinner');
         const searchContainer = document.querySelector('.search-container');
-        
+
         // Hide spinner
         spinner.style.display = 'none';
-        
+
         // Scroll to search bar
         searchContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        
+
         try {
             const results = JSON.parse(responseText);
 
@@ -224,7 +224,7 @@ window.addEventListener('load', function() {
             });
 
             const htmlContent = marked.parse(results.message);
-            
+
             resultsContainer.className = 'markdown-content';
             resultsContainer.innerHTML = htmlContent;
 
@@ -234,7 +234,7 @@ window.addEventListener('load', function() {
                 const offset = 55; // Offset from top in pixels
                 const elementPosition = searchContainer.getBoundingClientRect().top;
                 const offsetPosition = elementPosition + window.pageYOffset - offset;
-                
+
                 window.scrollTo({
                     top: offsetPosition,
                     behavior: 'smooth'
@@ -261,7 +261,7 @@ window.addEventListener('load', function() {
         spinner.style.display = 'flex';
         resultsContainer.innerHTML = '';
 
-        try { 
+        try {
             const data = {
                 "query": searchTerm
             };
@@ -299,11 +299,11 @@ window.addEventListener('load', function() {
     // Add event listeners
     const searchButton = document.getElementById('searchButton');
     const searchInput = document.getElementById('searchInput');
-    
+
     if (searchButton) {
         searchButton.addEventListener('click', performSearch);
     }
-    
+
     if (searchInput) {
         searchInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {

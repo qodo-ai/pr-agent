@@ -43,6 +43,19 @@ Now focus on the selected lines from the hunk:
 ======
 Note that lines in the diff body are prefixed with a symbol that represents the type of change: '-' for deletions, '+' for additions, and ' ' (a space) for unchanged lines
 
+{%- if conversation_history %}
+
+Previous discussion on this code:
+======
+{{ conversation_history|trim }}
+======
+
+Consider this conversation history (format: "N. Username: Message", where numbers indicate the comment order). When responding:
+- Maintain consistency with previous technical explanations
+- Address unresolved issues from earlier discussions
+- Build upon existing knowledge without contradictions
+- Incorporate relevant context while focusing on the current question
+{%- endif %}
 
 A question about the selected lines:
 ======
