@@ -58,6 +58,9 @@ def filter_ignored(files, platform = 'github'):
                     files = files_o
                 elif platform == 'azure':
                     files = [f for f in files if not r.match(f)]
+                elif platform == 'gitea':
+                    files = [f for f in files if not r.match(f.get("filename", ""))]
+
 
     except Exception as e:
         print(f"Could not filter file list: {e}")

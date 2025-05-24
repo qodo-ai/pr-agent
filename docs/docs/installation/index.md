@@ -9,6 +9,7 @@ There are several ways to use self-hosted PR-Agent:
 - [GitLab integration](./gitlab.md)
 - [BitBucket integration](./bitbucket.md)
 - [Azure DevOps integration](./azure.md)
+- [Gitea integration](./gitea.md)
 
 ## Qodo Merge 💎
 

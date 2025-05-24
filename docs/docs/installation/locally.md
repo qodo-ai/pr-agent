@@ -1,7 +1,7 @@
 To run PR-Agent locally, you first need to acquire two keys:
 
 1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/), if you prefer).
-2. A personal access token from your Git platform (GitHub, GitLab, BitBucket) with repo scope. GitHub token, for example, can be issued from [here](https://github.com/settings/tokens){:target="_blank"}
+2. A personal access token from your Git platform (GitHub, GitLab, BitBucket,Gitea) with repo scope. GitHub token, for example, can be issued from [here](https://github.com/settings/tokens){:target="_blank"}
 
 ## Using Docker image
 
@@ -39,6 +39,19 @@ To invoke a tool (for example `review`), you can run PR-Agent directly from the 
     ```bash
     docker run --rm -it -e CONFIG.GIT_PROVIDER=bitbucket -e OPENAI.KEY=$OPENAI_API_KEY -e BITBUCKET.BEARER_TOKEN=$BITBUCKET_BEARER_TOKEN codiumai/pr-agent:latest --pr_url=<pr_url> review
     ```
+
+- For Gitea:
+
+    ```bash
+    docker run --rm -it -e OPENAI.KEY=<your key> -e CONFIG.GIT_PROVIDER=gitea -e GITEA.PERSONAL_ACCESS_TOKEN=<your token> codiumai/pr-agent:latest --pr_url <pr_url> review
+    ```
+
+    If you have a dedicated Gitea instance, you need to specify the custom url as variable:
+
+    ```bash
+    -e GITEA.URL=<your gitea instance url>
+    ```
+
 
 For other git providers, update `CONFIG.GIT_PROVIDER` accordingly and check the [`pr_agent/settings/.secrets_template.toml`](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/.secrets_template.toml) file for environment variables expected names and values.
 

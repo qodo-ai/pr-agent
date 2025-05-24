@@ -279,6 +279,15 @@ push_commands = [
     "/review",
 ]
 
+[gitea_app]
+url = "https://gitea.com"
+handle_push_trigger = true
+pr_commands = [
+    "/describe --pr_description.final_update_message=false",
+    "/review",
+    "/improve",
+]
+
 [bitbucket_app]
 pr_commands = [
     "/describe --pr_description.final_update_message=false",

@@ -30,7 +30,7 @@ verbosity_level=2
 This is useful for debugging or experimenting with different tools.
 
 3. **git provider**: The [git_provider](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L5) field in a configuration file determines the GIT provider that will be used by Qodo Merge. Currently, the following providers are supported:
-`github` **(default)**, `gitlab`, `bitbucket`, `azure`, `codecommit`, `local`, and `gerrit`.
+`github` **(default)**, `gitlab`, `bitbucket`, `azure`, `codecommit`, `local`,`gitea`, and `gerrit`.
 
 ### CLI Health Check
 
@@ -306,6 +306,19 @@ To control which commands will run automatically when a new PR is opened, you ca
 
 ```toml
 [azure_devops_server]
+pr_commands = [
+    "/describe",
+    "/review",
+    "/improve",
+]
+```
+
+### Gitea Webhook
+
+After setting up a Gitea webhook, to control which commands will run automatically when a new MR is opened, you can set the `pr_commands` parameter in the configuration file, similar to the GitHub App:
+
+```toml
+[gitea]
 pr_commands = [
     "/describe",
     "/review",
