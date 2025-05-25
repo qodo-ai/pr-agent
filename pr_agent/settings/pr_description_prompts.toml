@@ -81,7 +81,7 @@ pr_files:
 {%- endif %}
 {%- if enable_pr_diagram %}
   changes_diagram: |
-    ```mermaind
+    ```mermaid
     ...
     ```
 {%- endif %}
@@ -168,7 +168,7 @@ pr_files:
 {%- endif %}
 {%- if enable_pr_diagram %}
   changes_diagram: |
-    ```mermaind
+    ```mermaid
     ...
     ```
 {%- endif %}
