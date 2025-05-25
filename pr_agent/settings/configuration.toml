@@ -104,6 +104,7 @@ enable_pr_type=true
 final_update_message = true
 enable_help_text=false
 enable_help_comment=true
+enable_pr_diagram=false # adds a section with a diagram of the PR changes
 # describe as comment
 publish_description_as_comment=false
 publish_description_as_comment_persistent=true

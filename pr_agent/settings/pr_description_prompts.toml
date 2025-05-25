@@ -49,6 +49,9 @@ class PRDescription(BaseModel):
 {%- if enable_semantic_files_types %}
     pr_files: List[FileDescription] = Field(max_items=20, description="a list of all the files that were changed in the PR, and summary of their changes. Each file must be analyzed regardless of change size.")
 {%- endif %}
+{%- if enable_pr_diagram %}
+    changes_diagram: str = Field(description="a horizontal diagram that represents the main PR changes, in the format of a mermaid flowchart. The diagram should be concise and easy to read. Leave empty if no diagram is relevant.")
+{%- endif %}
 =====
 
 
@@ -75,6 +78,12 @@ pr_files:
   label: |
     label_key_1
 ...
+{%- endif %}
+{%- if enable_pr_diagram %}
+  changes_diagram: |
+    ```mermaind
+    ...
+    ```
 {%- endif %}
 ```
 
@@ -156,6 +165,12 @@ pr_files:
   label: |
     label_key_1
 ...
+{%- endif %}
+{%- if enable_pr_diagram %}
+  changes_diagram: |
+    ```mermaind
+    ...
+    ```
 {%- endif %}
 ```
 (replace '...' with the actual values)
