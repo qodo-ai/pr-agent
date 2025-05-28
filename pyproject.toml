@@ -44,6 +44,7 @@ include = [
 
 [project.scripts]
 pr-agent = "pr_agent.cli:run"
+gen-api-key = "pr_agent.scripts.qm_endpoint_auth.gen_api_key:run"
 
 [tool.ruff]
 line-length = 120
