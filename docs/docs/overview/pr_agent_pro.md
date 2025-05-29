@@ -1,7 +1,11 @@
 ### Overview
 
-[Qodo Merge](https://www.codium.ai/pricing/){:target="_blank"} is a paid, hosted version of open-source [PR-Agent](https://github.com/Codium-ai/pr-agent){:target="_blank"}. A complimentary two-week trial is offered, followed by a monthly subscription fee.
-Qodo Merge is designed for companies and teams that require additional features and capabilities. It provides the following benefits:
+[Qodo Merge](https://www.codium.ai/pricing/){:target="_blank"} is a hosted version of the open-source [PR-Agent](https://github.com/Codium-ai/pr-agent){:target="_blank"}. 
+It is designed for companies and teams that require additional features and capabilities.
+
+Free users receive a monthly quota of 75 PR reviews per git organization, while unlimited usage requires a paid subscription. See [details](https://qodo-merge-docs.qodo.ai/installation/qodo_merge/#cloud-users).
+
+Qodo Merge provides the following benefits:
 
 1. **Fully managed** - We take care of everything for you - hosting, models, regular updates, and more. Installation is as simple as signing up and adding the Qodo Merge app to your GitHub\GitLab\BitBucket repo.
 
@@ -45,7 +49,7 @@ Here are additional tools that are available only for Qodo Merge users:
 
 ### Supported languages
 
-Qodo Merge leverages the world's leading code models, such as Claude 3.7 Sonnet and o3-mini.
+Qodo Merge leverages the world's leading code models, such as Claude 4 Sonnet, o4-mini and Gemini-2.5-Pro.
 As a result, its primary tools such as `describe`, `review`, and `improve`, as well as the PR-chat feature, support virtually all programming languages.
 
 For specialized commands that require static code analysis, Qodo Merge offers support for specific languages. For more details about features that require static code analysis, please refer to the [documentation](https://qodo-merge-docs.qodo.ai/tools/analyze/#overview).

@@ -1,20 +1,20 @@
 Qodo Merge is a versatile application compatible with GitHub, GitLab, and BitBucket, hosted by QodoAI.
 See [here](https://qodo-merge-docs.qodo.ai/overview/pr_agent_pro/) for more details about the benefits of using Qodo Merge.
 
-## Trial Period and Licensing
+## Usage and Licensing
 
-### Cloud Users with Teams Account
+### Cloud Users
 
-A complimentary two-week trial is provided to all new users (with three additional grace usages). When the trial period ends, users will stop receiving feedback from Qodo Merge.
+Non-paying users will enjoy feedback on up to 75 PRs per git organization per month. Above this limit, PRs will not receive feedback until a new month begins. 
 
-Following the trial period, user licenses (seats) are required for continued access. Each user requires an individual seat license.
+For unlimited access, user licenses (seats) are required. Each user requires an individual seat license.
 After purchasing seats, the team owner can assign them to specific users through the management portal.
 
-With an assigned seat, users can seamlessly deploy the application across any of their code repositories.
+With an assigned seat, users can seamlessly deploy the application across any of their code repositories in a git organization, and receive feedback on all their PRs.
 
 ### Enterprise Account
 
-For organizations who require an Enterprise account, please [contact](https://www.qodo.ai/contact/#pricing) us to initiate a trial period, and to discuss pricing and licensing options.
+For companies who require an Enterprise account, please [contact](https://www.qodo.ai/contact/#pricing) us to initiate a trial period, and to discuss pricing and licensing options.
 
 
 ## Install Qodo Merge for GitHub
@@ -95,4 +95,4 @@ Open a new merge request or add a MR comment with one of Qodo Merge’s commands
 
 ### GitLab Server
 
-For a trial period of two weeks on your private GitLab Server, the same [installation steps](#gitlab-cloud) as for GitLab Cloud apply. After the trial period, you will need to [contact](https://www.qodo.ai/contact/#pricing) Qodo for moving to an Enterprise account.
+For [limited free usage](https://qodo-merge-docs.qodo.ai/installation/qodo_merge/#cloud-users) on private GitLab Server, the same [installation steps](#gitlab-cloud) as for GitLab Cloud apply. For unlimited usage, you will need to [contact](https://www.qodo.ai/contact/#pricing) Qodo for moving to an Enterprise account.

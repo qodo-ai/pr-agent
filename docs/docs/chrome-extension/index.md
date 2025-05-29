@@ -4,7 +4,7 @@ With a single-click installation you will gain access to a context-aware chat on
 
 The extension is powered by top code models like Claude 3.7 Sonnet and o4-mini. All the extension's features are free to use on public repositories.
 
-For private repositories, you will need to install [Qodo Merge](https://github.com/apps/qodo-merge-pro){:target="_blank"} in addition to the extension  (Quick GitHub app setup with a 14-day free trial. No credit card needed).
+For private repositories, you will need to install [Qodo Merge](https://github.com/apps/qodo-merge-pro){:target="_blank"} in addition to the extension.
 For a demonstration of how to install Qodo Merge and use it with the Chrome extension, please refer to the tutorial video at the provided [link](https://codium.ai/images/pr_agent/private_repos.mp4){:target="_blank"}.
 
 <img src="https://codium.ai/images/pr_agent/PR-AgentChat.gif" width="768">
