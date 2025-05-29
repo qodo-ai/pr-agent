@@ -16,6 +16,7 @@ nav:
     - Introduction: 'usage-guide/introduction.md'
     - Enabling a Wiki: 'usage-guide/enabling_a_wiki.md'
     - Configuration File: 'usage-guide/configuration_options.md'
+    - AWS Secrets Manager: 'usage-guide/aws_secrets_manager.md'
     - Usage and Automation: 'usage-guide/automations_and_usage.md'
     - Managing Mail Notifications: 'usage-guide/mail_notifications.md'
     - Changing a Model: 'usage-guide/changing_a_model.md'
