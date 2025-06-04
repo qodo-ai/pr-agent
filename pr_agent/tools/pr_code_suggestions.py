@@ -7,6 +7,9 @@ import traceback
 from datetime import datetime
 from functools import partial
 from typing import Dict, List
+import json
+import os
+from pathlib import Path
 
 from jinja2 import Environment, StrictUndefined
 
@@ -125,6 +128,26 @@ class PRCodeSuggestions:
             if not data:
                 data = {"code_suggestions": []}
             self.data = data
+            if get_settings().impact_validator.enable:
+                try:
+                    pr_id_str = self.git_provider.get_pr_id()
+                    if not pr_id_str:
+                        get_logger().error("Failed to get PR ID, cannot save suggestions.")
+                    else:
+                        # Sanitize pr_id_str to be used as a directory name (replace '/')
+                        sane_pr_id = pr_id_str.replace('/', '_')
+                        commit_sha = self.git_provider.last_commit_id.sha
+                        if not commit_sha:
+                            get_logger().error("Failed to get commit SHA, cannot save suggestions.")
+                        else:
+                            suggestions_dir = Path(f".pr_agent_data/suggestions/{sane_pr_id}")
+                            suggestions_dir.mkdir(parents=True, exist_ok=True)
+                            suggestions_file = suggestions_dir / f"{commit_sha}.json"
+                            with open(suggestions_file, 'w') as f:
+                                json.dump(data, f, indent=2)
+                            get_logger().info(f"Saved code suggestions to {suggestions_file}")
+                except Exception as e:
+                    get_logger().error(f"Failed to save code suggestions: {e}", exc_info=True)
 
             # Handle the case where the PR has no suggestions
             if (data is None or 'code_suggestions' not in data or not data['code_suggestions']):

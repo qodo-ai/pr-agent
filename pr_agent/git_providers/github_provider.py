@@ -1193,6 +1193,79 @@ class GithubProvider(GitProvider):
     def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
         scheme = "https://"
 
+    @retry(exceptions=RateLimitExceeded, tries=get_settings().github.ratelimit_retries, delay=2, backoff=2, jitter=(1, 3))
+    def get_diff_between_commits(self, base_commit_sha: str, head_commit_sha: str) -> list[FilePatchInfo]:
+        diff_files = []
+        invalid_files_names = []
+
+        if not self.repo_obj:
+            self._get_repo() # Ensure repo_obj is initialized
+
+        try:
+            comparison = self.repo_obj.compare(base_commit_sha, head_commit_sha)
+        except Exception as e:
+            get_logger().error(f"Failed to compare commits {base_commit_sha}...{head_commit_sha}: {e}")
+            raise RateLimitExceeded(f"API call failed for comparing commits: {e}") from e
+
+        files_original = comparison.files
+        files = filter_ignored(files_original) # Apply ignore filters
+
+        for file_data in files:
+            if not is_valid_file(file_data.filename):
+                invalid_files_names.append(file_data.filename)
+                continue
+
+            patch = file_data.patch
+
+            # Determine edit type
+            if file_data.status == 'added':
+                edit_type = EDIT_TYPE.ADDED
+                original_file_content_str = "" # No original content for added files
+                new_file_content_str = self._get_pr_file_content(file_data, head_commit_sha)
+            elif file_data.status == 'removed':
+                edit_type = EDIT_TYPE.DELETED
+                original_file_content_str = self._get_pr_file_content(file_data, base_commit_sha)
+                new_file_content_str = "" # No new content for removed files
+            elif file_data.status == 'renamed':
+                edit_type = EDIT_TYPE.RENAMED
+                # For renamed files, content might be same or different.
+                # The 'patch' might indicate changes if any.
+                # Github API for compare might not give previous_filename directly in file_data for renamed files.
+                # This might need more sophisticated handling if precise old path content is needed for renamed files.
+                # For now, assume content is fetched based on current filename at respective SHAs.
+                original_file_content_str = self._get_pr_file_content(file_data, base_commit_sha) # Content before rename/change
+                new_file_content_str = self._get_pr_file_content(file_data, head_commit_sha)   # Content after rename/change
+            elif file_data.status == 'modified':
+                edit_type = EDIT_TYPE.MODIFIED
+                original_file_content_str = self._get_pr_file_content(file_data, base_commit_sha)
+                new_file_content_str = self._get_pr_file_content(file_data, head_commit_sha)
+            else:
+                get_logger().warning(f"Unknown file status: {file_data.status} for file {file_data.filename}")
+                edit_type = EDIT_TYPE.UNKNOWN
+                original_file_content_str = self._get_pr_file_content(file_data, base_commit_sha)
+                new_file_content_str = self._get_pr_file_content(file_data, head_commit_sha)
+
+            if not patch and (edit_type == EDIT_TYPE.MODIFIED or edit_type == EDIT_TYPE.RENAMED): # RENAMED might also have changes
+                 # If patch is not provided by API (e.g. for large files), generate it.
+                patch = load_large_diff(file_data.filename, new_file_content_str, original_file_content_str, git_provider=self)
+
+
+            file_patch_info = FilePatchInfo(
+                original_file_content_str,
+                new_file_content_str,
+                patch if patch else "", # Ensure patch is not None
+                file_data.filename,
+                edit_type=edit_type,
+                num_plus_lines=file_data.additions,
+                num_minus_lines=file_data.deletions
+            )
+            diff_files.append(file_patch_info)
+
+        if invalid_files_names:
+            get_logger().info(f"Filtered out files with invalid extensions during commit comparison: {invalid_files_names}")
+
+        return diff_files
+
         #For example, to clone:
         #https://github.com/Codium-ai/pr-agent-pro.git
         #Need to embed inside the github token:

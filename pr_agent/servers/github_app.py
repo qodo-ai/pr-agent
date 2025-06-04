@@ -23,6 +23,8 @@ from pr_agent.identity_providers import get_identity_provider
 from pr_agent.identity_providers.identity_provider import Eligibility
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.servers.utils import DefaultDictWithTimeout, verify_signature
+from pr_agent.tools.pr_impact_validator import PRImpactValidator
+import re # For parsing commit SHA from comment
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -197,13 +199,72 @@ async def handle_push_trigger_for_new_commits(body: Dict[str, Any],
     try:
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
             get_logger().info(f"Performing incremental review for {api_url=} because of {event=} and {action=}")
+            # This is the existing call for auto commands like /review on push
             await _perform_auto_commands_github("push_commands", agent, body, api_url, log_context)
+
+            # >>> New Impact Analysis Logic Start
+            if get_settings().impact_validator.enable:
+                get_logger().info(f"ImpactValidator: Starting impact analysis for PR: {api_url}, new commit: {after_sha}")
+
+                # Determine suggestions_commit_sha
+                # Strategy 1: Parse from the latest PR-Agent review comment
+                suggestions_commit_sha_from_comment = None
+                try:
+                    provider = get_git_provider_with_context(pr_url=api_url)
+                    # Assuming the relevant comment is the one starting with "## PR Code Suggestions" or similar
+                    # This might need to be more robust to find the *correct* PR-Agent comment
+                    comments = provider.get_issue_comments() # This should be list of comment objects
+                    pr_agent_comment = None
+                    for comment in reversed(comments): # Check recent comments first
+                        if hasattr(comment, 'body') and comment.body.startswith(get_settings().get("pr_code_suggestions.main_table_header", "## PR Code Suggestions")):
+                            # Look for the HTML comment <!-- commit_hash -->
+                            match = re.search(r"<!--\s*([0-9a-fA-F]{7,40})\s*-->", comment.body)
+                            if match:
+                                suggestions_commit_sha_from_comment = match.group(1)
+                                get_logger().info(f"ImpactValidator: Found suggestions_commit_sha {suggestions_commit_sha_from_comment} from PR comment.")
+                                break
+                    if not suggestions_commit_sha_from_comment:
+                         get_logger().warning(f"ImpactValidator: Could not parse suggestions_commit_sha from PR comments for {api_url}. Using 'before_sha' as fallback.")
+                except Exception as e:
+                    get_logger().error(f"ImpactValidator: Error parsing suggestions_commit_sha from comments: {e}", exc_info=True)
+
+                suggestions_commit_sha = suggestions_commit_sha_from_comment if suggestions_commit_sha_from_comment else before_sha
+
+                if not suggestions_commit_sha or suggestions_commit_sha == '0000000000000000000000000000000000000000': # Check for null SHA
+                    get_logger().warning(f"ImpactValidator: Invalid 'suggestions_commit_sha' ({suggestions_commit_sha}). Skipping analysis for PR: {api_url}")
+                elif suggestions_commit_sha == after_sha:
+                    get_logger().info(f"ImpactValidator: suggestions_commit_sha ({suggestions_commit_sha}) is same as after_sha. This means suggestions were likely just posted for this commit. Skipping analysis.")
+                else:
+                    validator = PRImpactValidator(pr_url=api_url,
+                                                  suggestions_commit_sha=suggestions_commit_sha,
+                                                  new_commit_sha=after_sha)
+
+                    analysis_results = await validator.analyze_commit_async() # analyze_commit is now async
+
+                    if analysis_results:
+                        get_logger().info(f"ImpactValidator: Analysis complete for {api_url}. Results: {analysis_results}")
+                        # Placeholder for calling feedback updates (Step 5)
+                        # await validator.update_pr_feedback(analysis_results)
+                        # get_logger().info(f"ImpactValidator: Placeholder for updating PR feedback.")
+
+                        # Placeholder for calling wiki update (Step 6)
+                        # implemented_suggestions = [res for res in analysis_results if res['implemented_status'] in ['direct', 'indirect']]
+                        # if implemented_suggestions:
+                        #    await validator._update_wiki_page(implemented_suggestions)
+                        #    get_logger().info(f"ImpactValidator: Placeholder for updating wiki page.")
+                    else:
+                        get_logger().info(f"ImpactValidator: Analysis returned no results for {api_url}.")
+            # <<< New Impact Analysis Logic End
 
     finally:
         # release the waiting task block
         async with _pending_task_duplicate_push_conditions[api_url]:
             _pending_task_duplicate_push_conditions[api_url].notify(1)
-            _duplicate_push_triggers[api_url] -= 1
+            if api_url in _duplicate_push_triggers: # Check if key exists before decrementing
+                 _duplicate_push_triggers[api_url] -= 1
+                 if _duplicate_push_triggers[api_url] == 0: # Clean up if count is zero
+                     del _duplicate_push_triggers[api_url]
+                     del _pending_task_duplicate_push_conditions[api_url]
 
 
 def handle_closed_pr(body, event, action, log_context):

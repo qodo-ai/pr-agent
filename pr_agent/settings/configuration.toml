@@ -373,3 +373,37 @@ pr_commands = [
     "/review",
     "/improve",
 ]
+
+[impact_validator]
+enable = false
+wiki_page_name = ".pr_agent_accepted_suggestions"
+auto_add_check_mark = true
+auto_add_explanation = true
+indirect_check_prompt = """Analyze the following code suggestion and the provided code patch (diff).\
+Determine if the *intent* of the original suggestion was implemented in the new code, even if the exact code differs.\n\
+\n\
+Original Suggestion:\n\
+File: {{ suggestion.relevant_file }}\n\
+Lines: {{ suggestion.relevant_lines_start }}-{{ suggestion.relevant_lines_end }}\n\
+Summary: {{ suggestion.one_sentence_summary }}\n\
+Content: {{ suggestion.suggestion_content }}\n\
+Original Code Snippet (if available):\n\
+```\n\
+{{ suggestion.existing_code }}\n\
+```\n\
+Suggested Improvement Snippet:\n\
+```\n\
+{{ suggestion.improved_code }}\n\
+```\n\
+\n\
+Code Patch (Changes made in the new commit relevant to the suggestion area):\n\
+```diff\n\
+{{ patch_hunk }}\n\
+```\n\
+\n\
+Question: Was the core intent of the original suggestion addressed or implemented by the changes in the code patch?\n\
+Respond in JSON format with two keys: \"implemented_indirectly\" (boolean) and \"explanation\" (string, max 100 words).\n\
+Your explanation should briefly state how the suggestion's intent was met or why it wasn't.\n\
+If the suggestion was about removing or refactoring code, and the code is indeed gone or changed as intended, consider it implemented.\n\
+If the patch is empty or doesn't relate to the suggestion, assume not implemented.\
+"""
