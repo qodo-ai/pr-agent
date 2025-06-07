@@ -1,8 +1,8 @@
 import difflib
 import hashlib
 import re
-from typing import Optional, Tuple
-from urllib.parse import urlparse
+from typing import Optional, Tuple, Any, Union
+from urllib.parse import urlparse, parse_qs
 
 import gitlab
 import requests
@@ -53,7 +53,7 @@ class GitLabProvider(GitProvider):
 
     def is_supported(self, capability: str) -> bool:
         if capability in ['get_issue_comments', 'create_inline_comment', 'publish_inline_comments',
-            'publish_file_comments']: # gfm_markdown is supported in gitlab !
+            'publish_file_comments', 'gfm_markdown']: # gfm_markdown is supported in gitlab !
             return False
         return True
 
@@ -112,14 +112,50 @@ class GitLabProvider(GitProvider):
             get_logger().error(f"Could not get diff for merge request {self.id_mr}")
             raise DiffNotFoundError(f"Could not get diff for merge request {self.id_mr}") from e
 
+    def _ensure_string_content(self, content: Union[str, bytes]) -> str:
+        """Convert bytes content to UTF-8 string if needed."""
+        if isinstance(content, bytes):
+            return content.decode('utf-8')
+        return content
 
     def get_pr_file_content(self, file_path: str, branch: str) -> str:
         try:
-            return self.gl.projects.get(self.id_project).files.get(file_path, branch).decode()
+            file_obj = self.gl.projects.get(self.id_project).files.get(file_path, branch)
+            content = file_obj.decode()
+            return self._ensure_string_content(content)
         except GitlabGetError:
             # In case of file creation the method returns GitlabGetError (404 file not found).
             # In this case we return an empty string for the diff.
             return ''
+        except Exception as e:
+            get_logger().warning(f"Error retrieving file {file_path} from branch {branch}: {e}")
+            return ''
+
+    def create_or_update_pr_file(self, file_path: str, branch: str, contents="", message="") -> None:
+        """Create or update a file in the GitLab repository."""
+        try:
+            project = self.gl.projects.get(self.id_project)
+            
+            if not message:
+                action = "Update" if contents else "Create"
+                message = f"{action} {file_path}"
+            
+            try:
+                existing_file = project.files.get(file_path, branch)
+                existing_file.content = contents
+                existing_file.save(branch=branch, commit_message=message)
+                get_logger().debug(f"Updated file {file_path} in branch {branch}")
+            except GitlabGetError:
+                project.files.create({
+                    'file_path': file_path,
+                    'branch': branch,
+                    'content': contents,
+                    'commit_message': message
+                })
+                get_logger().debug(f"Created file {file_path} in branch {branch}")
+        except Exception as e:
+            get_logger().exception(f"Failed to create or update file {file_path} in branch {branch}: {e}")
+            raise
 
     def get_diff_files(self) -> list[FilePatchInfo]:
         """
