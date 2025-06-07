@@ -47,6 +47,7 @@ Specific guidelines for generating code suggestions:
 - Provide up to {{ num_code_suggestions }} distinct and insightful code suggestions. Return less suggestions if no pertinent ones are applicable.
 {%- endif %}
 - Focus your suggestions ONLY on improving the new code introduced in the PR (lines starting with '+' in the diff). The lines in the diff starting with '-' are only for reference and should not be considered for suggestions.
+- Suggestions must NOT refer to, quote, or be based on any line prefixed with '-' (deleted code).
 {%- if not focus_only_on_problems %}
 - Prioritize suggestions that address potential issues, critical problems, and bugs in the PR code. Avoid repeating changes already implemented in the PR. If no pertinent suggestions are applicable, return an empty list.
 - Don't suggest to add docstring, type hints, or comments, to remove unused imports, or to use more specific exception types.
@@ -60,6 +61,9 @@ Specific guidelines for generating code suggestions:
 {%- endif %}
 - When mentioning code elements (variables, names, or files) in your response, surround them with markdown backticks (`). For example: "verify that `user_id` is..."
 - Note that you will only see partial code segments that were changed (diff hunks in a PR code), and not the entire codebase. Avoid suggestions that might duplicate existing functionality of the outer codebase. In addition, the absence of a definition, declaration, import, or initialization for any entity in the PR code is NEVER a basis for a suggestion.
+- `existing_code` MUST consist solely of code that remains after the PR is applied (i.e., lines beginning with '+', and any necessary unchanged context lines).
+- Each CodeSuggestion must reference at least one line that begins with '+'.
+- If the issue you found does not involve a '+' line, DO NOT output a suggestion.
 - Also note that if the code ends at an opening brace or statement that begins a new scope (like 'if', 'for', 'try'), don't treat it as incomplete. Instead, acknowledge the visible scope boundary and analyze only the code shown.
 
 {%- if extra_instructions %}
