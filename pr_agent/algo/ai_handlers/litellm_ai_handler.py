@@ -86,20 +86,21 @@ class LiteLLMAIHandler(BaseAiHandler):
                 "VERTEXAI.VERTEX_LOCATION", None
             )
             # Specific handling for models requiring 'global' location on Vertex AI
-            model_name_lower = get_settings().config.model.lower() # Use lower() for case-insensitive comparison
-            if "vertexai" in model_name_lower and "gemini-2.5-pro-preview-0605" in model_name_lower:
+            model_name = get_settings().config.model # Get the original model name
+            model_name_lower = model_name.lower() # Use lower() for case-insensitive comparison
+
+            # Correctly check for 'gemini-2.5-pro-preview-06-05' (with hyphen)
+            if "vertexai" in model_name_lower and "gemini-2.5-pro-preview-06-05" in model_name_lower:
                 current_location = get_settings().get("VERTEXAI.VERTEX_LOCATION", None)
                 if current_location != "global":
                     get_logger().info(
-                        f"Model '{get_settings().config.model}' on Vertex AI requires 'global' location. "
+                        f"Model '{model_name}' on Vertex AI requires 'global' location "
+                        f"as per Google's documentation (e.g., for gemini-2.5-pro-preview-06-05). "
                         f"Overriding current setting ('{current_location}') with 'global'."
                     )
                     litellm.vertex_location = "global"
                     os.environ["VERTEXAI_LOCATION"] = "global" # Also set env var
-            # Add other specific model checks here if needed in the future, e.g.:
-            # elif "vertexai" in model_name_lower and "another-specific-model" in model_name_lower:
-            #     litellm.vertex_location = "specific-region-for-this-model"
-            #     os.environ["VERTEXAI_LOCATION"] = "specific-region-for-this-model"
+            # Add other specific model checks here if needed in the future
         # Google AI Studio
         # SEE https://docs.litellm.ai/docs/providers/gemini
         if get_settings().get("GOOGLE_AI_STUDIO.GEMINI_API_KEY", None):
