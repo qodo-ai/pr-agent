@@ -85,22 +85,33 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.vertex_location = get_settings().get(
                 "VERTEXAI.VERTEX_LOCATION", None
             )
-            # Specific handling for models requiring 'global' location on Vertex AI
-            model_name = get_settings().config.model # Get the original model name
-            model_name_lower = model_name.lower() # Use lower() for case-insensitive comparison
+            # Specific location handling for certain Vertex AI Gemini models
+            model_name_from_config = get_settings().config.model
+            model_name_lower = model_name_from_config.lower()
+            current_vertex_location = get_settings().get("VERTEXAI.VERTEX_LOCATION", None)
+            new_vertex_location = None # Flag to see if we modify the location
 
-            # Correctly check for 'gemini-2.5-pro-preview-06-05' (with hyphen)
-            if "vertexai" in model_name_lower and "gemini-2.5-pro-preview-06-05" in model_name_lower:
-                current_location = get_settings().get("VERTEXAI.VERTEX_LOCATION", None)
-                if current_location != "global":
-                    get_logger().info(
-                        f"Model '{model_name}' on Vertex AI requires 'global' location "
-                        f"as per Google's documentation (e.g., for gemini-2.5-pro-preview-06-05). "
-                        f"Overriding current setting ('{current_location}') with 'global'."
-                    )
-                    litellm.vertex_location = "global"
-                    os.environ["VERTEXAI_LOCATION"] = "global" # Also set env var
-            # Add other specific model checks here if needed in the future
+            if "vertexai" in model_name_lower: # Only apply to vertexai models
+                if "gemini-2.5-pro-preview-06-05" in model_name_lower:
+                    if current_vertex_location != "global":
+                        get_logger().info(
+                            f"Model '{model_name_from_config}' on Vertex AI requires 'global' location. "
+                            f"Overriding current setting ('{current_vertex_location}') with 'global'."
+                        )
+                        new_vertex_location = "global"
+                elif "gemini-2.5-flash-preview-05-20" in model_name_lower:
+                    user_set_location_lower = str(current_vertex_location).lower() if current_vertex_location else ""
+                    if user_set_location_lower.startswith("us-") and user_set_location_lower != "us-central1":
+                        get_logger().info(
+                            f"Model '{model_name_from_config}' on Vertex AI, when used in the US, is only available in 'us-central1'. "
+                            f"User set location '{current_vertex_location}' is a non-central US region. "
+                            f"Correcting to 'us-central1'."
+                        )
+                        new_vertex_location = "us-central1"
+
+                if new_vertex_location:
+                    litellm.vertex_location = new_vertex_location
+                    os.environ["VERTEXAI_LOCATION"] = new_vertex_location
         # Google AI Studio
         # SEE https://docs.litellm.ai/docs/providers/gemini
         if get_settings().get("GOOGLE_AI_STUDIO.GEMINI_API_KEY", None):
