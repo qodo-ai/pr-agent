@@ -85,6 +85,19 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.vertex_location = get_settings().get(
                 "VERTEXAI.VERTEX_LOCATION", None
             )
+        model_name = get_settings().config.model
+        if "vertexai" in model_name.lower() and "gemini-2.5-pro-preview" in model_name.lower():
+            # For new Gemini 2.5 pro preview models on Vertex AI, location must be global
+            # as per https://github.com/BerriAI/litellm/pull/11447
+            if get_settings().get("VERTEXAI.VERTEX_LOCATION", None) != "global":
+                get_logger().info(
+                    f"Model {model_name} is a Vertex AI Gemini 2.5 Pro Preview model. "
+                    f"Forcing VERTEXAI_LOCATION to 'global'."
+                )
+                litellm.vertex_location = "global"
+                # Also set the environment variable as mentioned in the issue,
+                # although litellm.vertex_location should be the primary way
+                os.environ["VERTEXAI_LOCATION"] = "global"
         # Google AI Studio
         # SEE https://docs.litellm.ai/docs/providers/gemini
         if get_settings().get("GOOGLE_AI_STUDIO.GEMINI_API_KEY", None):
