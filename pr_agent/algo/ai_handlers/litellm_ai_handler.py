@@ -87,27 +87,37 @@ class LiteLLMAIHandler(BaseAiHandler):
             )
             # Specific location handling for certain Vertex AI Gemini models
             model_name_from_config = get_settings().config.model
-            model_name_lower = model_name_from_config.lower()
+            model_name_lower = model_name_from_config.lower() # For case-insensitive checks
             current_vertex_location = get_settings().get("VERTEXAI.VERTEX_LOCATION", None)
-            new_vertex_location = None # Flag to see if we modify the location
+            # Convert current_vertex_location to lower case for comparison, handling None
+            current_vertex_location_lower = str(current_vertex_location).lower() if current_vertex_location else ""
+
+            new_vertex_location = None # Initialize to None, will be set if a change is needed
 
             if "vertexai" in model_name_lower: # Only apply to vertexai models
                 if "gemini-2.5-pro-preview-06-05" in model_name_lower:
-                    if current_vertex_location != "global":
+                    if current_vertex_location_lower != "global":
                         get_logger().info(
                             f"Model '{model_name_from_config}' on Vertex AI requires 'global' location. "
                             f"Overriding current setting ('{current_vertex_location}') with 'global'."
                         )
                         new_vertex_location = "global"
                 elif "gemini-2.5-flash-preview-05-20" in model_name_lower:
-                    user_set_location_lower = str(current_vertex_location).lower() if current_vertex_location else ""
-                    if user_set_location_lower.startswith("us-") and user_set_location_lower != "us-central1":
+                    if current_vertex_location_lower.startswith("us-") and current_vertex_location_lower != "us-central1":
                         get_logger().info(
-                            f"Model '{model_name_from_config}' on Vertex AI, when used in the US, is only available in 'us-central1'. "
-                            f"User set location '{current_vertex_location}' is a non-central US region. "
-                            f"Correcting to 'us-central1'."
+                            f"Model '{model_name_from_config}' on Vertex AI: User set US location '{current_vertex_location}' "
+                            f"is not 'us-central1'. Correcting to 'us-central1' as per specific model requirements."
                         )
                         new_vertex_location = "us-central1"
+                    elif not current_vertex_location_lower.startswith("us-"): # Non-US regions
+                        if current_vertex_location_lower != "global":
+                             get_logger().info(
+                                f"Model '{model_name_from_config}' on Vertex AI: User set location '{current_vertex_location}' "
+                                f"is not a US region. Setting to 'global' as per specific model requirements for non-US or other cases."
+                            )
+                             new_vertex_location = "global"
+                    # If it's 'us-central1' already, new_vertex_location remains None, no change needed.
+                    # If it's 'global' already (for non-US), new_vertex_location remains None, no change needed.
 
                 if new_vertex_location:
                     litellm.vertex_location = new_vertex_location
