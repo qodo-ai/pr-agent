@@ -25,3 +25,4 @@ It includes information on how to adjust Qodo Merge configurations, define which
     - [Patch Extra Lines](./additional_configurations.md#patch-extra-lines)
 - [FAQ](https://qodo-merge-docs.qodo.ai/faq/)
 - [Qodo Merge Models](./qodo_merge_models)
+- [Qodo Merge Endpoints](./qm_endpoints)

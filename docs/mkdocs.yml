@@ -22,6 +22,7 @@ nav:
     - Additional Configurations: 'usage-guide/additional_configurations.md'
     - Frequently Asked Questions: 'faq/index.md'
     - 💎 Qodo Merge Models: 'usage-guide/qodo_merge_models.md'
+    - 💎 Qodo Merge Endpoints: 'usage-guide/qm_endpoints.md'
   - Tools:
      - 'tools/index.md'
      - Describe: 'tools/describe.md'
