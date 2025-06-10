@@ -1,0 +1,374 @@
+from typing import Dict, List, Any, Optional
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
+import structlog
+import json
+import re
+
+from src.agents.enhanced_review_agent import EnhancedCodeReviewAgent, EnhancedCodeReviewState, EnhancedReviewIssue
+from src.services.rag_knowledge_service import RAGKnowledgeService
+from src.services.gitlab_client import DiffFile, MergeRequestInfo
+from src.config.settings import settings
+
+logger = structlog.get_logger(__name__)
+
+
+class RAGEnhancedReviewAgent(EnhancedCodeReviewAgent):
+    """RAG增强的代码审查智能体，结合知识库提升审查质量"""
+    
+    def __init__(self):
+        super().__init__()
+        self.rag_service = RAGKnowledgeService()
+        
+        # 专门用于RAG增强的模型
+        self.rag_enhanced_llm = ChatOpenAI(
+            model="gpt-4-turbo-preview",
+            temperature=0.05,
+            max_tokens=4000,
+            api_key=settings.openai_api_key
+        )
+    
+    def _enhanced_file_review_with_rag(self, state: EnhancedCodeReviewState) -> EnhancedCodeReviewState:
+        """执行RAG增强的文件审查"""
+        try:
+            current_file = state.diff_files[state.current_file_index]
+            
+            # 1. 检索相关知识
+            relevant_knowledge = self._retrieve_context_knowledge(
+                current_file, 
+                state.merge_request, 
+                state.project_context
+            )
+            
+            # 2. 创建RAG增强的提示词
+            messages = self._create_rag_enhanced_prompt(
+                current_file, 
+                state.merge_request, 
+                state.project_context,
+                relevant_knowledge
+            )
+            
+            # 3. 获取LLM响应
+            response = self.rag_enhanced_llm.invoke(messages)
+            
+            # 4. 解析并验证响应
+            file_review = self._parse_enhanced_response(response.content, current_file.file_path)
+            
+            # 5. 基于知识库验证和增强结果
+            enhanced_file_review = self._validate_with_knowledge(file_review, relevant_knowledge)
+            
+            # 6. 添加到结果
+            state.file_reviews.append(enhanced_file_review)
+            state.current_file_index += 1
+            
+            # 7. 更新知识库使用统计
+            self._update_knowledge_usage(relevant_knowledge)
+            
+            logger.info("RAG-enhanced file review completed", 
+                       file_path=current_file.file_path,
+                       issues_found=len(enhanced_file_review.issues),
+                       knowledge_used=len(relevant_knowledge))
+            
+            return state
+            
+        except Exception as e:
+            state.error_message = f"RAG-enhanced review error: {str(e)}"
+            state.status = "failed"
+            return state
+    
+    def _retrieve_context_knowledge(self, diff_file: DiffFile, mr_info: MergeRequestInfo, 
+                                  project_context) -> List[Dict[str, Any]]:
+        """检索上下文相关的知识"""
+        try:
+            all_knowledge = []
+            
+            # 1. 检索项目特定的团队标准
+            if project_context and hasattr(mr_info, 'project_id'):
+                project_knowledge = self.rag_service.get_project_specific_knowledge(
+                    mr_info.project_id, 
+                    knowledge_types=["team_standard", "project_specific"]
+                )
+                all_knowledge.extend(project_knowledge)
+            
+            # 2. 基于代码内容检索相似案例
+            code_snippet = self._extract_code_snippet(diff_file.diff)
+            if code_snippet:
+                similar_cases = self.rag_service.retrieve_relevant_knowledge(
+                    code_snippet=code_snippet,
+                    language=project_context.language if project_context else "unknown",
+                    project_id=getattr(mr_info, 'project_id', None),
+                    top_k=3
+                )
+                all_knowledge.extend(similar_cases)
+            
+            # 3. 检索最佳实践
+            if project_context:
+                best_practices = self.rag_service.retrieve_relevant_knowledge(
+                    code_snippet=f"Language: {project_context.language} Framework: {project_context.framework}",
+                    language=project_context.language,
+                    top_k=2
+                )
+                all_knowledge.extend([bp for bp in best_practices if bp.get("type") == "best_practice"])
+            
+            # 4. 去重并按相似度排序
+            unique_knowledge = self._deduplicate_knowledge(all_knowledge)
+            
+            # 5. 按有效性和相似度排序
+            sorted_knowledge = sorted(
+                unique_knowledge, 
+                key=lambda k: (k.get("effectiveness_score", 0.0), k.get("similarity_score", 0.0)), 
+                reverse=True
+            )
+            
+            return sorted_knowledge[:5]  # 最多返回5个相关知识
+            
+        except Exception as e:
+            logger.error("Failed to retrieve context knowledge", error=str(e))
+            return []
+    
+    def _create_rag_enhanced_prompt(self, diff_file: DiffFile, mr_info: MergeRequestInfo, 
+                                  project_context, relevant_knowledge: List[Dict[str, Any]]) -> List:
+        """创建RAG增强的审查提示词"""
+        
+        # 构建知识上下文
+        knowledge_context = self._format_knowledge_context(relevant_knowledge)
+        
+        # 构建项目信息
+        project_info = f"""
+Project Context:
+- Language: {project_context.language if project_context else 'Unknown'}
+- Framework: {project_context.framework if project_context else 'Unknown'}
+- Project Type: {project_context.project_type if project_context else 'Unknown'}
+- Critical File: {'Yes' if project_context and diff_file.file_path in project_context.critical_paths else 'No'}
+"""
+        
+        system_content = f"""You are a senior code reviewer with access to team knowledge and best practices.
+
+{project_info}
+
+AVAILABLE KNOWLEDGE BASE:
+{knowledge_context}
+
+ENHANCED REVIEW INSTRUCTIONS:
+1. Use the provided knowledge base to inform your review
+2. Reference team standards and past successful patterns when applicable
+3. Compare against similar cases from the knowledge base
+4. Apply known best practices for this language/framework
+5. Prioritize issues that align with team standards and proven concerns
+6. Avoid flagging issues that contradict established team practices
+
+KNOWLEDGE-INFORMED FOCUS:
+- Apply team-specific coding standards rigorously
+- Look for patterns that have caused issues in similar code before
+- Suggest solutions that align with established best practices
+- Reference specific examples from the knowledge base when relevant
+
+Response format (JSON):
+{{
+    "complexity_score": <1-10>,
+    "maintainability_score": <1-10>,
+    "context_analysis": "<how this change aligns with team standards and best practices>",
+    "knowledge_applied": ["<list of knowledge base items referenced>"],
+    "issues": [
+        {{
+            "line_number": <number_or_null>,
+            "severity": "<critical|high|medium|low>",
+            "category": "<security|performance|bug|maintainability|style>",
+            "message": "<specific problem description>",
+            "suggestion": "<concrete fix suggestion with reference to standards/practices>",
+            "confidence_score": <0.7-1.0>,
+            "actionability": "<immediate|recommended|optional>",
+            "business_impact": "<high|medium|low>",
+            "effort_estimate": "<trivial|easy|moderate|hard>",
+            "context_relevance": <0.8-1.0>,
+            "knowledge_source": "<reference to specific knowledge base item if applicable>"
+        }}
+    ],
+    "summary": "<assessment focusing on alignment with team standards and proven practices>",
+    "suggestions": ["<suggestions informed by best practices and team standards>"]
+}}"""
+
+        human_content = f"""
+Merge Request: {mr_info.title}
+Author: {mr_info.author}
+File: {diff_file.file_path}
+
+Code Changes:
+```diff
+{diff_file.diff}
+```
+
+Please review this code using the available knowledge base. Focus on issues that:
+1. Violate established team standards
+2. Match patterns that have caused problems before
+3. Contradict proven best practices
+4. Could benefit from established solutions
+
+Provide specific references to the knowledge base when applicable.
+"""
+
+        return [
+            SystemMessage(content=system_content),
+            HumanMessage(content=human_content)
+        ]
+    
+    def _format_knowledge_context(self, knowledge_list: List[Dict[str, Any]]) -> str:
+        """格式化知识上下文为可读格式"""
+        if not knowledge_list:
+            return "No relevant knowledge available."
+        
+        context_parts = []
+        
+        for i, knowledge in enumerate(knowledge_list, 1):
+            context_part = f"""
+Knowledge Item {i}: {knowledge.get('title', 'Untitled')}
+Type: {knowledge.get('type', 'unknown')}
+Category: {knowledge.get('category', 'general')}
+Effectiveness: {knowledge.get('effectiveness_score', 0.0):.2f}
+
+Description: {knowledge.get('content', 'No description')}
+
+{f"Code Pattern: {knowledge.get('code_pattern', '')}" if knowledge.get('code_pattern') else ""}
+
+{f"Solution: {knowledge.get('solution', '')}" if knowledge.get('solution') else ""}
+
+{f"Examples: {json.dumps(knowledge.get('examples', []), indent=2)}" if knowledge.get('examples') else ""}
+---"""
+            context_parts.append(context_part)
+        
+        return "\n".join(context_parts)
+    
+    def _validate_with_knowledge(self, file_review, relevant_knowledge: List[Dict[str, Any]]):
+        """基于知识库验证和增强审查结果"""
+        try:
+            enhanced_issues = []
+            
+            for issue in file_review.issues:
+                # 查找相关的知识条目
+                matching_knowledge = self._find_matching_knowledge(issue, relevant_knowledge)
+                
+                if matching_knowledge:
+                    # 基于知识库调整置信度
+                    knowledge_confidence_boost = matching_knowledge.get("effectiveness_score", 0.0) * 0.2
+                    issue.confidence.confidence_score = min(1.0, issue.confidence.confidence_score + knowledge_confidence_boost)
+                    
+                    # 如果知识库有更好的解决方案，更新建议
+                    knowledge_solution = matching_knowledge.get("solution", "")
+                    if knowledge_solution and len(knowledge_solution) > len(issue.suggestion or ""):
+                        issue.suggestion = f"{issue.suggestion or ''} Based on team experience: {knowledge_solution}"
+                
+                enhanced_issues.append(issue)
+            
+            file_review.issues = enhanced_issues
+            
+            # 添加知识库应用的总结
+            if relevant_knowledge:
+                applied_knowledge = [k.get("title", "") for k in relevant_knowledge]
+                file_review.context_analysis += f" Applied knowledge: {', '.join(applied_knowledge[:3])}"
+            
+            return file_review
+            
+        except Exception as e:
+            logger.error("Failed to validate with knowledge", error=str(e))
+            return file_review
+    
+    def _find_matching_knowledge(self, issue: EnhancedReviewIssue, knowledge_list: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """查找与问题匹配的知识条目"""
+        for knowledge in knowledge_list:
+            # 检查类别匹配
+            if knowledge.get("category") == issue.category:
+                return knowledge
+            
+            # 检查描述相似性（简单关键词匹配）
+            issue_keywords = set(issue.message.lower().split())
+            knowledge_keywords = set((knowledge.get("content", "") + " " + knowledge.get("title", "")).lower().split())
+            
+            # 如果有足够的关键词重叠，认为匹配
+            overlap = len(issue_keywords.intersection(knowledge_keywords))
+            if overlap >= 2:
+                return knowledge
+        
+        return None
+    
+    def _extract_code_snippet(self, diff_content: str) -> str:
+        """从diff中提取代码片段"""
+        try:
+            # 提取添加的行（以+开头）
+            added_lines = []
+            for line in diff_content.split('\n'):
+                if line.startswith('+') and not line.startswith('+++'):
+                    added_lines.append(line[1:])  # 去掉+号
+            
+            return '\n'.join(added_lines[:10])  # 最多取前10行
+            
+        except Exception as e:
+            logger.error("Failed to extract code snippet", error=str(e))
+            return ""
+    
+    def _deduplicate_knowledge(self, knowledge_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """去重知识条目"""
+        seen_ids = set()
+        unique_knowledge = []
+        
+        for knowledge in knowledge_list:
+            knowledge_id = knowledge.get("id")
+            if knowledge_id and knowledge_id not in seen_ids:
+                seen_ids.add(knowledge_id)
+                unique_knowledge.append(knowledge)
+            elif not knowledge_id:  # 没有ID的情况，基于标题去重
+                title = knowledge.get("title", "")
+                if title not in [k.get("title", "") for k in unique_knowledge]:
+                    unique_knowledge.append(knowledge)
+        
+        return unique_knowledge
+    
+    def _update_knowledge_usage(self, knowledge_list: List[Dict[str, Any]]):
+        """更新知识使用统计"""
+        try:
+            for knowledge in knowledge_list:
+                knowledge_id = knowledge.get("id")
+                if knowledge_id:
+                    # 这里可以记录知识的使用情况，用于后续优化
+                    logger.debug("Knowledge used", knowledge_id=knowledge_id)
+                    
+        except Exception as e:
+            logger.error("Failed to update knowledge usage", error=str(e))
+    
+    def review_merge_request(self, mr_info: MergeRequestInfo, diff_files: List[DiffFile]) -> EnhancedCodeReviewState:
+        """执行RAG增强的代码审查"""
+        logger.info("Starting RAG-enhanced code review", 
+                   mr_title=mr_info.title, 
+                   files_count=len(diff_files))
+        
+        # 使用原有的工作流，但替换文件审查步骤
+        initial_state = EnhancedCodeReviewState(
+            merge_request=mr_info,
+            diff_files=diff_files
+        )
+        
+        # 手动执行工作流步骤，替换关键的文件审查步骤
+        state = self._extract_project_context(initial_state)
+        state = self._validate_input(state)
+        
+        while state.current_file_index < len(state.diff_files) and state.status != "failed":
+            state = self._analyze_files(state)
+            if state.current_file_index < len(state.diff_files):
+                # 使用RAG增强的审查方法
+                state = self._enhanced_file_review_with_rag(state)
+                state = self._evaluate_confidence(state)
+                state = self._filter_low_quality_issues(state)
+        
+        state = self._generate_enhanced_summary(state)
+        state = self._finalize_review(state)
+        
+        logger.info("RAG-enhanced code review completed", 
+                   status=state.status,
+                   files_reviewed=len(state.file_reviews),
+                   total_issues=state.total_issues,
+                   high_confidence_issues=state.high_confidence_issues)
+        
+        return state
+
+
+# 全局实例
+rag_enhanced_review_agent = RAGEnhancedReviewAgent() 
