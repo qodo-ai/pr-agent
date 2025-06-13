@@ -39,17 +39,40 @@ By understanding the reasoning and intent behind modifications, the LLM can offe
 Similarly to the `describe` tool, the `review` tool will use the ticket content to provide additional context for the code changes.
 
 In addition, this feature will evaluate how well a Pull Request (PR) adheres to its original purpose/intent as defined by the associated ticket or issue mentioned in the PR description.
-Each ticket will be assigned a label (Compliance/Alignment level), Indicates the degree to which the PR fulfills its original purpose, Options: Fully compliant, Partially compliant or Not compliant.
+Each ticket will be assigned a label (Compliance/Alignment level), Indicates the degree to which the PR fulfills its original purpose:
+
+- Fully Compliant
+- Partially Compliant
+- Not Compliant
+- PR Code Verified
 
 ![Ticket Compliance](https://www.qodo.ai/images/pr_agent/ticket_compliance_review.png){width=768}
 
-By default, the tool will automatically validate if the PR complies with the referenced ticket.
-If you want to disable this feedback, add the following line to your configuration file:
+A `PR Code Verified` label indicates the PR code meets ticket requirements, but requires additional manual testing beyond the code scope. For example - validating UI display across different environments (Mac, Windows, mobile, etc.).
 
-```toml
-[pr_reviewer]
-require_ticket_analysis_review=false
-```
+
+#### Configuration options
+
+- 
+
+    By default, the tool will automatically validate if the PR complies with the referenced ticket.
+    If you want to disable this feedback, add the following line to your configuration file:
+    
+    ```toml
+    [pr_reviewer]
+    require_ticket_analysis_review=false
+    ```
+
+- 
+
+    If you set:
+    ```toml
+    [pr_reviewer]
+    check_pr_additional_content=true
+    ```
+    (default: `false`)
+    
+    the `review` tool will also validate that the PR code doesn't contain any additional content that is not related to the ticket. If it does, the PR will be labeled at best as `PR Code Verified`, and the `review` tool will provide a comment with the additional unrelated content found in the PR code.
 
 ## GitHub Issues Integration
 
@@ -369,7 +392,7 @@ To integrate with Jira, you can link your PR to a ticket using either of these m
 
 **Method 1: Description Reference:**
 
-Include a ticket reference in your PR description using either the complete URL format https://<JIRA_ORG>.atlassian.net/browse/ISSUE-123 or the shortened ticket ID ISSUE-123.
+Include a ticket reference in your PR description, using either the complete URL format `https://<JIRA_ORG>.atlassian.net/browse/ISSUE-123` or the shortened ticket ID `ISSUE-123` (without prefix or suffix for the shortened ID).
 
 **Method 2: Branch Name Detection:**
 
@@ -382,6 +405,7 @@ Name your branch with the ticket ID as a prefix (e.g., `ISSUE-123-feature-descri
     [jira]
     jira_base_url = "https://<JIRA_ORG>.atlassian.net"
     ```
+    Where `<JIRA_ORG>` is your Jira organization identifier (e.g., `mycompany` for `https://mycompany.atlassian.net`).
 
 ## Linear Integration 💎
 
