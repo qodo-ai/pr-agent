@@ -41,6 +41,12 @@ class GiteaProvider(GitProvider):
         configuration.host = "{}/api/v1".format(self.base_url)
         configuration.api_key['Authorization'] = f'token {gitea_access_token}'
 
+        if get_settings().get("GITEA.SKIP_SSL_VERIFICATION", False):
+            configuration.verify_ssl = False
+
+        # Use custom cert (self-signed)
+        configuration.ssl_ca_cert = get_settings().get("GITEA.SSL_CA_CERT", None)
+
         client = giteapy.ApiClient(configuration)
         self.repo_api = RepoApi(client)
         self.owner = None

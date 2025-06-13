@@ -39,6 +39,8 @@ GITEA__PERSONAL_ACCESS_TOKEN=<personal_access_token>
 GITEA__WEBHOOK_SECRET=<webhook_secret>
 GITEA__URL=https://gitea.com # Or self host
 OPENAI__KEY=<your_openai_api_key>
+GITEA__SKIP_SSL_VERIFICATION=false # or true
+GITEA__SSL_CA_CERT=/path/to/cacert.pem
 ```
 
 8. Create a webhook in your Gitea project. Set the URL to `http[s]://<PR_AGENT_HOSTNAME>/api/v1/gitea_webhooks`, the secret token to the generated secret from step 3, and enable the triggers `push`, `comments` and `merge request events`.
