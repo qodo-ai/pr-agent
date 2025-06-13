@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import copy
 import difflib
 import hashlib
@@ -14,7 +15,7 @@ import traceback
 from datetime import datetime
 from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, TypedDict
 
 import html2text
 import requests
@@ -37,20 +38,30 @@ def get_model(model_type: str = "model_weak") -> str:
         return get_settings().config.model_reasoning
     return get_settings().config.model
 
+
 class Range(BaseModel):
     line_start: int  # should be 0-indexed
     line_end: int
     column_start: int = -1
     column_end: int = -1
 
+
 class ModelType(str, Enum):
     REGULAR = "regular"
     WEAK = "weak"
     REASONING = "reasoning"
 
+
+class TodoItem(TypedDict):
+    relevant_file: str
+    line_range: Tuple[int, int]
+    content: str
+
+
 class PRReviewHeader(str, Enum):
     REGULAR = "## PR Reviewer Guide"
     INCREMENTAL = "## Incremental PR Reviewer Guide"
+
 
 class ReasoningEffort(str, Enum):
     HIGH = "high"
@@ -109,6 +120,7 @@ def unique_strings(input_list: List[str]) -> List[str]:
             seen.add(item)
     return unique_list
 
+
 def convert_to_markdown_v2(output_data: dict,
                            gfm_supported: bool = True,
                            incremental_review=None,
@@ -131,6 +143,7 @@ def convert_to_markdown_v2(output_data: dict,
         "Focused PR": "✨",
         "Relevant ticket": "🎫",
         "Security concerns": "🔒",
+        "Todo sections": "✅",
         "Insights from user's answers": "📝",
         "Code feedback": "🤖",
         "Estimated effort to review [1-5]": "⏱️",
@@ -151,6 +164,7 @@ def convert_to_markdown_v2(output_data: dict,
     if gfm_supported:
         markdown_text += "<table>\n"
 
+    todo_summary = output_data['review'].pop('todo_summary', '')
     for key, value in output_data['review'].items():
         if value is None or value == '' or value == {} or value == []:
             if key.lower() not in ['can_be_split', 'key_issues_to_review']:
@@ -209,6 +223,90 @@ def convert_to_markdown_v2(output_data: dict,
                     markdown_text += f"### {emoji} Security concerns\n\n"
                     value = emphasize_header(value.strip(), only_markdown=True)
                     markdown_text += f"{value}\n\n"
+        elif 'todo sections' in key_nice.lower():
+            def format_todo_item(todo_item: TodoItem) -> str:
+                relevant_file = todo_item.get('relevant_file', '').strip()
+                line_range = todo_item.get('line_range', [])
+                content = todo_item.get('content', '')
+                reference_link = None
+
+                if isinstance(line_range, str):
+                    line_range = ast.literal_eval(line_range.strip())
+                try:
+                    if git_provider and relevant_file and line_range:
+                        reference_link = git_provider.get_line_link(relevant_file, line_range[0], line_range[1])
+                except Exception as e:
+                    get_logger().exception(f"Error generating link: {e}")
+                    line_str = f"[{line_range[0]}]" if line_range[0] == line_range[1] else f"[{line_range[0]}-{line_range[1]}]"
+                    return f"{relevant_file} {line_str}: {content}"
+
+                line_str = f"[{line_range[0]}]" if line_range[0] == line_range[1] else f"[{line_range[0]}-{line_range[1]}]"
+                file_ref = f"{relevant_file} {line_str}"
+                if reference_link:
+                    if gfm_supported:
+                        file_ref = f"<a href='{reference_link}'>{file_ref}</a>"
+                    else:
+                        file_ref = f"[{file_ref}]({reference_link})"
+
+                content_lines = content.strip().split("\n")
+                # if TODO content is single-line :
+                if len(content_lines) == 1:
+                    return f"{file_ref}: {content_lines[0]}"
+                # else if TODO content is multi-line:
+                elif len(content_lines) > 1:
+                    content_lines = "<br>".join(content_lines)
+                    return f"{file_ref}: <blockquote>\n{content_lines}\n</blockquote>"
+                # else if TODO content is empty:
+                else:
+                    return file_ref
+
+            def format_todo_items(value: list[TodoItem] | TodoItem) -> str: 
+                markdown_text = ""
+                if gfm_supported:
+                    if isinstance(value, list):
+                        markdown_text += "<ul>\n"
+                        for todo_item in value:
+                            markdown_text += f"<li>{format_todo_item(todo_item)}</li>\n"
+                        markdown_text += "</ul>\n"
+                    else:
+                        markdown_text += f"<p>{format_todo_item(value)}</p>\n"
+                else:
+                    if isinstance(value, list):
+                        for todo_item in value:
+                            markdown_text += f"- {format_todo_item(todo_item)}\n"
+                    else:
+                        markdown_text += f"- {format_todo_item(value)}\n"
+                return markdown_text
+ 
+            if gfm_supported:
+                markdown_text += "<tr><td>"
+                if is_value_no(value):
+                    markdown_text += f"{emoji}&nbsp;<strong>No TODO sections</strong>"
+                else:
+                    markdown_todo_items = format_todo_items(value)
+
+                    EXPAND_LINE_THRESHOLD = 10
+                    details_open_attr = " open" if markdown_todo_items.count("\n") + 1 <= EXPAND_LINE_THRESHOLD else ""
+                    todo_entry_label = f"{len(value)} " + "entries" if len(value) > 1 else "entry"
+
+                    markdown_text += f"{emoji}&nbsp;<strong>TODO sections ({todo_entry_label})</strong>\n"
+                    markdown_text += f"<details{details_open_attr}><summary>{todo_summary}</summary>\n\n"
+                    markdown_text += markdown_todo_items
+                    markdown_text += "\n</details>\n"
+                markdown_text += "</td></tr>\n"
+            else:
+                if is_value_no(value):
+                    markdown_text += f"### {emoji} No TODO sections\n\n"
+                else:
+                    markdown_todo_items = format_todo_items(value)
+
+                    EXPAND_LINE_THRESHOLD = 10
+                    details_open_attr = " open" if markdown_todo_items.count("\n") + 1 <= EXPAND_LINE_THRESHOLD else ""             
+                    todo_entry_label = f"{len(value)} " + "entries" if len(value) > 1 else "entry"
+
+                    markdown_text += f"### {emoji} TODO sections ({todo_entry_label})\n<details{details_open_attr}><summary>{todo_summary}</summary>\n\n"
+                    markdown_text += markdown_todo_items
+                    markdown_text += "\n</details>\n\n"
         elif 'can be split' in key_nice.lower():
             if gfm_supported:
                 markdown_text += f"<tr><td>"

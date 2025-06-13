@@ -72,6 +72,11 @@ class KeyIssuesComponentLink(BaseModel):
     start_line: int = Field(description="The start line that corresponds to this issue in the relevant file")
     end_line: int = Field(description="The end line that corresponds to this issue in the relevant file")
 
+class TodoSection(BaseModel):
+    relevant_file: str = Field(description="The file containing the TODO comment")
+    line_range: Tuple[int, int] = Field(description="Start and end line numbers of the TODO comment (inclusive). Must be a tuple of two integers, e.g., (7, 7) for a single line or (7, 10) for a range. Do not use list format [7, 7].")
+    content: str = Field(description="The content of the TODO comment. Only include actual TODO comments within code comments (e.g., lines starting with '#', '//', '/*', '<!--').  Remove leading 'TODO' prefixes. Include lines like '# TODO', even if empty after prefix removal. Exclude TODOs outside comments or without appropriate prefixes. Use | block style only when the line range covers multiple lines (e.g., (7, 10)).")
+
 {%- if related_tickets %}
 
 class TicketCompliance(BaseModel):
@@ -101,6 +106,18 @@ class Review(BaseModel):
     key_issues_to_review: List[KeyIssuesComponentLink] = Field("A short and diverse list (0-{{ num_max_findings }} issues) of high-priority bugs, problems or performance concerns introduced in the PR code, which the PR reviewer should further focus on and validate during the review process.")
 {%- if require_security_review %}
     security_concerns: str = Field(description="Does this PR code introduce possible vulnerabilities such as exposure of sensitive information (e.g., API keys, secrets, passwords), or security concerns like SQL injection, XSS, CSRF, and others ? Answer 'No' (without explaining why) if there are no possible issues. If there are security concerns or issues, start your answer with a short header, such as: 'Sensitive information exposure: ...', 'SQL injection: ...' etc. Explain your answer. Be specific and give examples if possible")
+{%- endif %}
+{%- if require_todo_scan %}
+    todo_sections: Union[List[TodoSection], str] = Field(description="A list of TODO comments found in the code. Return 'No' (as a string) if there are no TODO comments or the list would be empty.")
+    todo_summary: str = Field(description="Summarize the functional areas of the TODO comments found in the code.
+      - Focus on describing the *functional areas* of the TODOs, such as:
+          testing, error handling, validation, documentation, performance,
+          security, logging, refactoring, API design, UI/UX
+
+      - Example:
+          TODO related to input validation and error handling
+
+      - Return 'No' (as a string) if there are no TODO comments.")
 {%- endif %}
 {%- if require_can_be_split_review %}
     can_be_split: List[SubPR] = Field(min_items=0, max_items=3, description="Can this PR, which contains {{ num_pr_files }} changed files in total, be divided into smaller sub-PRs with distinct tasks that can be reviewed and merged independently, regardless of the order ? Make sure that the sub-PRs are indeed independent, with no code dependencies between them, and that each sub-PR represent a meaningful independent task. Output an empty list if the PR code does not need to be split.")
@@ -147,6 +164,10 @@ review:
       end_line: 14
     - ...
   security_concerns: |
+    No
+  todo_sections: |
+    No
+  todo_summary: |
     No
 {%- if require_can_be_split_review %}
   can_be_split:
@@ -265,6 +286,10 @@ review:
       end_line: ...
     - ...
   security_concerns: |
+    No
+  todo_sections: |
+    No
+  todo_summary: |
     No
 {%- if require_can_be_split_review %}
   can_be_split:
