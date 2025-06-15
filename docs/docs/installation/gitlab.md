@@ -61,12 +61,12 @@ git clone https://github.com/qodo-ai/pr-agent.git
 ```
 
 5. Prepare variables and secrets. Skip this step if you plan on setting these as environment variables when running the agent:
-1. In the configuration file/variables:
-    - Set `config.git_provider` to "gitlab"
+    1. In the configuration file/variables:
+        - Set `config.git_provider` to "gitlab"
 
-2. In the secrets file/variables:
-    - Set your AI model key in the respective section
-    - In the [gitlab] section, set `personal_access_token` (with token from step 2) and `shared_secret` (with secret from step 3)
+    2. In the secrets file/variables:
+        - Set your AI model key in the respective section
+        - In the [gitlab] section, set `personal_access_token` (with token from step 2) and `shared_secret` (with secret from step 3)
 
 6. Build a Docker image for the app and optionally push it to a Docker repository. We'll use Dockerhub as an example:
 
@@ -88,3 +88,63 @@ OPENAI__KEY=<your_openai_api_key>
 8. Create a webhook in your GitLab project. Set the URL to `http[s]://<PR_AGENT_HOSTNAME>/webhook`, the secret token to the generated secret from step 3, and enable the triggers `push`, `comments` and `merge request events`.
 
 9. Test your installation by opening a merge request or commenting on a merge request using one of PR Agent's commands.
+
+## Deploy as a Lambda Function
+
+Note that since AWS Lambda env vars cannot have "." in the name, you can replace each "." in an env variable with "__".<br>
+For example: `GITLAB.PERSONAL_ACCESS_TOKEN` --> `GITLAB__PERSONAL_ACCESS_TOKEN`
+
+1. Follow steps 1-5 from [Run a GitLab webhook server](#run-a-gitlab-webhook-server).
+2. Build a docker image that can be used as a lambda function
+
+    ```shell
+    docker buildx build --platform=linux/amd64 . -t codiumai/pr-agent:serverless --target gitlab_lambda -f docker/Dockerfile.lambda
+   ```
+
+3. Push image to ECR
+
+    ```shell
+    docker tag codiumai/pr-agent:serverless <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    ```
+
+4. Create a lambda function that uses the uploaded image. Set the lambda timeout to be at least 3m.
+5. Configure the lambda function to have a Function URL.
+6. In the environment variables of the Lambda function, specify `AZURE_DEVOPS_CACHE_DIR` to a writable location such as /tmp. (see [link](https://github.com/Codium-ai/pr-agent/pull/450#issuecomment-1840242269))
+7. Go back to steps 8-9 of [Run a GitLab webhook server](#run-a-gitlab-webhook-server) with the function url as your Webhook URL.
+    The Webhook URL would look like `https://<LAMBDA_FUNCTION_URL>/webhook`
+
+### Using AWS Secrets Manager
+
+For production Lambda deployments, use AWS Secrets Manager instead of environment variables:
+
+1. Create individual secrets for each GitLab webhook with this JSON format (e.g., secret name: `project-webhook-secret-001`)
+
+```json
+{
+  "gitlab_token": "glpat-xxxxxxxxxxxxxxxxxxxxxxxx",
+  "token_name": "project-webhook-001"
+}
+```
+
+2. Create a main configuration secret for common settings (e.g., secret name: `pr-agent-main-config`)
+
+```json
+{
+  "openai.key": "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+}
+```
+
+3. Set these environment variables in your Lambda:
+
+```bash
+CONFIG__SECRET_PROVIDER=aws_secrets_manager
+AWS_SECRETS_MANAGER__SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:pr-agent-main-config-AbCdEf
+```
+
+4. In your GitLab webhook configuration, set the **Secret Token** to the **Secret name** created in step 1:
+   - Example: `project-webhook-secret-001`
+
+**Important**: When using Secrets Manager, GitLab's webhook secret must be the Secrets Manager secret name.
+
+5. Add IAM permission `secretsmanager:GetSecretValue` to your Lambda execution role

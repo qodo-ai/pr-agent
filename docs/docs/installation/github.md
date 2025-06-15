@@ -187,7 +187,8 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 2. Build a docker image that can be used as a lambda function
 
     ```shell
-    docker buildx build --platform=linux/amd64 . -t codiumai/pr-agent:serverless -f docker/Dockerfile.lambda
+    # Note: --target github_lambda is optional as it's the default target
+    docker buildx build --platform=linux/amd64 . -t codiumai/pr-agent:serverless --target github_lambda -f docker/Dockerfile.lambda
    ```
 
 3. Push image to ECR
