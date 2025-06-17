@@ -1,4 +1,4 @@
-<div align="center">
+
 
 <div align="center">
 
@@ -21,7 +21,7 @@ PR-Agent aims to help efficiently review and handle pull requests, by providing 
 [![Static Badge](https://img.shields.io/badge/Chrome-Extension-violet)](https://chromewebstore.google.com/detail/qodo-merge-ai-powered-cod/ephlnjeghhogofkifjloamocljapahnl)
 [![Static Badge](https://img.shields.io/badge/Pro-App-blue)](https://github.com/apps/qodo-merge-pro/)
 [![Static Badge](https://img.shields.io/badge/OpenSource-App-red)](https://github.com/apps/qodo-merge-pro-for-open-source/)
-[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=purple)](https://discord.com/invite/SgSxuQ65GF)
+[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label&color=purple)](https://discord.com/invite/SgSxuQ65GF) #toDo - add badge also for twitter
 <a href="https://github.com/Codium-ai/pr-agent/commits/main">
 <img alt="GitHub" src="https://img.shields.io/github/last-commit/Codium-ai/pr-agent/main?style=for-the-badge" height="20">
 </a>
@@ -44,7 +44,7 @@ PR-Agent aims to help efficiently review and handle pull requests, by providing 
 ## Getting Started
 
 ### Try it Instantly
-Test PR-Agent on any public GitHub repository by commenting `@CodiumAI-Agent /improve`
+Test PR-Agent on any public GitHub repository by commenting `@CodiumAI-Agent /improve`. The bot will reply with code suggestions
 
 ### GitHub Action
 Add automated PR reviews to your repository with a simple workflow file using [GitHub Action setup guide](https://qodo-merge-docs.qodo.ai/installation/github/#run-as-a-github-action)
@@ -186,7 +186,7 @@ ___
 
 ## Try It Now
 
-Try the Claude Sonnet powered PR-Agent instantly on _your public GitHub repository_. Just mention `@CodiumAI-Agent` and add the desired command in any PR comment. The agent will generate a response based on your command.
+Try PR-Agent instantly on _your public GitHub repository_. Just mention `@CodiumAI-Agent` and add the desired command in any PR comment. The agent will generate a response based on your command.
 For example, add a comment to any pull request with the following text:
 
 ```
