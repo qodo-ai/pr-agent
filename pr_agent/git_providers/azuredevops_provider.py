@@ -589,8 +589,6 @@ class AzureDevopsProvider(GitProvider):
                 raise
 
         credentials = BasicAuthentication("", auth_token)
-
-        credentials = BasicAuthentication("", auth_token)
         azure_devops_connection = Connection(base_url=org, creds=credentials)
         azure_devops_client = azure_devops_connection.clients.get_git_client()
         azure_devops_board_client = azure_devops_connection.clients.get_work_item_tracking_client()
