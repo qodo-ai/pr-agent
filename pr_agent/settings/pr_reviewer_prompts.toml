@@ -196,6 +196,13 @@ Ticket Description:
 {{ ticket.body }}
 #####
 {%- endif %}
+
+{%- if ticket.requirements %}
+Ticket Requirements:
+#####
+{{ ticket.requirements }}
+#####
+{%- endif %}
 =====
 {% endfor %}
 {%- endif %}
