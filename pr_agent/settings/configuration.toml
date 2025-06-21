@@ -324,6 +324,7 @@ pr_commands = [
     "/review",
     "/improve --pr_code_suggestions.commitable_code_suggestions=true",
 ]
+direct_link_supported=false
 
 [litellm]
 # use_client = false

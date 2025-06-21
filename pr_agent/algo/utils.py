@@ -29,6 +29,8 @@ from pr_agent.algo.token_handler import TokenEncoder
 from pr_agent.algo.types import FilePatchInfo
 from pr_agent.config_loader import get_settings, global_settings
 from pr_agent.log import get_logger
+import regex
+import markdown_strings
 
 
 def get_model(model_type: str = "model_weak") -> str:
@@ -59,8 +61,8 @@ class TodoItem(TypedDict):
 
 
 class PRReviewHeader(str, Enum):
-    REGULAR = "## PR Reviewer Guide"
-    INCREMENTAL = "## Incremental PR Reviewer Guide"
+    REGULAR = "PR Reviewer Guide"
+    INCREMENTAL = "Incremental PR Reviewer Guide"
 
 
 class ReasoningEffort(str, Enum):
@@ -91,9 +93,10 @@ def emphasize_header(text: str, only_markdown=False, reference_link=None) -> str
             # Everything before the colon (inclusive) is wrapped in <strong> tags
             if only_markdown:
                 if reference_link:
-                    transformed_string = f"[**{text[:colon_position + 1]}**]({reference_link})\n" + text[colon_position + 1:]
+                    transformed_string = markdown_strings.link(markdown_strings.bold(text[:colon_position + 1]), reference_link) + "\n"
                 else:
-                    transformed_string = f"**{text[:colon_position + 1]}**\n" + text[colon_position + 1:]
+                    transformed_string = markdown_strings.bold(text[:colon_position + 1]) + "\n"
+                transformed_string += text[colon_position + 1:]
             else:
                 if reference_link:
                     transformed_string = f"<strong><a href='{reference_link}'>{text[:colon_position + 1]}</a></strong><br>" + text[colon_position + 1:]
@@ -151,10 +154,10 @@ def convert_to_markdown_v2(output_data: dict,
     }
     markdown_text = ""
     if not incremental_review:
-        markdown_text += f"{PRReviewHeader.REGULAR.value} 🔍\n\n"
+        markdown_text += f"{markdown_strings.header(f"{PRReviewHeader.REGULAR.value} 🔍", 2)}\n\n"
     else:
-        markdown_text += f"{PRReviewHeader.INCREMENTAL.value} 🔍\n\n"
-        markdown_text += f"⏮️ Review for commits since previous PR-Agent review {incremental_review}.\n\n"
+        markdown_text += f"{markdown_strings.header(f"{PRReviewHeader.INCREMENTAL.value} 🔍", 2)}\n\n"
+        markdown_text += f"{markdown_strings.italics(f"⏮️ Review for commits since previous PR-Agent review {incremental_review}.")}\n\n"
     if not output_data or not output_data.get('review', {}):
         return ""
 
@@ -189,7 +192,8 @@ def convert_to_markdown_v2(output_data: dict,
                 markdown_text += f"{emoji}&nbsp;<strong>{key_nice}</strong>: {value}"
                 markdown_text += f"</td></tr>\n"
             else:
-                markdown_text += f"### {emoji} {key_nice}: {value}\n\n"
+                markdown_text += markdown_strings.horizontal_rule() + "\n\n"
+                markdown_text += f"{markdown_strings.header(f"{emoji} {key_nice}: {value}", 3)}\n\n"
         elif 'relevant tests' in key_nice.lower():
             value = str(value).strip().lower()
             if gfm_supported:
@@ -200,10 +204,11 @@ def convert_to_markdown_v2(output_data: dict,
                     markdown_text += f"{emoji}&nbsp;<strong>PR contains tests</strong>"
                 markdown_text += f"</td></tr>\n"
             else:
+                markdown_text += markdown_strings.horizontal_rule() + "\n\n"
                 if is_value_no(value):
-                    markdown_text += f'### {emoji} No relevant tests\n\n'
+                    markdown_text += f"{markdown_strings.header(f"{emoji} No relevant tests", 3)}\n\n"
                 else:
-                    markdown_text += f"### {emoji} PR contains tests\n\n"
+                    markdown_text += f"{markdown_strings.header(f"{emoji} PR contains tests", 3)}\n\n"
         elif 'ticket compliance check' in key_nice.lower():
             markdown_text = ticket_markdown_logic(emoji, markdown_text, value, gfm_supported)
         elif 'security concerns' in key_nice.lower():
@@ -217,10 +222,11 @@ def convert_to_markdown_v2(output_data: dict,
                     markdown_text += f"{value}"
                 markdown_text += f"</td></tr>\n"
             else:
+                markdown_text += markdown_strings.horizontal_rule() + "\n\n"
                 if is_value_no(value):
-                    markdown_text += f'### {emoji} No security concerns identified\n\n'
+                    markdown_text += f"{markdown_strings.header(f"{emoji} No security concerns identified", 3)}\n\n"
                 else:
-                    markdown_text += f"### {emoji} Security concerns\n\n"
+                    markdown_text += f"{markdown_strings.header(f"{emoji} Security concerns", 3)}\n\n"
                     value = emphasize_header(value.strip(), only_markdown=True)
                     markdown_text += f"{value}\n\n"
         elif 'todo sections' in key_nice.lower():
@@ -312,7 +318,8 @@ def convert_to_markdown_v2(output_data: dict,
                     markdown_text += f"{emoji}&nbsp;<strong>No major issues detected</strong>"
                     markdown_text += f"</td></tr>\n"
                 else:
-                    markdown_text += f"### {emoji} No major issues detected\n\n"
+                    markdown_text += markdown_strings.horizontal_rule() + "\n\n"
+                    markdown_text += f"{markdown_strings.header(f"{emoji} No major issues detected", 3)}\n\n"
             else:
                 issues = value
                 if gfm_supported:
@@ -320,7 +327,10 @@ def convert_to_markdown_v2(output_data: dict,
                     # markdown_text += f"{emoji}&nbsp;<strong>{key_nice}</strong><br><br>\n\n"
                     markdown_text += f"{emoji}&nbsp;<strong>Recommended focus areas for review</strong><br><br>\n\n"
                 else:
-                    markdown_text += f"### {emoji} Recommended focus areas for review\n\n#### \n"
+                    markdown_text += markdown_strings.horizontal_rule() + "\n\n"
+                    markdown_text += f"{markdown_strings.header(f"{emoji} Recommended focus areas for review", 3)}\n\n"
+
+                issue_str_list = []
                 for i, issue in enumerate(issues):
                     try:
                         if not issue or not isinstance(issue, dict):
@@ -342,28 +352,43 @@ def convert_to_markdown_v2(output_data: dict,
                         if gfm_supported:
                             if reference_link is not None and len(reference_link) > 0:
                                 if relevant_lines_str:
-                                    issue_str = f"<details><summary><a href='{reference_link}'><strong>{issue_header}</strong></a>\n\n{issue_content}\n</summary>\n\n{relevant_lines_str}\n\n</details>"
+                                    issue_str = f"<details><summary><strong>{issue_header}</strong> (<a href='{reference_link}'>{relevant_file}</a>)\n\n{issue_content}\n</summary>\n\n{relevant_lines_str}\n\n</details>"
                                 else:
-                                    issue_str = f"<a href='{reference_link}'><strong>{issue_header}</strong></a><br>{issue_content}"
+                                    issue_str = f"<strong>{issue_header}</strong> (<a href='{reference_link}'>{relevant_file}</a>)<br>{issue_content}"
                             else:
-                                issue_str = f"<strong>{issue_header}</strong><br>{issue_content}"
+                                issue_str = f"<strong>{issue_header}</strong> ({relevant_file})<br>{issue_content}"
+                            markdown_text += f"{issue_str}\n\n"
                         else:
                             if reference_link is not None and len(reference_link) > 0:
-                                issue_str = f"[**{issue_header}**]({reference_link})\n\n{issue_content}\n\n"
+                                issue_str = f"{markdown_strings.bold(issue_header)} ({markdown_strings.link(relevant_file, reference_link)}): {issue_content}\n\n"
                             else:
-                                issue_str = f"**{issue_header}**\n\n{issue_content}\n\n"
-                        markdown_text += f"{issue_str}\n\n"
+                                issue_str = f"{markdown_strings.bold(issue_header)} ({relevant_file}): {issue_content}\n\n"
+                            
+                            if relevant_lines_str and len(relevant_lines_str) > 2:
+                                # Get the first 5 and the last 5 lines, with a ... in between
+                                relevant_lines = relevant_lines_str.splitlines()
+                                if len(relevant_lines) > 12: # 12 is due to 1st and last line are codeblocks
+                                    sample_lines_str = "\n".join(relevant_lines[:6] + ['\n[Skipping the middle lines....]\n'] + relevant_lines[-6:])
+                                else:
+                                    sample_lines_str = relevant_lines_str
+                                
+                                issue_str += f"{sample_lines_str}\n\n"
+                            issue_str_list.append(issue_str)
                     except Exception as e:
                         get_logger().exception(f"Failed to process 'Recommended focus areas for review': {e}")
                 if gfm_supported:
                     markdown_text += f"</td></tr>\n"
+                else:
+                    markdown_text += f"{markdown_strings.ordered_list(issue_str_list, esc=False)}\n\n"
+                    
         else:
             if gfm_supported:
                 markdown_text += f"<tr><td>"
                 markdown_text += f"{emoji}&nbsp;<strong>{key_nice}</strong>: {value}"
                 markdown_text += f"</td></tr>\n"
             else:
-                markdown_text += f"### {emoji} {key_nice}: {value}\n\n"
+                markdown_text += markdown_strings.horizontal_rule() + "\n\n"
+                markdown_text += f'{markdown_strings.header(f"{emoji} {key_nice}: {value}", 3)}\n\n'
 
     if gfm_supported:
         markdown_text += "</table>\n"
@@ -456,7 +481,7 @@ def ticket_markdown_logic(emoji, markdown_text, value, gfm_supported) -> str:
                     explanation += f"Non-compliant requirements:\n\n{not_compliant_str}\n\n"
                 if requires_further_human_verification:
                     explanation += f"Requires further human verification:\n\n{requires_further_human_verification}\n\n"
-                ticket_compliance_str += f"\n\n**[{ticket_url.split('/')[-1]}]({ticket_url}) - {ticket_compliance_level}**\n\n{explanation}\n\n"
+                ticket_compliance_str += f"\n\n{markdown_strings.bold(f"{markdown_strings.link(ticket_url.split('/')[-1], ticket_url)} - {ticket_compliance_level}")}\n\n{explanation}\n\n"
 
                 # for debugging
                 if requires_further_human_verification:
@@ -502,7 +527,8 @@ def ticket_markdown_logic(emoji, markdown_text, value, gfm_supported) -> str:
             markdown_text += ticket_compliance_str
             markdown_text += f"</td></tr>\n"
         else:
-            markdown_text += f"### {emoji} Ticket compliance analysis {compliance_emoji}\n\n"
+            markdown_text += markdown_strings.horizontal_rule() + "\n\n"
+            markdown_text += f"{markdown_strings.header(f"{emoji} Ticket compliance analysis {compliance_emoji}", 3)}\n\n"
             markdown_text += ticket_compliance_str + "\n\n"
 
     return markdown_text
@@ -1457,3 +1483,17 @@ def set_file_languages(diff_files) -> List[FilePatchInfo]:
         get_logger().exception(f"Failed to set file languages: {e}")
 
     return diff_files
+
+def emoji_to_html_entities(text):
+    # Match any Unicode grapheme cluster (handles compound emojis too)
+    graphemes = regex.findall(r'\X', text)
+
+    result = []
+    for g in graphemes:
+        if any(ord(c) > 0x1F000 for c in g):  # crude emoji check
+            html_entity = ''.join(f'&#x{ord(c):X};' for c in g)
+            result.append(html_entity)
+        else:
+            result.append(g)
+
+    return ''.join(result)
