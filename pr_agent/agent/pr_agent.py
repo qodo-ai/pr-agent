@@ -51,7 +51,7 @@ class PRAgent:
     def __init__(self, ai_handler: partial[BaseAiHandler,] = LiteLLMAIHandler):
         self.ai_handler = ai_handler  # will be initialized in run_action
 
-    async def handle_request(self, pr_url, request, notify=None) -> bool:
+    async def _handle_request(self, pr_url, request, notify=None) -> bool:
         # First, apply repo specific settings if exists
         apply_repo_settings(pr_url)
 
@@ -117,3 +117,10 @@ class PRAgent:
             else:
                 return False
             return True
+
+    async def handle_request(self, pr_url, request, notify=None) -> bool:
+        try:
+            return await self._handle_request(pr_url, request, notify)
+        except:
+            get_logger().exception("Failed to process the command.")
+            return False
