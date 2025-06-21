@@ -29,13 +29,13 @@ jobs:
           file: ./docker/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/pr-agent:bitbucket_server_webhook
-          build-args: |
-            --target=bitbucket_server_webhook
+          target: bitbucket_server_webhook
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image for cli
         uses: docker/build-push-action@v2
         with:
           context: .
           file: ./docker/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/pr-agent:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/pr-agent:cli,${{ secrets.DOCKER_USERNAME }}/pr-agent:latest
+          target: cli
