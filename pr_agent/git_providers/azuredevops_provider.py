@@ -654,7 +654,7 @@ class AzureDevopsProvider(GitProvider):
             get_logger().exception(f"Failed to get linked work items, error: {e}")
             return []
 
-    def get_work_items(self, work_item_ids: int) -> dict:
+    def get_work_items(self, work_item_ids: int) -> list:
         """
         Get work items by their IDs.
         """
