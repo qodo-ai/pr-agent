@@ -2,6 +2,7 @@
 # The server listens for incoming webhooks from Azure DevOps Server and forwards them to the PR Agent.
 # ADO webhook documentation: https://learn.microsoft.com/en-us/azure/devops/service-hooks/services/webhooks?view=azure-devops
 
+import asyncio
 import json
 import os
 import re
@@ -121,7 +122,7 @@ async def handle_request_azure(data, log_context):
         pr_url = unquote(data["resource"]["_links"]["web"]["href"].replace("_apis/git/repositories", "_git"))
         log_context["event"] = data["eventType"]
         log_context["api_url"] = pr_url
-        await _perform_commands_azure("pr_commands", PRAgent(), pr_url, log_context)
+        asyncio.create_task(_perform_commands_azure("pr_commands", PRAgent(), pr_url, log_context))
         return JSONResponse(
             status_code=status.HTTP_202_ACCEPTED,
             content=jsonable_encoder({"message": "webhook triggered successfully"})
