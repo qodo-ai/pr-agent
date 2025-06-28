@@ -10,6 +10,7 @@ This integration enriches the review process by automatically surfacing relevant
 **Ticket systems supported**:
 
 - [GitHub](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#github-issues-integration)
+- Azure DevOps
 - [Jira (💎)](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#jira-integration)
 - [Linear (💎)](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#linear-integration)
 
@@ -84,6 +85,19 @@ Examples of valid GitHub issue references:
 - `<ORG_NAME>/<REPO_NAME>#<ISSUE_NUMBER>`
 
 Since Qodo Merge is integrated with GitHub, it doesn't require any additional configuration to fetch GitHub issues.
+
+## Azure DevOps Integration
+
+Qodo Merge can automatically fetch Azure DevOps work item details for your PRs, providing extra context during code review.
+
+### How it works
+
+- Qodo Merge detects Azure DevOps work items linked to the PR.
+- It fetches the work item's title, description, acceptance criteria, and tags.
+- This information is used to enhance code analysis and review.
+
+!!! note "No Extra Configuration Needed"
+    Qodo Merge is natively integrated with Azure DevOps. No additional setup is required to fetch work item details.
 
 ## Jira Integration 💎
 
