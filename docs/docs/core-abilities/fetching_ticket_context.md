@@ -96,8 +96,9 @@ Qodo Merge can automatically fetch Azure DevOps work item details for your PRs, 
 - It fetches the work item's title, description, acceptance criteria, and tags.
 - This information is used to enhance code analysis and review.
 
-!!! note "No Extra Configuration Needed"
-    Qodo Merge is natively integrated with Azure DevOps. No additional setup is required to fetch work item details.
+> **Note**  
+> No extra configuration needed. Qodo Merge is natively integrated with Azure DevOps. No additional setup is required to fetch work item details.
+
 
 ## Jira Integration 💎
 
