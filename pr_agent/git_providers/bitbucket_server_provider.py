@@ -14,10 +14,11 @@ from ..algo.git_patch_processing import decode_if_bytes
 from ..algo.language_handler import is_valid_file
 from ..algo.types import EDIT_TYPE, FilePatchInfo
 from ..algo.utils import (find_line_number_of_relevant_line_in_file,
-                          load_large_diff)
+                          load_large_diff, emoji_to_html_entities)
 from ..config_loader import get_settings
 from ..log import get_logger
 from .git_provider import GitProvider
+import html
 
 
 class BitbucketServerProvider(GitProvider):
@@ -287,6 +288,9 @@ class BitbucketServerProvider(GitProvider):
         return diff_files
 
     def publish_comment(self, pr_comment: str, is_temporary: bool = False):
+        # Escape html 
+        pr_comment = emoji_to_html_entities(pr_comment)
+
         if not is_temporary:
             self.bitbucket_client.add_pull_request_comment(self.workspace_slug, self.repo_slug, self.pr_num, pr_comment)
 
@@ -339,10 +343,10 @@ class BitbucketServerProvider(GitProvider):
             raise e
 
     def get_line_link(self, relevant_file: str, relevant_line_start: int, relevant_line_end: int = None) -> str:
-        if relevant_line_start == -1:
-            link = f"{self.pr_url}/diff#{quote_plus(relevant_file)}"
+        if relevant_line_start == -1 or get_settings().get("BITBUCKET_SERVER.DIRECT_LINK_SUPPORTED", True) is False:
+            link = f"{self.pr_url}/diff#{html.escape(relevant_file)}"
         else:
-            link = f"{self.pr_url}/diff#{quote_plus(relevant_file)}?t={relevant_line_start}"
+            link = f"{self.pr_url}/diff#{html.escape(relevant_file)}?t={relevant_line_start}"
         return link
 
     def generate_link_to_relevant_line_number(self, suggestion) -> str:
