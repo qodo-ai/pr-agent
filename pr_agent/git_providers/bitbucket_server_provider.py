@@ -24,11 +24,11 @@ import html
 class BitbucketServerProvider(GitProvider):
     def __init__(
             self, pr_url: Optional[str] = None, incremental: Optional[bool] = False,
-            bitbucket_client: Optional[Bitbucket] = None,
+            bitbucket_client: Optional[Bitbucket] = None, bitbucket_server_url: Optional[str] = None,
+            workspace_slug: Optional[str] = None, repo_slug: Optional[str] = None
     ):
-        self.bitbucket_server_url = None
-        self.workspace_slug = None
-        self.repo_slug = None
+        self.workspace_slug = workspace_slug or None
+        self.repo_slug = repo_slug or None
         self.repo = None
         self.pr_num = None
         self.pr = None
@@ -38,7 +38,7 @@ class BitbucketServerProvider(GitProvider):
         self.diff_files = None
         self.bitbucket_pull_request_api_url = pr_url
         self.bearer_token = get_settings().get("BITBUCKET_SERVER.BEARER_TOKEN", None)
-        self.bitbucket_server_url = self._parse_bitbucket_server(url=pr_url)
+        self.bitbucket_server_url = bitbucket_server_url or get_settings().get("BITBUCKET_SERVER.URL", None) or self._parse_bitbucket_server(url=pr_url)
         self.bitbucket_client = bitbucket_client or Bitbucket(url=self.bitbucket_server_url,
                                                               token=get_settings().get("BITBUCKET_SERVER.BEARER_TOKEN",
                                                                                        None))
@@ -195,6 +195,20 @@ class BitbucketServerProvider(GitProvider):
         changes = self.bitbucket_client.get_pull_requests_changes(self.workspace_slug, self.repo_slug, self.pr_num)
         diffstat = [change["path"]['toString'] for change in changes]
         return diffstat
+
+    def get_pr_nums_from_commit(self, commit_id:str) -> list:
+        # Gets the list of PRs that contain the given commit_id
+        try:
+            pr_list = self.bitbucket_client.get_pull_requests_contain_commit(
+                self.workspace_slug,
+                self.repo_slug,
+                commit=commit_id
+            )
+            # Return only the PR numbers with ste 'OPEN'
+            return [pr['id'] for pr in pr_list if pr['state'] == 'OPEN']
+        except HTTPError as e:
+            get_logger().error(f"Failed to get pull requests for commit {commit_id}, error: {e}")
+            return []
 
     #gets the best common ancestor: https://git-scm.com/docs/git-merge-base
     @staticmethod

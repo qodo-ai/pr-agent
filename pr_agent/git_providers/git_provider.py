@@ -133,6 +133,13 @@ class GitProvider(ABC):
     def reply_to_comment_from_comment_id(self, comment_id: int, body: str):
         pass
 
+    def get_pr_nums_from_commit(self, commit_id:str) -> list:
+        """
+        Given a commit id, return a list of PR numbers that contain this commit.
+        If the commit is not part of any PR, return an empty list.
+        """
+        return []
+
     def get_pr_description(self, full: bool = True, split_changes_walkthrough=False) -> str | tuple:
         from pr_agent.algo.utils import clip_tokens
         from pr_agent.config_loader import get_settings
