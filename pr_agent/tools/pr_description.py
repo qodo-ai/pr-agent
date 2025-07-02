@@ -538,10 +538,9 @@ class PRDescription:
                 get_logger().error(f"Failing to process walkthrough {self.pr_id}: {e}")
                 body = body.replace('pr_agent:walkthrough', "")
 
-        # Add support for pr_agent:diagram marker (plain and HTML comment formats)
         ai_diagram = self.data.get('changes_diagram')
-        if ai_diagram:
-            body = re.sub(r'<!--\s*pr_agent:diagram\s*-->|pr_agent:diagram', ai_diagram, body)
+        if ai_diagram and not re.search(r'<!--\s*pr_agent:diagram\s*-->', body):
+            body = body.replace('pr_agent:diagram', ai_diagram)
 
         return title, body, walkthrough_gfm, pr_file_changes
 
