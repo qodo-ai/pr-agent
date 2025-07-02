@@ -538,10 +538,6 @@ class PRDescription:
                 get_logger().error(f"Failing to process walkthrough {self.pr_id}: {e}")
                 body = body.replace('pr_agent:walkthrough', "")
 
-        ai_diagram = self.data.get('changes_diagram')
-        if ai_diagram and not re.search(r'<!--\s*pr_agent:diagram\s*-->', body):
-            body = body.replace('pr_agent:diagram', ai_diagram)
-
         return title, body, walkthrough_gfm, pr_file_changes
 
     def _prepare_pr_answer(self) -> Tuple[str, str, str, List[dict]]:
