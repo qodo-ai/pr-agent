@@ -614,22 +614,19 @@ class PRCodeSuggestions:
                     break
             if original_initial_line:
                 suggested_initial_line = new_code_snippet.splitlines()[0]
+                # Detect if this is a Go file
                 is_go_file = relevant_file.strip().endswith('.go') or (hasattr(self, 'main_language') and self.main_language and self.main_language.lower() == 'go')
-                if is_go_file:
-                    # For Go, always use tabs for indentation
-                    original_leading_tabs = len(original_initial_line) - len(original_initial_line.lstrip('\t'))
-                    suggested_leading_tabs = len(suggested_initial_line) - len(suggested_initial_line.lstrip('\t'))
-                    delta_tabs = original_leading_tabs - suggested_leading_tabs
-                    if delta_tabs > 0:
-                        new_code_snippet = textwrap.indent(new_code_snippet, '\t' * delta_tabs).rstrip('\n')
-                else:
-                    # Default: use the original logic (spaces or tabs based on first char)
-                    original_initial_spaces = len(original_initial_line) - len(original_initial_line.lstrip()) # lstrip works both for spaces and tabs
-                    suggested_initial_spaces = len(suggested_initial_line) - len(suggested_initial_line.lstrip())
-                    delta_spaces = original_initial_spaces - suggested_initial_spaces
-                    if delta_spaces > 0:
+                # Default: use the original logic (spaces or tabs based on first char)
+                original_leading_tabs = len(original_initial_line) - len(original_initial_line.lstrip())
+                suggested_leading_tabs = len(suggested_initial_line) - len(suggested_initial_line.lstrip())
+                delta_spaces = original_leading_tabs - suggested_leading_tabs
+                if delta_spaces > 0:
+                    if is_go_file and original_initial_line.startswith('\t'):
+                        # For Go, if tabs are used, we enforce tabs
+                        indent_char = '\t'
+                    else:
                         indent_char = '\t' if original_initial_line.startswith('\t') else ' '
-                        new_code_snippet = textwrap.indent(new_code_snippet, delta_spaces * indent_char).rstrip('\n')
+                    new_code_snippet = textwrap.indent(new_code_snippet, delta_spaces * indent_char).rstrip('\n')
         except Exception as e:
             get_logger().error(f"Error when dedenting code snippet for file {relevant_file}, error: {e}")
 
