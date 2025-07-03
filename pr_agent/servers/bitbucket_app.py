@@ -173,9 +173,6 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
     app_name = get_settings().get("CONFIG.APP_NAME", "Unknown")
     log_context = {"server_type": "bitbucket_app", "app_name": app_name}
     get_logger().debug(request.headers)
-    jwt_header = request.headers.get("authorization", None)
-    if jwt_header:
-        input_jwt = jwt_header.split(" ")[1]
     data = await request.json()
     get_logger().debug(data)
 
@@ -186,7 +183,7 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
                 return "OK"
 
             # Check if the PR should be processed
-            if data.get("event", "") == "pullrequest:created":
+            if request.headers.get("x-event-key") == "pullrequest:created":
                 if not should_process_pr_logic(data):
                     return "OK"
 
@@ -195,39 +192,29 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
 
             sender_id = data.get("data", {}).get("actor", {}).get("account_id", "")
             log_context["sender_id"] = sender_id
-            jwt_parts = input_jwt.split(".")
-            claim_part = jwt_parts[1]
-            claim_part += "=" * (-len(claim_part) % 4)
-            decoded_claims = base64.urlsafe_b64decode(claim_part)
-            claims = json.loads(decoded_claims)
-            client_key = claims["iss"]
-            secrets = json.loads(secret_provider.get_secret(client_key))
-            shared_secret = secrets["shared_secret"]
-            jwt.decode(input_jwt, shared_secret, audience=client_key, algorithms=["HS256"])
-            bearer_token = await get_bearer_token(shared_secret, client_key)
-            context['bitbucket_bearer_token'] = bearer_token
-            context["settings"] = copy.deepcopy(global_settings)
-            event = data["event"]
+            event = request.headers.get("x-event-key")
+            get_logger().debug(event)
             agent = PRAgent()
             if event == "pullrequest:created":
-                pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
+                pr_url = data["pullrequest"]["links"]["html"]["href"]
+                get_logger().debug(pr_url)
                 log_context["api_url"] = pr_url
                 log_context["event"] = "pull_request"
                 if pr_url:
                     with get_logger().contextualize(**log_context):
                         apply_repo_settings(pr_url)
-                        if get_identity_provider().verify_eligibility("bitbucket",
-                                                        sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
+                        if get_identity_provider().verify_eligibility("bitbucket",sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
                             if get_settings().get("bitbucket_app.pr_commands"):
                                 await _perform_commands_bitbucket("pr_commands", PRAgent(), pr_url, log_context, data)
             elif event == "pullrequest:comment_created":
-                pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
+                pr_url = data["pullrequest"]["links"]["html"]["href"]
+                get_logger().debug(pr_url)
                 log_context["api_url"] = pr_url
                 log_context["event"] = "comment"
-                comment_body = data["data"]["comment"]["content"]["raw"]
+                comment_body = data["comment"]["content"]["raw"]
+                get_logger().debug(comment_body)
                 with get_logger().contextualize(**log_context):
-                    if get_identity_provider().verify_eligibility("bitbucket",
-                                                                     sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
+                    if get_identity_provider().verify_eligibility("bitbucket", sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
                         await agent.handle_request(pr_url, comment_body)
         except Exception as e:
             get_logger().error(f"Failed to handle webhook: {e}")

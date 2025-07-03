@@ -31,8 +31,7 @@ class BitbucketProvider(GitProvider):
         s = requests.Session()
         s.headers["Content-Type"] = "application/json"
 
-        self.auth_type = get_settings().get("BITBUCKET.AUTH_TYPE", "bearer")
-
+        self.auth_type = get_settings().get("BITBUCKET.AUTH_TYPE", "basic")
         try:
             def get_token(token_name, auth_type_name):
                 token = get_settings().get(f"BITBUCKET.{token_name.upper()}", None)
