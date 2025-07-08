@@ -1,3 +1,4 @@
+import os
 import subprocess
 import re
 import boto3
@@ -5,8 +6,9 @@ import json
 import toml
 from botocore.exceptions import ClientError
 
-secret_name = "devops/github/pr-agent-bot"
-region_name = "eu-west-1"
+# Fetch values from environment variables, with defaults as fallback
+secret_name = os.environ.get("github_app_secret", "devops/github/pr-agent-bot")
+region_name = os.environ.get("REGION_NAME", "eu-west-1")
 
 def get_aws_secrets(secret_name, region_name):
     session = boto3.session.Session()

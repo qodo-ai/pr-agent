@@ -1,7 +1,7 @@
 [config]
 # models
-model="anthropic/claude-3-5-sonnet-20241022"
-fallback_models=["anthropic/claude-3-5-sonnet-20241022"]
+model="o4-mini"
+fallback_models=["gpt-4o-mini"]
 # CLI
 git_provider="github"
 publish_output=true

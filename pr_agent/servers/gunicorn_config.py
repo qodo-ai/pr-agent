@@ -76,7 +76,7 @@ if os.getenv('GUNICORN_WORKERS', None):
 else:
     cores = multiprocessing.cpu_count()
     workers = cores * 2 + 1
-worker_connections = 1000
+worker_connections = 300
 timeout = 240
 keepalive = 2
 
