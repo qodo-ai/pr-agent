@@ -37,7 +37,7 @@ async def run_action():
     OPENAI_KEY = os.environ.get('OPENAI_KEY') or os.environ.get('OPENAI.KEY')
     OPENAI_ORG = os.environ.get('OPENAI_ORG') or os.environ.get('OPENAI.ORG')
     GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
-    RESPONSE_LANGUAGE = os.environ.get('RESPONSE_LANGUAGE','ko_KR')
+    RESPONSE_LANGUAGE = os.environ.get('RESPONSE_LANGUAGE','en-us')
     # get_settings().set("CONFIG.PUBLISH_OUTPUT_PROGRESS", False)
 
     # Check if required environment variables are set
@@ -63,7 +63,9 @@ async def run_action():
     get_settings().set("GITHUB.DEPLOYMENT_TYPE", "user")
     enable_output = get_setting_or_env("GITHUB_ACTION_CONFIG.ENABLE_OUTPUT", True)
     get_settings().set("GITHUB_ACTION_CONFIG.ENABLE_OUTPUT", enable_output)
-    get_settings().set("CONFIG.RESPONSE_LANGUAGE", RESPONSE_LANGUAGE)
+
+    if RESPONSE_LANGUAGE:
+        get_settings().set("CONFIG.RESPONSE_LANGUAGE", RESPONSE_LANGUAGE)
     
     # Load the event payload
     try:
