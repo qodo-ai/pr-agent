@@ -10,6 +10,7 @@ from requests.exceptions import HTTPError
 import shlex
 import subprocess
 
+from ..algo.file_filter import filter_ignored
 from ..algo.git_patch_processing import decode_if_bytes
 from ..algo.language_handler import is_valid_file
 from ..algo.types import EDIT_TYPE, FilePatchInfo
@@ -244,7 +245,8 @@ class BitbucketServerProvider(GitProvider):
         original_file_content_str = ""
         new_file_content_str = ""
 
-        changes = self.bitbucket_client.get_pull_requests_changes(self.workspace_slug, self.repo_slug, self.pr_num)
+        changes_original = list(self.bitbucket_client.get_pull_requests_changes(self.workspace_slug, self.repo_slug, self.pr_num))
+        changes = filter_ignored(changes_original, 'bitbucket_server')
         for change in changes:
             file_path = change['path']['toString']
             if not is_valid_file(file_path.split("/")[-1]):
