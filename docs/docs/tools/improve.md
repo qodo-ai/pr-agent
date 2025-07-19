@@ -80,13 +80,13 @@ Qodo Merge tracks two types of implementations for tracking implemented suggesti
 - Direct implementation - when the user directly applies the suggestion by clicking the `Apply` checkbox.
 - Indirect implementation - when the user implements the suggestion in their IDE environment. In this case, Qodo Merge will utilize, after each commit, a dedicated logic to identify if a suggestion was implemented, and will mark it as implemented.
 
-![code_suggestions_assess_impact](https://codium.ai/images/pr_agent/code_suggestions_asses_impact.png){width=512}
+![code_suggestions_assess_impact](https://codium.ai/images/pr_agent/code_suggestions_assess_impact.png){width=512}
 
 In post-process, Qodo Merge counts the number of suggestions that were implemented, and provides general statistics and insights about the suggestions' impact on the PR process.
 
-![code_suggestions_assess_impact_stats_1](https://codium.ai/images/pr_agent/code_suggestions_asses_impact_stats_1.png){width=512}
+![code_suggestions_assess_impact_stats_1](https://codium.ai/images/pr_agent/code_suggestions_assess_impact_stats_1.png){width=512}
 
-![code_suggestions_assess_impact_stats_2](https://codium.ai/images/pr_agent/code_suggestions_asses_impact_stats_2.png){width=512}
+![code_suggestions_assess_impact_stats_2](https://codium.ai/images/pr_agent/code_suggestions_assess_impact_stats_2.png){width=512}
 
 ## Suggestion tracking
 

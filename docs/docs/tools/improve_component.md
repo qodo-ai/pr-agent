@@ -1,6 +1,6 @@
 ## Overview
 
-The `improve_component` tool generates code suggestions for a specific code component that changed in the PR.
+The `improve_component` tool generates code suggestions for a specific code component that has changed in the PR.
 it can be invoked manually by commenting on any PR:
 
 ```

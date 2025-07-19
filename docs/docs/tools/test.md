@@ -1,6 +1,6 @@
 ## Overview
 
-By combining LLM abilities with static code analysis, the `test` tool  generate tests for a selected component, based on the PR code changes.
+By combining LLM abilities with static code analysis, the `test` tool generates tests for a selected component, based on the PR code changes.
 It can be invoked manually by commenting on any PR:
 
 ```
