@@ -609,13 +609,15 @@ class PRDescription:
                 changes_walkthrough += "</details>\n\n"
             elif key.lower().strip() == 'description':
                 if isinstance(value, list):
-                    value = ', '.join(v.rstrip() for v in value)
+                    # Handle both strings and dictionaries in the list
+                    value = ', '.join(str(v).rstrip() if hasattr(v, 'rstrip') else str(v) for v in value)
                 value = value.replace('\n-', '\n\n-').strip() # makes the bullet points more readable by adding double space
                 pr_body += f"{value}\n"
             else:
                 # if the value is a list, join its items by comma
                 if isinstance(value, list):
-                    value = ', '.join(v.rstrip() for v in value)
+                    # Handle both strings and dictionaries in the list
+                    value = ', '.join(str(v).rstrip() if hasattr(v, 'rstrip') else str(v) for v in value)
                 pr_body += f"{value}\n"
             if idx < len(self.data) - 1:
                 pr_body += "\n\n___\n\n"
