@@ -32,12 +32,14 @@ class GitLabProvider(GitProvider):
         if not gitlab_url:
             raise ValueError("GitLab URL is not set in the config file")
         self.gitlab_url = gitlab_url
+        ssl_verify = get_settings().get("GITLAB.SSL_VERIFY", True)
         gitlab_access_token = get_settings().get("GITLAB.PERSONAL_ACCESS_TOKEN", None)
         if not gitlab_access_token:
             raise ValueError("GitLab personal access token is not set in the config file")
         self.gl = gitlab.Gitlab(
             url=gitlab_url,
-            oauth_token=gitlab_access_token
+            oauth_token=gitlab_access_token,
+            ssl_verify=ssl_verify
         )
         self.max_comment_chars = 65000
         self.id_project = None
