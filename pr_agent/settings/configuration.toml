@@ -334,6 +334,7 @@ enable_callbacks = false
 success_callback = []
 failure_callback = []
 service_callback = []
+# model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
 [pr_similar_issue]
 skip_comments = false
