@@ -13,8 +13,8 @@ keywords:
   - github
   - gitlab
   - automation
-home: https://github.com/crest/pr-agent
+home: https://github.com/cresta/pr-agent
 sources:
-  - https://github.com/crest/pr-agent
+  - https://github.com/cresta/pr-agent
 annotations:
   category: Development 
