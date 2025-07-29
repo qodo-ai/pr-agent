@@ -1,0 +1,219 @@
+# Default values for pr-agent
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 2
+
+# Deployment mode - determines which Docker target and server to use
+# Options: github_app, gitlab_webhook, bitbucket_app, gitea_app, azure_devops_webhook
+deploymentMode: "github_app"
+
+global:
+  whitelist_source_range: ""  # Optional IP whitelist for webhooks
+
+image:
+  repository: 242659714806.dkr.ecr.us-west-2.amazonaws.com/cresta/pr-agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000  # PR-Agent webhook servers run on port 3000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  host: pr-agent.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Example webhook path annotations:
+    # nginx.ingress.kubernetes.io/rewrite-target: /$2
+  tls: []
+  #  - secretName: pr-agent-tls
+  #    hosts:
+  #      - pr-agent.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# PR-Agent Core Configuration
+# These map to the configuration.toml settings
+config:
+  # AI Model Configuration
+  model: "o4-mini"
+  fallback_models: '["gpt-4o-mini"]'
+  ai_timeout: 120
+  max_model_tokens: 32000
+  custom_model_max_tokens: -1
+  temperature: 0.2
+  
+  # Git Provider
+  git_provider: "github"
+  
+  # General Settings
+  publish_output: true
+  publish_output_progress: true
+  verbosity_level: 0
+  log_level: "INFO"
+  
+  # Patch Processing
+  patch_extra_lines_before: 5
+  patch_extra_lines_after: 1
+  allow_dynamic_context: true
+  large_patch_policy: "clip"
+  
+  # Response Language
+  response_language: "en-US"
+
+# PR-Agent Tool Configuration
+pr_reviewer:
+  require_score_review: false
+  require_tests_review: true
+  require_estimate_effort_to_review: true
+  require_security_review: true
+  require_ticket_analysis_review: true
+  persistent_comment: true
+  extra_instructions: ""
+  num_max_findings: 3
+  enable_review_labels_security: true
+  enable_review_labels_effort: true
+
+pr_description:
+  publish_labels: true
+  add_original_user_description: true
+  keep_original_user_title: false
+  extra_instructions: ""
+  enable_pr_type: true
+
+pr_code_suggestions:
+  num_code_suggestions: 4
+  summarize: true
+  extra_instructions: ""
+  rank_suggestions: false
+
+# Environment Variables for Fine-tuning
+# These will be set as environment variables with the exact names
+env: {}
+  # Examples:
+  # CONFIG__MODEL: "gpt-4o"
+  # PR_REVIEWER__REQUIRE_TESTS_REVIEW: "false"
+  # PR_CODE_SUGGESTIONS__NUM_CODE_SUGGESTIONS: "6"
+  # GITHUB__DEPLOYMENT_TYPE: "app"
+
+# Secrets Configuration
+# Note: In production, use external secret management (AWS Secrets Manager, etc.)
+secrets:
+  # OpenAI API Key
+  openai_key: ""
+  
+  # GitHub Configuration
+  github_token: ""
+  github_webhook_secret: ""
+  github_app_id: ""
+  github_private_key: ""
+  
+  # GitLab Configuration
+  gitlab_token: ""
+  gitlab_webhook_secret: ""
+  
+  # Other AI Providers
+  anthropic_key: ""
+  google_ai_studio_gemini_api_key: ""
+  azure_openai_key: ""
+  azure_openai_endpoint: ""
+  azure_openai_deployment: ""
+
+# Configuration Override
+# If you need to provide a complete configuration.toml file
+configOverride: ""
+  # Example:
+  # |
+  # [config]
+  # model = "gpt-4o"
+  # git_provider = "github"
+  # [pr_reviewer]
+  # require_tests_review = false
+
+# External Configuration Sources
+externalSecrets:
+  enabled: false
+  # AWS Secrets Manager configuration
+  aws:
+    secretName: ""
+    region: "us-west-2"
+  # Google Secret Manager configuration
+  gcp:
+    secretName: ""
+    projectId: "" 

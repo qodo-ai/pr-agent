@@ -1,4 +1,4 @@
-name: Build-and-test
+name: Build, lint, and test code
 
 on:
   push:
@@ -9,31 +9,58 @@ on:
       - main
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-
+  test:
+    name: Test
+    runs-on:
+      group: self-hosted
+      labels: cpu
     steps:
-      - id: checkout
+      - name: Check out code
         uses: actions/checkout@v4
-
-      - id: dockerx
-        name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - id: build
-        name: Build dev docker
-        uses: docker/build-push-action@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          context: .
-          file: ./docker/Dockerfile
-          push: false
-          load: true
-          tags: codiumai/pr-agent:test
-          cache-from: type=gha,scope=dev
-          cache-to: type=gha,mode=max,scope=dev
-          target: test
-
-      - id: test
-        name: Test dev docker
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+      - name: Verify generated code is up to date
+        shell: bash
         run: |
-          docker run --rm codiumai/pr-agent:test pytest -v tests/unittest
+          if (( $(git status --porcelain=v1 2>/dev/null | wc -l) > 0 )); then
+            # Already have changes. Skip running generate
+            exit 0
+          fi
+          # No code generation needed for PR-Agent currently
+      - name: Install dependencies
+        shell: bash
+        run: |
+          pip install --no-cache-dir -r requirements.txt
+          pip install --no-cache-dir -r requirements-dev.txt
+      - name: Build
+        run: |
+          docker build . -t pr-agent:test --target test -f docker/Dockerfile
+        shell: bash
+      - name: Test
+        shell: bash
+        run: |
+          docker run --rm pr-agent:test pytest -v tests/unittest
+
+  build:
+    needs:
+      - test
+    uses: cresta/github-workflow-build-push-docker/.github/workflows/main.yaml@v1
+    secrets: inherit
+    with:
+      name: pr-agent
+      push: ${{ github.ref == 'refs/heads/main' }}
+      fail-on-lint: false
+
+  build-helm:
+    uses: cresta/github-actions/.github/workflows/build-push-helm.yaml@build-push-helm/v1
+    secrets: inherit
+    with:
+      push_chart: ${{ github.ref == 'refs/heads/main' }}
+      chart_name: "pr-agent"
+      publish_as_root: true

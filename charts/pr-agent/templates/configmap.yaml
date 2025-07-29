@@ -1,0 +1,11 @@
+{{- if .Values.configOverride }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pr-agent.fullname" . }}-config
+  labels:
+    {{- include "pr-agent.labels" . | nindent 4 }}
+data:
+  configuration.toml: |
+    {{- .Values.configOverride | nindent 4 }}
+{{- end }} 

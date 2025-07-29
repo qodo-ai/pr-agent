@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "pr-agent.fullname" . }}-test-connection"
+  labels:
+    {{- include "pr-agent.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: wget
+      image: busybox:1.36
+      command: ['wget']
+      args: ['--no-check-certificate', '--quiet', '--timeout=10', '--tries=1', '--spider', '{{ include "pr-agent.fullname" . }}:{{ .Values.service.port }}/']
+      resources:
+        limits:
+          cpu: 100m
+          memory: 128Mi
+        requests:
+          cpu: 50m
+          memory: 64Mi 

@@ -1,0 +1,20 @@
+apiVersion: v2
+name: pr-agent
+description: A Helm chart for AI-powered pull request agent
+type: application
+version: 0.1.0
+appVersion: latest
+maintainers:
+  - name: infra-squad
+keywords:
+  - ai
+  - pull-request
+  - code-review
+  - github
+  - gitlab
+  - automation
+home: https://github.com/crest/pr-agent
+sources:
+  - https://github.com/crest/pr-agent
+annotations:
+  category: Development 

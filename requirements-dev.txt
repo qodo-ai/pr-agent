@@ -2,3 +2,10 @@ pytest==7.4.0
 poetry
 twine
 pre-commit>=4,<5
+# Linting and code quality
+ruff>=0.1.0
+black>=23.0.0
+mypy>=1.0.0
+# Testing utilities
+pytest-cov>=4.0.0
+coverage>=7.0.0
