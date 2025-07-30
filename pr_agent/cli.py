@@ -44,10 +44,7 @@ def set_parser():
     
     - help_docs - Ask a question, from either an issue or PR context, on a given repo (current context or a different one)
     
-    - ingest - Ingest PRs from repository for learning (use --max-prs=N to specify count)
-    
-    - evolve - Enhanced PR review with continuous learning
-
+    - evolve - Self-improving PR review with zero-training automated learning
 
     Configuration:
     To edit any configuration parameter from 'configuration.toml', just add -config_path=<value>.
