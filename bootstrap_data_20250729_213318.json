@@ -1,0 +1,23 @@
+[
+  {
+    "pr_url": "https://github.com/qodo-ai/pr-agent/pull/1958",
+    "pr_id": "qodo-ai/pr-agent#1958",
+    "title": "Update changing_a_model.md",
+    "description": "### **User description**\nHi,\r\n\r\nRemoving an extra equal sign.\n\n\n___\n\n### **PR Type**\nBug fix\n\n\n___\n\n### **Description**\n- Fix syntax error in TOML configuration example\n\n\n___\n\n\n\n<details> <summary><h3> File Walkthrough</h3></summary>\n\n<table><thead><tr><th></th><th align=\"left\">Relevant files</th></tr></thead><tbody><tr><td><strong>Bug fix</strong></td><td><table>\n<tr>\n  <td>\n    <details>\n      <summary><strong>changing_a_model.md</strong><dd><code>Fix TOML syntax error</code>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; </dd></summary>\n<hr>\n\ndocs/docs/usage-guide/changing_a_model.md\n\n<ul><li>Remove duplicate equals sign in <code>reasoning_efffort</code> configuration <br>example</ul>\n\n\n</details>\n\n\n  </td>\n  <td><a href=\"https://github.com/qodo-ai/pr-agent/pull/1958/files#diff-7904af6a8722d533e7de626761ae6c1d9554069ed02634c3b719d2e7f8b39f4d\">+1/-1</a>&nbsp; &nbsp; &nbsp; </td>\n\n</tr>\n</table></td></tr></tr></tbody></table>\n\n</details>\n\n___\n\n",
+    "diff_text": "\n\n## File: 'docs/docs/usage-guide/changing_a_model.md'\n\n@@ -359,7 +359,7 @@ To bypass chat templates and temperature controls, set `config.custom_reasoning_\n \n ```toml\n [config]\n-reasoning_efffort= = \"medium\" # \"low\", \"medium\", \"high\"\n+reasoning_efffort = \"medium\" # \"low\", \"medium\", \"high\"\n ```\n \n With the OpenAI models that support reasoning effort (eg: o4-mini), you can specify its reasoning effort via `config` section. The default value is `medium`. You can change it to `high` or `low` based on your usage.\n",
+    "diff_summary": "Summary:\n\nThis PR fixes a syntax error in the TOML configuration example within the documentation. Specifically, it removes an extra equal sign from the reasoning_efffort assignment to ensure the example is valid TOML syntax. The change is limited to documentation and does not affect application code or architecture.",
+    "changed_files": [
+      "docs/docs/usage-guide/changing_a_model.md"
+    ],
+    "commit_messages": [
+      "1. Update changing_a_model.md",
+      "",
+      "Removing an extra equal sign"
+    ],
+    "created_at": "2025-07-29T10:15:41",
+    "merged_at": "2025-07-29T15:03:51",
+    "author": "loicngr",
+    "language": "Python",
+    "embedding_hash": "242e87fb0980c98e92f05c89c8b0107c"
+  }
+]

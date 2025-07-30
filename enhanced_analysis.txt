@@ -1,0 +1,21 @@
+[32m2025-07-29 23:27:03.098[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_wrapper[0m:[36mrun[0m:[36m38[0m - [1mRunning evolutionary command: evolve[0m
+[32m2025-07-29 23:27:07.109[0m | [1mINFO    [0m | [36mpr_agent.algo.rag_handler[0m:[36m__init__[0m:[36m444[0m - [1mInitialized RAG handler with pinecone[0m
+[32m2025-07-29 23:27:07.110[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_reviewer[0m:[36m__init__[0m:[36m86[0m - [1mInitialized RAG with pinecone vector database[0m
+[32m2025-07-29 23:27:08.854[0m | [1mINFO    [0m | [36mpr_agent.algo.rag_handler[0m:[36m__init__[0m:[36m444[0m - [1mInitialized RAG handler with pinecone[0m
+[32m2025-07-29 23:27:08.855[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_supervisor[0m:[36m__init__[0m:[36m465[0m - [1mInitialized learning database with Pinecone RAG handler[0m
+[32m2025-07-29 23:27:08.855[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_reviewer[0m:[36m__init__[0m:[36m103[0m - [1mInitialized Evolutionary PR Reviewer (RAG: True, O3: True)[0m
+[32m2025-07-29 23:27:08.855[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_cli[0m:[36mhandle_evolve_command[0m:[36m39[0m - [1mStarting evolutionary review for: https://github.com/kubernetes/kubernetes/pull/133290[0m
+[32m2025-07-29 23:27:08.855[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_reviewer[0m:[36mreview_pr_evolutionary[0m:[36m110[0m - [1mStarting evolutionary review for PR: https://github.com/kubernetes/kubernetes/pull/133290[0m
+[32m2025-07-29 23:27:11.705[0m | [1mINFO    [0m | [36mpr_agent.git_providers.github_provider[0m:[36mget_diff_files[0m:[36m272[0m - [1mUsing merge base commit 1b273b385e0ec817167040ec2b75cb7fdda105da instead of base commit [0m
+[32m2025-07-29 23:27:13.211[0m | [1mINFO    [0m | [36mpr_agent.algo.pr_processing[0m:[36mget_pr_diff[0m:[36m63[0m - [1mPR main language: Go[0m
+[32m2025-07-29 23:27:13.219[0m | [1mINFO    [0m | [36mpr_agent.algo.pr_processing[0m:[36mget_pr_diff[0m:[36m74[0m - [1mTokens: 726, total tokens under limit: 32000, returning full diff.[0m
+[32m2025-07-29 23:27:20.659[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_reviewer[0m:[36m_get_rag_context[0m:[36m204[0m - [1mRetrieved 5 similar contexts from RAG[0m
+[32m2025-07-29 23:27:21.654[0m | [31m[1mERROR   [0m | [36mpr_agent.tools.pr_evolutionary_reviewer[0m:[36mreview_pr_evolutionary[0m:[36m164[0m - [31m[1mFailed to perform evolutionary review: string indices must be integers, not 'str'[0m
+[32m2025-07-29 23:27:21.659[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_wrapper[0m:[36m_store_result[0m:[36m68[0m - [1mEvolutionary result:
+## 🧬 Evolutionary PR Analysis - `/evolve`
+
+Review failed: string indices must be integers, not 'str'[0m
+## 🧬 Evolutionary PR Analysis - `/evolve`
+
+Review failed: string indices must be integers, not 'str'
+[32m2025-07-29 23:27:21.662[0m | [1mINFO    [0m | [36mpr_agent.tools.pr_evolutionary_wrapper[0m:[36m_store_analysis_result[0m:[36m117[0m - [1mStored analysis result for evolve command[0m

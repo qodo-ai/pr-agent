@@ -25,6 +25,7 @@ from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
 from pr_agent.tools.ticket_pr_compliance_check import (
     extract_and_cache_pr_tickets, extract_tickets)
+from pr_agent.dicl.sdk import DICL
 
 
 class PRReviewer:
@@ -131,6 +132,11 @@ class PRReviewer:
             #     return None
 
             get_logger().info(f'Reviewing PR: {self.pr_url} ...')
+            
+            # Disable publishing if DICL is enabled
+            if get_settings().get("enable_dicl", False):
+                get_settings().set("config.publish_output", False)
+            
             relevant_configs = {'pr_reviewer': dict(get_settings().pr_reviewer),
                                 'config': dict(get_settings().config)}
             get_logger().debug("Relevant configs", artifacts=relevant_configs)
@@ -165,6 +171,15 @@ class PRReviewer:
                 if get_settings().config.publish_output:
                     reason += ": no major issues detected."
                 get_logger().info(reason)
+                
+                # Print to terminal if DICL is enabled
+                if get_settings().get("enable_dicl", False):
+                    print("\n" + "="*80)
+                    print("🧬 DICL Enhanced PR Review")  
+                    print("="*80)
+                    print(pr_review)
+                    print("="*80)
+                
                 get_settings().data = {"artifact": pr_review}
                 return
 
@@ -215,6 +230,9 @@ class PRReviewer:
         environment = Environment(undefined=StrictUndefined)
         system_prompt = environment.from_string(get_settings().pr_review_prompt.system).render(variables)
         user_prompt = environment.from_string(get_settings().pr_review_prompt.user).render(variables)
+        
+        if get_settings().get("enable_dicl", False):
+            user_prompt = DICL.regular(variables, user_prompt)
 
         response, finish_reason = await self.ai_handler.chat_completion(
             model=model,

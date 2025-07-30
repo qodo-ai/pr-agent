@@ -13,3 +13,9 @@ build/
 docs/.cache/
 .qodo
 poetry.lock
+
+venv/
+venv/bin/
+venv/lib/
+venv/include/
+venv/share/

@@ -20,6 +20,7 @@ from pr_agent.tools.pr_questions import PRQuestions
 from pr_agent.tools.pr_reviewer import PRReviewer
 from pr_agent.tools.pr_similar_issue import PRSimilarIssue
 from pr_agent.tools.pr_update_changelog import PRUpdateChangelog
+from pr_agent.dicl.commands import DICLIngest, DICLEvolve
 
 command2class = {
     "auto_review": PRReviewer,
@@ -41,6 +42,8 @@ command2class = {
     "add_docs": PRAddDocs,
     "generate_labels": PRGenerateLabels,
     "help_docs": PRHelpDocs,
+    "ingest": DICLIngest,
+    "evolve": DICLEvolve,
 }
 
 commands = list(command2class.keys())
