@@ -20,6 +20,7 @@ pr_agent_job:
     - echo "MR_URL=$MR_URL"
     - export gitlab__url=$CI_SERVER_PROTOCOL://$CI_SERVER_FQDN
     - export gitlab__PERSONAL_ACCESS_TOKEN=$GITLAB_PERSONAL_ACCESS_TOKEN
+    - export gitlab__SSL_VERIFY=$CI_SERVER_TLS_CA_FILE
     - export config__git_provider="gitlab"
     - export openai__key=$OPENAI_KEY
     - python -m pr_agent.cli --pr_url="$MR_URL" describe
@@ -41,6 +42,8 @@ You can also modify the `script` section to run different Qodo Merge commands, o
 Note that if your base branches are not protected, don't set the variables as `protected`, since the pipeline will not have access to them.
 
 > **Note**: The `$CI_SERVER_FQDN` variable is available starting from GitLab version 16.10. If you're using an earlier version, this variable will not be available. However, you can combine `$CI_SERVER_HOST` and `$CI_SERVER_PORT` to achieve the same result. Please ensure you're using a compatible version or adjust your configuration.
+
+> **Note**: The `gitlab__SSL_VERIFY` environment variable can also be set to `False` to disable validation. This however is not recommended.
 
 ## Run a GitLab webhook server
 
