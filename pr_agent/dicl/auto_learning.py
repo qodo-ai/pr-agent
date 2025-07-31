@@ -29,9 +29,8 @@ class AutoLearningEngine:
         common_issues = len(gpt4_issues) + len(o3_issues) - len(unique_to_gpt4) - len(unique_to_o3)
         total_issues = len(gpt4_issues) + len(o3_issues)
         
-        # Fix agreement score calculation to be between 0 and 1
         if total_issues == 0:
-            agreement_score = 1.0  # No issues found by either model = perfect agreement
+            agreement_score = 1.0
         else:
             agreement_score = min(1.0, (2 * common_issues) / total_issues)
         
@@ -73,25 +72,18 @@ class AutoLearningEngine:
         return False
     
     def generate_learning_insights(self, comparison: ModelComparison, pr_context: Dict[str, Any]) -> List[str]:
-        """Use LLM judge to compare reviews and generate insights"""
-        
-        # Skip if no reviews to compare
         if not comparison.gpt4_review or not comparison.o3_review:
             return []
         
         try:
             import asyncio
-            
-            # Handle event loop properly
             try:
-                loop = asyncio.get_running_loop()
-                # Create a new task in the existing loop
+                asyncio.get_running_loop()
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     future = executor.submit(asyncio.run, self._generate_insights_with_judge(comparison, pr_context))
                     insights = future.result(timeout=30)
             except RuntimeError:
-                # No running loop, safe to use asyncio.run
                 insights = asyncio.run(self._generate_insights_with_judge(comparison, pr_context))
                 
             self.logger.info(f"LLM Judge generated {len(insights)} learning insights")
@@ -106,7 +98,7 @@ class AutoLearningEngine:
         
         from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
         
-        judge_prompt = f"""Compare these two code reviews and extract learning insights about what each model specializes in detecting.
+        judge_prompt = f"""Compare these two code reviews to identify learning patterns for future reviews.
 
 ## Context
 - **Language**: {pr_context.get('language', 'unknown')}
@@ -119,30 +111,38 @@ class AutoLearningEngine:
 {comparison.o3_review[:2000]}
 
 ## Task
-Analyze what each model uniquely caught or emphasized. Generate 2-4 specific learning insights that capture:
+Find cases where one model caught something important the other missed. Generate 2-4 learning insights in this format:
 
-1. **Technical Specializations**: What types of issues does each model excel at finding?
-2. **Specific Examples**: File-level insights with clear impact (like "O3 detected test coverage gap in test/e2e/dra/dra.go:921 affecting ResourceClaim validation")
-3. **Actionable Patterns**: When to prioritize which model for similar code changes
+**Pattern**: "When reviewing [specific code pattern/situation], ensure you look for [specific issue type] because [reason]"
+**Example**: "[Model name] correctly identified [specific issue with file:line] while [other model] missed this [issue type]"
 
-Format each insight as a complete, standalone learning point. Focus on substantial differences, not minor style variations.
+Focus on substantial differences where one model demonstrated superior detection of:
+- Security vulnerabilities
+- Performance issues  
+- Testing gaps
+- Logic errors
+- Resource management problems
 
-Output format: One insight per line, no prefixes or numbering."""
+Each insight should teach future reviews what to prioritize in similar situations.
+
+Output format: One complete insight per line including both pattern and example."""
 
         ai_handler = LiteLLMAIHandler()
         response, _ = await ai_handler.chat_completion(
             model="gpt-4o-mini",
             temperature=0.1,
-            system="""You are an expert code review analyst. Your job is to identify what each AI model specializes in detecting by comparing their reviews.
+            system="""You are a code review expert creating learning rules for future reviews. Analyze where one model succeeded while the other failed.
 
-Focus on:
-- **Substantial technical differences** (not style preferences)
-- **File-specific insights** with concrete examples
-- **Actionable specialization patterns** for future reviews
+Generate learning insights that follow this pattern:
+"When reviewing [code situation], ensure you look for [specific issue] because [technical reason]. Example: [Model] correctly identified [specific issue with file:line] while [other model] missed this [issue category]."
 
-Generate insights that would help choose the right model for specific types of code changes.
+Requirements:
+- **Teaching Focus**: Each insight teaches what to prioritize in similar code situations
+- **Concrete Examples**: Use actual findings from the current PR with file references
+- **Comparative Analysis**: Show which model was superior and why
+- **Future Application**: Frame as guidance for handling similar code patterns
 
-Keep insights concise but technically specific. Each insight should be valuable for improving future code reviews.""",
+Create insights that help future reviews catch issues one model found but the other missed.""",
             user=judge_prompt
         )
         
@@ -151,7 +151,7 @@ Keep insights concise but technically specific. Each insight should be valuable 
         for line in response.strip().split('\n'):
             line = line.strip()
             if len(line) > 40:  # Only substantial insights
-                insights.append(f"JUDGE_INSIGHT: {line}")
+                insights.append(line)
         
         return insights
     
@@ -198,7 +198,7 @@ class DualModelReviewer:
             o3_review = await self._get_o3_review(pr_data, base_prompt)
             comparison = self.learning_engine.compare_models(gpt4_review, o3_review)
             insights = self.learning_engine.generate_learning_insights(comparison, pr_data)
-            stored = self.learning_engine.store_learning_insights(insights, pr_data)
+            self.learning_engine.store_learning_insights(insights, pr_data)
             final_review = self._synthesize_reviews(gpt4_review, o3_review, comparison)
             
             self.logger.info(f"Dual model review completed. Agreement: {comparison.agreement_score:.2f}, Insights: {len(insights)}")
@@ -209,7 +209,7 @@ class DualModelReviewer:
             self.logger.error(f"Dual model review failed: {e}")
             return base_prompt, 0
     
-    async def _get_gpt4_review(self, pr_data: Dict[str, Any], prompt: str) -> str:
+    async def _get_gpt4_review(self, _: Dict[str, Any], prompt: str) -> str:
         try:
             from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
             
@@ -242,7 +242,7 @@ Focus on substantial issues that impact code quality, security, or maintainabili
             self.logger.error(f"GPT-4 review failed: {e}")
             return "GPT-4 review unavailable"
     
-    async def _get_o3_review(self, pr_data: Dict[str, Any], prompt: str) -> str:
+    async def _get_o3_review(self, _: Dict[str, Any], prompt: str) -> str:
         try:
             from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
             

@@ -530,6 +530,85 @@ class RAGHandler:
             self.logger.error(f"Failed to add learning insight: {e}")
             return False
 
+    async def generate_insight_search_query(self, pr_title: str, pr_description: str, changed_files: List[str] = None, language: str = None) -> str:
+        """Use lightweight LLM to generate optimal search query for learning insights"""
+        try:
+            # Prepare context for the translation LLM
+            context = f"Title: {pr_title}\nDescription: {pr_description or 'No description'}"
+            if changed_files:
+                context += f"\nFiles: {', '.join(changed_files[:5])}"
+            if language:
+                context += f"\nLanguage: {language}"
+            
+            # Prompt for generating insight search terms
+            search_prompt = f"""Analyze this PR and generate search terms to find relevant code review learning insights.
+
+## PR Context:
+{context}
+
+## Task:
+Generate 2-3 descriptive phrases that would help find learning insights relevant to this PR. Focus on:
+- Technical domains (authentication, testing, performance, security, database, API, etc.)
+- Code patterns and practices
+- Common issue types
+- Risk categories
+
+Transform specific PR details into general technical concepts that learning insights would address.
+
+Examples:
+- "authentication middleware security validation" 
+- "database connection resource management"
+- "test coverage gap detection"
+- "API error handling patterns"
+
+Output only the search phrases, one per line, no explanations."""
+
+            # Use lightweight model for this translation task
+            response, _ = await self.ai_handler.chat_completion(
+                model="gpt-4o-mini",
+                temperature=0.1,
+                system="You are an expert at mapping specific code changes to general technical insight categories. Generate search terms that will find relevant learning patterns.",
+                user=search_prompt
+            )
+            
+            # Clean and combine the generated search terms
+            search_terms = []
+            for line in response.strip().split('\n'):
+                line = line.strip()
+                if len(line) > 10:  # Filter out short/empty lines
+                    search_terms.append(line)
+            
+            # Combine into a single search query
+            search_query = " ".join(search_terms[:3])  # Use up to 3 terms
+            
+            self.logger.info(f"Generated insight search query: {search_query}")
+            return search_query
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate insight search query: {e}")
+            # Fallback to basic PR title/description
+            return f"{pr_title} {pr_description or ''}"
+
+    async def get_relevant_learning_insights_with_context(self, pr_title: str, pr_description: str = None, changed_files: List[str] = None, language: str = None, max_insights: int = 3) -> List[Dict[str, Any]]:
+        """Get learning insights using intelligent PR context analysis"""
+        try:
+            # Use LLM to generate optimal search query
+            search_query = await self.generate_insight_search_query(
+                pr_title=pr_title,
+                pr_description=pr_description,
+                changed_files=changed_files,
+                language=language
+            )
+            
+            # Use the generated query to search for insights
+            return self.get_relevant_learning_insights(search_query, max_insights)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get learning insights with context: {e}")
+            # Fallback to simple search
+            fallback_query = f"{pr_title} {pr_description or ''}"
+            return self.get_relevant_learning_insights(fallback_query, max_insights)
+
     def get_relevant_learning_insights(self, query_text: str, max_insights: int = 3) -> List[Dict[str, Any]]:
         """Get learning insights relevant to the query using vector search"""
         try:
