@@ -352,6 +352,12 @@ class LiteLLMAIHandler(BaseAiHandler):
             # Support for custom OpenAI body fields (e.g., Flex Processing)
             kwargs = _process_litellm_extra_body(kwargs)
 
+            # Support for Bedrock custom inference profile via model_id
+            model_id = get_settings().get("litellm.model_id")
+            if model_id and 'bedrock/' in model:
+                kwargs["model_id"] = model_id
+                get_logger().info(f"Using Bedrock custom inference profile: {model_id}")
+
             get_logger().debug("Prompts", artifact={"system": system, "user": user})
 
             if get_settings().config.verbosity_level >= 2:
