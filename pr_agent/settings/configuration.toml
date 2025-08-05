@@ -376,3 +376,6 @@ pr_commands = [
     "/review",
     "/improve",
 ]
+
+[pr_review_summary] # /review_summary #
+enable_auto_summary=true  # PR이 close/merge될 때 자동으로 총평 생성

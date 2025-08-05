@@ -206,16 +206,33 @@ async def handle_push_trigger_for_new_commits(body: Dict[str, Any],
             _duplicate_push_triggers[api_url] -= 1
 
 
-def handle_closed_pr(body, event, action, log_context):
+async def handle_closed_pr(body, event, action, log_context, agent):
     pull_request = body.get("pull_request", {})
     is_merged = pull_request.get("merged", False)
-    if not is_merged:
-        return
     api_url = pull_request.get("url", "")
-    pr_statistics = get_git_provider()(pr_url=api_url).calc_pr_statistics(pull_request)
     log_context["api_url"] = api_url
-    get_logger().info("PR-Agent statistics for closed PR", analytics=True, pr_statistics=pr_statistics, **log_context)
 
+    # 기존 통계 로깅 기능 유지
+    if is_merged:
+        pr_statistics = get_git_provider()(pr_url=api_url).calc_pr_statistics(pull_request)
+        get_logger().info(
+            "PR-Agent statistics for closed PR",
+            analytics=True,
+            pr_statistics=pr_statistics,
+            **log_context,
+        )
+
+    # 리뷰 총평 자동 생성 (merge된 경우에만)
+    if is_merged and get_settings().pr_review_summary.get('enable_auto_summary', True):
+        try:
+            get_logger().info(f"자동 리뷰 총평 생성 시작: {api_url}")
+            from pr_agent.tools.pr_review_summary import PRReviewSummary
+            pr_html_url = pull_request.get("html_url", api_url)
+            summary_tool = PRReviewSummary(pr_html_url, ai_handler=agent.ai_handler)
+            await summary_tool.run()
+            get_logger().info(f"자동 리뷰 총평 생성 완료: {api_url}")
+        except Exception as e:
+            get_logger().error(f"자동 리뷰 총평 생성 실패: {e}", exc_info=True)
 
 def get_log_context(body, event, action, build_number):
     sender = ""
@@ -351,8 +368,7 @@ async def handle_request(body: Dict[str, Any], event: str):
     elif event == 'pull_request' and action == 'synchronize':
         await handle_push_trigger_for_new_commits(body, event, sender,sender_id,  action, log_context, agent)
     elif event == 'pull_request' and action == 'closed':
-        if get_settings().get("CONFIG.ANALYTICS_FOLDER", ""):
-            handle_closed_pr(body, event, action, log_context)
+        await handle_closed_pr(body, event, action, log_context, agent)
     else:
         get_logger().info(f"event {event=} action {action=} does not require any handling")
     return {}
