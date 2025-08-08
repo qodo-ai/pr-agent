@@ -89,6 +89,13 @@ class TicketCompliance(BaseModel):
     requires_further_human_verification: str = Field(description="Bullet-point list of items from the 'ticket_requirements' section above that cannot be assessed through code review alone, are unclear, or need further human review (e.g., browser testing, UI checks). Leave empty if all 'ticket_requirements' were marked as fully compliant or not compliant")
 {%- endif %}
 
+{%- if require_estimate_contribution_time_cost %}
+class ContributionTimeCostEstimate(BaseModel):
+    best_case: str = Field(description="Assume that an author is an expert in the involved technology stack and that there were no edge cases or unexpected bugs during development.", examples=["45m", "5h", "10h"])
+    average_case: str = Field(description="A typical required time to create and submit the changes if an author is more or less familiar with the technology and there were no significant unforeseen circumstances.", examples=["45m", "5h", "10h"])
+    worst_case: str = Field(description="Assume that contributing the changes could require a great deal of additional effort, such as investigating the topic, debugging the source code, or resolving unexpected errors.", examples=["45m", "5h", "10h"])
+{%- endif %}
+
 class Review(BaseModel):
 {%- if related_tickets %}
     ticket_compliance_check: List[TicketCompliance] = Field(description="A list of compliance checks for the related tickets")
@@ -114,6 +121,9 @@ class Review(BaseModel):
 {%- endif %}
 {%- if require_can_be_split_review %}
     can_be_split: List[SubPR] = Field(min_items=0, max_items=3, description="Can this PR, which contains {{ num_pr_files }} changed files in total, be divided into smaller sub-PRs with distinct tasks that can be reviewed and merged independently, regardless of the order ? Make sure that the sub-PRs are indeed independent, with no code dependencies between them, and that each sub-PR represent a meaningful independent task. Output an empty list if the PR code does not need to be split.")
+{%- endif %}
+{%- if require_estimate_contribution_time_cost %}
+    contribution_time_cost_estimate: ContributionTimeEstimate = Field(description="Based on the contribution quantity, quality, and complexity, estimate the time that may be required for a senior developer to create and submit such changes.")
 {%- endif %}
 
 class PRReview(BaseModel):
