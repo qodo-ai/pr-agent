@@ -38,10 +38,22 @@ class BitbucketServerProvider(GitProvider):
         self.diff_files = None
         self.bitbucket_pull_request_api_url = pr_url
         self.bearer_token = get_settings().get("BITBUCKET_SERVER.BEARER_TOKEN", None)
+        #get username and password from settings
+        self.username = get_settings().get("BITBUCKET_SERVER.USERNAME", None)
+        self.password = get_settings().get("BITBUCKET_SERVER.PASSWORD", None)
         self.bitbucket_server_url = self._parse_bitbucket_server(url=pr_url)
-        self.bitbucket_client = bitbucket_client or Bitbucket(url=self.bitbucket_server_url,
-                                                              token=get_settings().get("BITBUCKET_SERVER.BEARER_TOKEN",
-                                                                                       None))
+        #if bearer token is provided, use it to authenticate, otherwise use username and password
+        if self.bearer_token:
+            self.bitbucket_client = bitbucket_client or Bitbucket(
+                url=self.bitbucket_server_url,
+                token=self.bearer_token
+            )
+        else:
+            self.bitbucket_client = bitbucket_client or Bitbucket(
+                url=self.bitbucket_server_url,
+                username=self.username,
+                password=self.password
+            )
         try:
             self.bitbucket_api_version = parse_version(self.bitbucket_client.get("rest/api/1.0/application-properties").get('version'))
         except Exception:
