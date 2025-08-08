@@ -148,6 +148,7 @@ def convert_to_markdown_v2(output_data: dict,
         "Insights from user's answers": "📝",
         "Code feedback": "🤖",
         "Estimated effort to review [1-5]": "⏱️",
+        "Contribution time cost estimate": "⏳",
         "Ticket compliance check": "🎫",
     }
     markdown_text = ""
@@ -207,6 +208,14 @@ def convert_to_markdown_v2(output_data: dict,
                     markdown_text += f"### {emoji} PR contains tests\n\n"
         elif 'ticket compliance check' in key_nice.lower():
             markdown_text = ticket_markdown_logic(emoji, markdown_text, value, gfm_supported)
+        elif 'contribution time cost estimate' in key_nice.lower():
+            if gfm_supported:
+                markdown_text += f"<tr><td>{emoji}&nbsp;<strong>Contribution time estimate</strong> (best, average, worst case): "
+                markdown_text += f"{value['best_case'].replace('m', ' minutes')} | {value['average_case'].replace('m', ' minutes')} | {value['worst_case'].replace('m', ' minutes')}"
+                markdown_text += f"</td></tr>\n"
+            else:
+                markdown_text += f"### {emoji} Contribution time estimate (best, average, worst case): "
+                markdown_text += f"{value['best_case'].replace('m', ' minutes')} | {value['average_case'].replace('m', ' minutes')} | {value['worst_case'].replace('m', ' minutes')}\n\n"
         elif 'security concerns' in key_nice.lower():
             if gfm_supported:
                 markdown_text += f"<tr><td>"
