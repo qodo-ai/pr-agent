@@ -92,6 +92,10 @@ extra_instructions = "..."
         <td>If set to true, the tool will add a section that estimates the effort needed to review the PR. Default is true.</td>
       </tr>
       <tr>
+        <td><b>require_estimate_contribution_time_cost</b></td>
+        <td>If set to true, the tool will add a section that estimates the time required for a senior developer to create and submit such changes. Default is false.</td>
+      </tr>
+      <tr>
         <td><b>require_can_be_split_review</b></td>
         <td>If set to true, the tool will add a section that checks if the PR contains several themes, and can be split into smaller PRs. Default is false.</td>
       </tr>
