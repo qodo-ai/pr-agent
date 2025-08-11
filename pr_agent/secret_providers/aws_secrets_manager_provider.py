@@ -48,8 +48,8 @@ class AWSSecretsManagerProvider(SecretProvider):
 
     def store_secret(self, secret_name: str, secret_value: str):
         try:
-            self.client.put_secret_value(
-                SecretId=secret_name,
+            self.client.create_secret(
+                Name=secret_name,
                 SecretString=secret_value
             )
         except Exception as e:
