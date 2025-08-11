@@ -303,6 +303,7 @@ pr_commands = [
     "/improve --pr_code_suggestions.commitable_code_suggestions=true",
 ]
 avoid_full_files = false
+allowed_repositories = []
 
 [local]
 # LocalGitProvider settings - uncomment to use paths other than default
