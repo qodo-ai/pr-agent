@@ -184,9 +184,12 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
         data.get("data", {}).get("repository", {}).get("name")
     )
     allowed_repos = get_settings().get("BITBUCKET.ALLOWED_REPOSITORIES", [])
-
-    if repo_name_in_request not in allowed_repos:
-        get_logger().warning(f"Repository '{repo_name_in_request}' is not in the allowed list.")
+    
+    # Only enforce restriction if the list is non-empty
+    if allowed_repos and repo_name_in_request not in allowed_repos:
+        get_logger().warning(
+            f"Repository '{repo_name_in_request}' is not in the allowed list."
+        )
         return JSONResponse(
             status_code=403,
             content={"error": f"Repository '{repo_name_in_request}' is not allowed"}
