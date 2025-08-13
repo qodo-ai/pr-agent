@@ -15,6 +15,7 @@ from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 from starlette_context import context
 from starlette_context.middleware import RawContextMiddleware
+from contextlib import asynccontextmanager
 
 from pr_agent.agent.pr_agent import PRAgent
 from pr_agent.algo.utils import update_settings_from_args
@@ -286,11 +287,18 @@ def start():
     app = FastAPI(middleware=middleware)
     app.include_router(router)
 
-    @app.on_event("startup")
-    async def log_allowed_repos():
-        allowed_repositories = get_settings().get("BITBUCKET.ALLOWED_REPOSITORIES")
-        get_logger().info(f"allowed bitbucket repositories :{allowed_repositories}")
-        
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        allowed_repositories = get_settings().get("BITBUCKET.ALLOWED_REPOSITORIES") or []
+        if allowed_repositories:
+            get_logger().info(f"allowed bitbucket repositories: {allowed_repositories}")
+        else:
+            # empty list => allow all (and log it)
+            get_logger().warning("BITBUCKET.ALLOWED_REPOSITORIES is empty — allowing all repositories.")
+        yield
+    
+    app = FastAPI(middleware=middleware, lifespan=lifespan)
+    app.include_router(router)
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "3000")))
 
 
