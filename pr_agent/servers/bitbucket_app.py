@@ -260,11 +260,8 @@ async def handle_installed_webhooks(request: Request, response: Response):
         data = await request.json()
         get_logger().info(data)
         shared_secret = data["sharedSecret"]
-        client_key = data["clientKey"]
         shared_secret_key_id = "bitbucket-app-" + data["principal"]["username"] + "-shared-secret" # store under this key in AWS secrets manager or GCP secrets provider
-        client_key_secret_id = "bitbucket-app-" + data["principal"]["username"] + "-client-key" # store under this key in AWS secrets manager or GCP secrets store
         secret_provider.store_secret(shared_secret_key_id, shared_secret)
-        secret_provider.store_secret(client_key_secret_id, client_key)
     except Exception as e:
         get_logger().error(f"Failed to register user: {e}")
         return JSONResponse({"error": "Unable to register user"}, status_code=500)
