@@ -15,6 +15,7 @@ from starlette.middleware import Middleware
 from starlette.responses import JSONResponse
 from starlette_context import context
 from starlette_context.middleware import RawContextMiddleware
+from contextlib import asynccontextmanager
 
 from pr_agent.agent.pr_agent import PRAgent
 from pr_agent.algo.utils import update_settings_from_args
@@ -178,6 +179,22 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
         input_jwt = jwt_header.split(" ")[1]
     data = await request.json()
     get_logger().debug(data)
+        
+    # --- Check allowed repositories ---
+    repo_name_in_request = (
+        data.get("data", {}).get("repository", {}).get("name")
+    )
+    allowed_repos = get_settings().get("BITBUCKET.ALLOWED_REPOSITORIES", [])
+    
+    # Only enforce restriction if the list is non-empty
+    if allowed_repos and repo_name_in_request not in allowed_repos:
+        get_logger().warning(
+            f"Repository '{repo_name_in_request}' is not in the allowed list."
+        )
+        return JSONResponse(
+            status_code=403,
+            content={"error": f"Repository '{repo_name_in_request}' is not allowed"}
+        )
 
     async def inner():
         try:
@@ -201,8 +218,9 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
             decoded_claims = base64.urlsafe_b64decode(claim_part)
             claims = json.loads(decoded_claims)
             client_key = claims["iss"]
-            secrets = json.loads(secret_provider.get_secret(client_key))
-            shared_secret = secrets["shared_secret"]
+            username = data.get("data").get("repository").get("owner").get("username")
+            shared_secret_key_id="bitbucket-app-" + username + "-shared-secret"
+            shared_secret = secret_provider.get_secret(shared_secret_key_id)
             jwt.decode(input_jwt, shared_secret, audience=client_key, algorithms=["HS256"])
             bearer_token = await get_bearer_token(shared_secret, client_key)
             context['bitbucket_bearer_token'] = bearer_token
@@ -246,13 +264,8 @@ async def handle_installed_webhooks(request: Request, response: Response):
         data = await request.json()
         get_logger().info(data)
         shared_secret = data["sharedSecret"]
-        client_key = data["clientKey"]
-        username = data["principal"]["username"]
-        secrets = {
-            "shared_secret": shared_secret,
-            "client_key": client_key
-        }
-        secret_provider.store_secret(username, json.dumps(secrets))
+        shared_secret_key_id = "bitbucket-app-" + data["principal"]["username"] + "-shared-secret" # store under this key in AWS secrets manager or GCP secrets provider
+        secret_provider.store_secret(shared_secret_key_id, shared_secret)
     except Exception as e:
         get_logger().error(f"Failed to register user: {e}")
         return JSONResponse({"error": "Unable to register user"}, status_code=500)
@@ -269,10 +282,23 @@ def start():
     get_settings().set("CONFIG.PUBLISH_OUTPUT_PROGRESS", False)
     get_settings().set("CONFIG.GIT_PROVIDER", "bitbucket")
     get_settings().set("PR_DESCRIPTION.PUBLISH_DESCRIPTION_AS_COMMENT", True)
+    
     middleware = [Middleware(RawContextMiddleware)]
     app = FastAPI(middleware=middleware)
     app.include_router(router)
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        allowed_repositories = get_settings().get("BITBUCKET.ALLOWED_REPOSITORIES") or []
+        if allowed_repositories:
+            get_logger().info(f"allowed bitbucket repositories: {allowed_repositories}")
+        else:
+            # empty list => allow all (and log it)
+            get_logger().warning("BITBUCKET.ALLOWED_REPOSITORIES is empty — allowing all repositories.")
+        yield
+    
+    app = FastAPI(middleware=middleware, lifespan=lifespan)
+    app.include_router(router)
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", "3000")))
 
 

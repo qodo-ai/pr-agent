@@ -19,7 +19,8 @@ class AWSSecretsManagerProvider(SecretProvider):
 
             self.secret_arn = get_settings().get("aws_secrets_manager.secret_arn")
             if not self.secret_arn:
-                raise ValueError("AWS Secrets Manager ARN is not configured")
+                get_logger().warning("AWS Secrets Manager ARN is not configured — proceeding without it.")
+
         except Exception as e:
             get_logger().error(f"Failed to initialize AWS Secrets Manager Provider: {e}")
             raise e
@@ -48,8 +49,8 @@ class AWSSecretsManagerProvider(SecretProvider):
 
     def store_secret(self, secret_name: str, secret_value: str):
         try:
-            self.client.put_secret_value(
-                SecretId=secret_name,
+            self.client.create_secret(
+                Name=secret_name,
                 SecretString=secret_value
             )
         except Exception as e:
