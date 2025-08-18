@@ -98,7 +98,8 @@ def apply_secrets_manager_config():
             return
 
         if (hasattr(secret_provider, 'get_all_secrets') and
-            get_settings().get("CONFIG.SECRET_PROVIDER") == 'aws_secrets_manager'):
+            get_settings().get("CONFIG.SECRET_PROVIDER") == 'aws_secrets_manager' and 
+            get_settings().get("AWS_SECRETS_MANAGER.SECRET_ARN") != ""):
             try:
                 secrets = secret_provider.get_all_secrets()
                 if secrets:
@@ -109,7 +110,7 @@ def apply_secrets_manager_config():
     except Exception as e:
         try:
             from pr_agent.log import get_logger
-            get_logger().debug(f"Secret provider not configured: {e}")
+            get_logger().debug(f"Secret provider not configured: {e}, ensure SECRET_PROVIDER & SECRET_ARN values are set")
         except:
             # Fail completely silently if log module is not available
             pass
