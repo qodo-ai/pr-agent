@@ -53,6 +53,15 @@ class AWSSecretsManagerProvider(SecretProvider):
                 Name=secret_name,
                 SecretString=secret_value
             )
+        except self.client.exceptions.ResourceExistsException:
+            try:
+                self.client.put_secret_value(
+                    SecretId=secret_name,
+                    SecretString=secret_value
+                )
+            except Exception as e:
+                get_logger().error(f"Failed to update existing secret {secret_name} in AWS Secrets Manager: {e}")
+                raise e
         except Exception as e:
             get_logger().error(f"Failed to store secret {secret_name} in AWS Secrets Manager: {e}")
-            raise e 
+            raise e
