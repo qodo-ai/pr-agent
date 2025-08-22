@@ -1,3 +1,5 @@
+In this page we will cover how to install and run PR-Agent as a GitHub Action or GitHub App, and how to configure it for your needs.
+
 ## Run as a GitHub Action
 
 You can use our pre-built Github Action Docker image to run PR-Agent as a Github Action.
@@ -50,6 +52,437 @@ When you open your next PR, you should see a comment from `github-actions` bot w
 ```
 
 See detailed usage instructions in the [USAGE GUIDE](https://qodo-merge-docs.qodo.ai/usage-guide/automations_and_usage/#github-action)
+
+### Configuration Examples
+
+This section provides detailed, step-by-step examples for configuring PR-Agent with different models and advanced options in GitHub Actions.
+
+#### Quick Start Examples
+
+##### Basic Setup (OpenAI Default)
+
+Copy this minimal workflow to get started with the default OpenAI models:
+
+```yaml
+name: PR Agent
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    steps:
+      - name: PR Agent action step
+        uses: qodo-ai/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+##### Gemini Setup
+
+Ready-to-use workflow for Gemini models:
+
+```yaml
+name: PR Agent (Gemini)
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    steps:
+      - name: PR Agent action step
+        uses: qodo-ai/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          config.model: "gemini/gemini-1.5-flash"
+          config.fallback_models: '["gemini/gemini-1.5-flash"]'
+          GOOGLE_AI_STUDIO.GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"
+```
+
+#### Claude Setup
+
+Ready-to-use workflow for Claude models:
+
+```yaml
+name: PR Agent (Claude)
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    steps:
+      - name: PR Agent action step
+        uses: qodo-ai/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          config.model: "anthropic/claude-3-opus-20240229"
+          config.fallback_models: '["anthropic/claude-3-haiku-20240307"]'
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"
+```
+
+#### Basic Configuration with Tool Controls
+
+Start with this enhanced workflow that includes tool configuration:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    name: Run pr agent on every pull request, respond to user comments
+    steps:
+      - name: PR Agent action step
+        id: pragent
+        uses: qodo-ai/pr-agent@main
+        env:
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Enable/disable automatic tools
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"
+          # Configure which PR events trigger the action
+          github_action_config.pr_actions: '["opened", "reopened", "ready_for_review", "review_requested"]'
+```
+
+#### Switching Models
+
+##### Using Gemini (Google AI Studio)
+
+To use Gemini models instead of the default OpenAI models:
+
+```yaml
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Set the model to Gemini
+        config.model: "gemini/gemini-1.5-flash"
+        config.fallback_models: '["gemini/gemini-1.5-flash"]'
+        # Add your Gemini API key
+        GOOGLE_AI_STUDIO.GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # Tool configuration
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+**Required Secrets:**
+
+- Add `GEMINI_API_KEY` to your repository secrets (get it from [Google AI Studio](https://aistudio.google.com/))
+
+**Note:** When using non-OpenAI models like Gemini, you don't need to set `OPENAI_KEY` - only the model-specific API key is required.
+
+##### Using Claude (Anthropic)
+
+To use Claude models:
+
+```yaml
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Set the model to Claude
+        config.model: "anthropic/claude-3-opus-20240229"
+        config.fallback_models: '["anthropic/claude-3-haiku-20240307"]'
+        # Add your Anthropic API key
+        ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+        # Tool configuration
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+**Required Secrets:**
+
+- Add `ANTHROPIC_KEY` to your repository secrets (get it from [Anthropic Console](https://console.anthropic.com/))
+
+**Note:** When using non-OpenAI models like Claude, you don't need to set `OPENAI_KEY` - only the model-specific API key is required.
+
+##### Using Azure OpenAI
+
+To use Azure OpenAI services:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Azure OpenAI configuration
+        OPENAI.API_TYPE: "azure"
+        OPENAI.API_VERSION: "2023-05-15"
+        OPENAI.API_BASE: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+        OPENAI.DEPLOYMENT_ID: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}
+        # Set the model to match your Azure deployment
+        config.model: "gpt-4o"
+        config.fallback_models: '["gpt-4o"]'
+        # Tool configuration
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+**Required Secrets:**
+
+- `AZURE_OPENAI_KEY`: Your Azure OpenAI API key
+- `AZURE_OPENAI_ENDPOINT`: Your Azure OpenAI endpoint URL
+- `AZURE_OPENAI_DEPLOYMENT`: Your deployment name
+
+##### Using Local Models (Ollama)
+
+To use local models via Ollama:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Set the model to a local Ollama model
+        config.model: "ollama/qwen2.5-coder:32b"
+        config.fallback_models: '["ollama/qwen2.5-coder:32b"]'
+        config.custom_model_max_tokens: "128000"
+        # Ollama configuration
+        OLLAMA.API_BASE: "http://localhost:11434"
+        # Tool configuration
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+**Note:** For local models, you'll need to use a self-hosted runner with Ollama installed, as GitHub Actions hosted runners cannot access localhost services.
+
+#### Advanced Configuration Options
+
+##### Custom Review Instructions
+
+Add specific instructions for the review process:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Custom review instructions
+        pr_reviewer.extra_instructions: "Focus on security vulnerabilities and performance issues. Check for proper error handling."
+        # Tool configuration
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+##### Language-Specific Configuration
+
+Configure for specific programming languages:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Language-specific settings
+        pr_reviewer.extra_instructions: "Focus on Python best practices, type hints, and docstrings."
+        pr_code_suggestions.num_code_suggestions: "8"
+        pr_code_suggestions.suggestions_score_threshold: "7"
+        # Tool configuration
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+##### Selective Tool Execution
+
+Run only specific tools automatically:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Only run review and describe, skip improve
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "false"
+        # Only trigger on PR open and reopen
+        github_action_config.pr_actions: '["opened", "reopened"]'
+```
+
+#### Using Configuration Files
+
+Instead of setting all options via environment variables, you can use a `.pr_agent.toml` file in your repository root:
+
+1. Create a `.pr_agent.toml` file in your repository root:
+
+```toml
+[config]
+model = "gemini/gemini-1.5-flash"
+fallback_models = ["anthropic/claude-3-opus-20240229"]
+
+[pr_reviewer]
+extra_instructions = "Focus on security issues and code quality."
+
+[pr_code_suggestions]
+num_code_suggestions = 6
+suggestions_score_threshold = 7
+```
+
+2. Use a simpler workflow file:
+
+```yaml
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    name: Run pr agent on every pull request, respond to user comments
+    steps:
+      - name: PR Agent action step
+        id: pragent
+        uses: qodo-ai/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOOGLE_AI_STUDIO.GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"
+```
+
+#### Troubleshooting Common Issues
+
+##### Model Not Found Errors
+
+If you get model not found errors:
+
+1. **Check model name format**: Ensure you're using the correct model identifier format (e.g., `gemini/gemini-1.5-flash`, not just `gemini-1.5-flash`)
+
+2. **Verify API keys**: Make sure your API keys are correctly set as repository secrets
+
+3. **Check model availability**: Some models may not be available in all regions or may require specific access
+
+##### Environment Variable Format
+
+Remember these key points about environment variables:
+
+- Use dots (`.`) or double underscores (`__`) to separate sections and keys
+- Boolean values should be strings: `"true"` or `"false"`
+- Arrays should be JSON strings: `'["item1", "item2"]'`
+- Model names are case-sensitive
+
+##### Rate Limiting
+
+If you encounter rate limiting:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Add fallback models for better reliability
+        config.fallback_models: '["gpt-4o", "gpt-3.5-turbo"]'
+        # Increase timeout for slower models
+        config.ai_timeout: "300"
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+##### Common Error Messages and Solutions
+
+**Error: "Model not found"**
+- **Solution**: Check the model name format and ensure it matches the exact identifier. See the [Changing a model in PR-Agent](../usage-guide/changing_a_model.md) guide for supported models and their correct identifiers.
+
+**Error: "API key not found"**
+- **Solution**: Verify that your API key is correctly set as a repository secret and the environment variable name matches exactly
+- **Note**: For non-OpenAI models (Gemini, Claude, etc.), you only need the model-specific API key, not `OPENAI_KEY`
+
+**Error: "Rate limit exceeded"**
+- **Solution**: Add fallback models or increase the `config.ai_timeout` value
+
+**Error: "Permission denied"**
+- **Solution**: Ensure your workflow has the correct permissions set:
+  ```yaml
+  permissions:
+    issues: write
+    pull-requests: write
+    contents: write
+  ```
+
+**Error: "Invalid JSON format"**
+
+- **Solution**: Check that arrays are properly formatted as JSON strings:
+
+```yaml
+
+Correct:
+config.fallback_models: '["model1", "model2"]'
+Incorrect (interpreted as a YAML list, not a string):
+config.fallback_models: ["model1", "model2"]
+```
+
+##### Debugging Tips
+
+1. **Enable verbose logging**: Add `config.verbosity_level: "2"` to see detailed logs
+2. **Check GitHub Actions logs**: Look at the step output for specific error messages
+3. **Test with minimal configuration**: Start with just the basic setup and add options one by one
+4. **Verify secrets**: Double-check that all required secrets are set in your repository settings
+
+##### Performance Optimization
+
+For better performance with large repositories:
+
+```yaml
+      env:
+        OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Optimize for large PRs
+        config.large_patch_policy: "clip"
+        config.max_model_tokens: "32000"
+        config.patch_extra_lines_before: "3"
+        config.patch_extra_lines_after: "1"
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
+```
+
+#### Reference
+
+For more detailed configuration options, see:
+
+- [Changing a model in PR-Agent](../usage-guide/changing_a_model.md)
+- [Configuration options](../usage-guide/configuration_options.md)
+- [Automations and usage](../usage-guide/automations_and_usage.md#github-action)
 
 ### Using a specific release
 
@@ -178,7 +611,9 @@ cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
 > For more information please check out the [USAGE GUIDE](../usage-guide/automations_and_usage.md#github-app)
 ---
 
-## Deploy as a Lambda Function
+## Additional deployment methods
+
+### Deploy as a Lambda Function
 
 Note that since AWS Lambda env vars cannot have "." in the name, you can replace each "." in an env variable with "__".<br>
 For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
@@ -187,14 +622,16 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 2. Build a docker image that can be used as a lambda function
 
     ```shell
-    docker buildx build --platform=linux/amd64 . -t codiumai/pr-agent:serverless -f docker/Dockerfile.lambda
+    docker buildx build --platform=linux/amd64 . -t codiumai/pr-agent:github_lambda --target github_lambda -f docker/Dockerfile.lambda
    ```
+   (Note: --target github_lambda is optional as it's the default target)
+
 
 3. Push image to ECR
 
     ```shell
-    docker tag codiumai/pr-agent:serverless <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
-    docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:serverless
+    docker tag codiumai/pr-agent:github_lambda <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:github_lambda
+    docker push <AWS_ACCOUNT>.dkr.ecr.<AWS_REGION>.amazonaws.com/codiumai/pr-agent:github_lambda
     ```
 
 4. Create a lambda function that uses the uploaded image. Set the lambda timeout to be at least 3m.
@@ -203,9 +640,31 @@ For example: `GITHUB.WEBHOOK_SECRET` --> `GITHUB__WEBHOOK_SECRET`
 7. Go back to steps 8-9 of [Method 5](#run-as-a-github-app) with the function url as your Webhook URL.
     The Webhook URL would look like `https://<LAMBDA_FUNCTION_URL>/api/v1/github_webhooks`
 
+#### Using AWS Secrets Manager
+
+For production Lambda deployments, use AWS Secrets Manager instead of environment variables:
+
+1. Create a secret in AWS Secrets Manager with JSON format like this:
+
+```json
+{
+  "openai.key": "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "github.webhook_secret": "your-webhook-secret-from-step-2",
+  "github.private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"
+}
+```
+
+2. Add IAM permission `secretsmanager:GetSecretValue` to your Lambda execution role
+3. Set these environment variables in your Lambda:
+
+```bash
+AWS_SECRETS_MANAGER__SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:pr-agent-secrets-AbCdEf
+CONFIG__SECRET_PROVIDER=aws_secrets_manager
+```
+
 ---
 
-## AWS CodeCommit Setup
+### AWS CodeCommit Setup
 
 Not all features have been added to CodeCommit yet.  As of right now, CodeCommit has been implemented to run the Qodo Merge CLI on the command line, using AWS credentials stored in environment variables.  (More features will be added in the future.)  The following is a set of instructions to have Qodo Merge do a review of your CodeCommit pull request from the command line:
 
@@ -222,7 +681,7 @@ Not all features have been added to CodeCommit yet.  As of right now, CodeCommit
 
 ---
 
-#### AWS CodeCommit IAM Role Example
+##### AWS CodeCommit IAM Role Example
 
 Example IAM permissions to that user to allow access to CodeCommit:
 
@@ -254,7 +713,7 @@ Example IAM permissions to that user to allow access to CodeCommit:
 }
 ```
 
-#### AWS CodeCommit Access Key and Secret
+##### AWS CodeCommit Access Key and Secret
 
 Example setting the Access Key and Secret using environment variables
 
@@ -264,7 +723,7 @@ export AWS_SECRET_ACCESS_KEY="XXXXXXXXXXXXXXXX"
 export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-#### AWS CodeCommit CLI Example
+##### AWS CodeCommit CLI Example
 
 After you set up AWS CodeCommit using the instructions above, here is an example CLI run that tells pr-agent to **review** a given pull request.
 (Replace your specific PYTHONPATH and PR URL in the example)

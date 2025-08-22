@@ -614,11 +614,13 @@ class PRCodeSuggestions:
                     break
             if original_initial_line:
                 suggested_initial_line = new_code_snippet.splitlines()[0]
-                original_initial_spaces = len(original_initial_line) - len(original_initial_line.lstrip())
+                original_initial_spaces = len(original_initial_line) - len(original_initial_line.lstrip()) # lstrip works both for spaces and tabs
                 suggested_initial_spaces = len(suggested_initial_line) - len(suggested_initial_line.lstrip())
                 delta_spaces = original_initial_spaces - suggested_initial_spaces
                 if delta_spaces > 0:
-                    new_code_snippet = textwrap.indent(new_code_snippet, delta_spaces * " ").rstrip('\n')
+                    # Detect indentation character from original line
+                    indent_char = '\t' if original_initial_line.startswith('\t') else ' '
+                    new_code_snippet = textwrap.indent(new_code_snippet, delta_spaces * indent_char).rstrip('\n')
         except Exception as e:
             get_logger().error(f"Error when dedenting code snippet for file {relevant_file}, error: {e}")
 
@@ -942,6 +944,7 @@ class PRCodeSuggestions:
             with get_logger().contextualize(command="self_reflect_on_suggestions"):
                 response_reflect, finish_reason_reflect = await self.ai_handler.chat_completion(model=model,
                                                                                                 system=system_prompt_reflect,
+                                                                                                temperature=get_settings().config.temperature,
                                                                                                 user=user_prompt_reflect)
         except Exception as e:
             get_logger().info(f"Could not reflect on suggestions, error: {e}")

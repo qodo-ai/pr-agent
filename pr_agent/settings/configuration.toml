@@ -6,9 +6,9 @@
 
 [config]
 # models
-model="o4-mini"
-fallback_models=["gpt-4.1"]
-#model_reasoning="o4-mini" # dedictated reasoning model for self-reflection
+model="gpt-5-2025-08-07"
+fallback_models=["o4-mini"]
+#model_reasoning="o4-mini" # dedicated reasoning model for self-reflection
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
 # CLI
 git_provider="github"
@@ -39,7 +39,7 @@ allow_dynamic_context=true
 max_extra_lines_before_dynamic_context = 10 # will try to include up to 10 extra lines before the hunk in the patch, until we reach an enclosing function or class
 patch_extra_lines_before = 5 # Number of extra lines (+3 default ones) to include before each hunk in the patch
 patch_extra_lines_after = 1 # Number of extra lines (+3 default ones) to include after each hunk in the patch
-secret_provider=""
+secret_provider="" # "" (disabled), "google_cloud_storage", or "aws_secrets_manager" for secure secret management
 cli_mode=false
 ai_disclaimer_title=""  # Pro feature, title for a collapsible disclaimer to AI outputs
 ai_disclaimer=""  # Pro feature, full text for the AI disclaimer
@@ -56,6 +56,7 @@ ignore_pr_source_branches = [] # a list of regular expressions of source branche
 ignore_pr_labels = [] # labels to ignore from PR agent when an PR is created
 ignore_pr_authors = [] # authors to ignore from PR agent when an PR is created
 ignore_repositories = [] # a list of regular expressions of repository full names (e.g. "org/repo") to ignore from PR agent processing
+ignore_language_framework = [] # a list of code-generation languages or frameworks (e.g. 'protobuf', 'go_gen') whose auto-generated source files will be excluded from analysis
 #
 is_auto_command = false # will be auto-set to true if the command is triggered by an automation
 enable_ai_metadata = false # will enable adding ai metadata
@@ -64,6 +65,7 @@ reasoning_effort = "medium" # "low", "medium", "high"
 enable_auto_approval=false # Set to true to enable auto-approval of PRs under certain conditions
 auto_approve_for_low_review_effort=-1 # -1 to disable, [1-5] to set the threshold for auto-approval
 auto_approve_for_no_suggestions=false # If true, the PR will be auto-approved if there are no suggestions
+ensure_ticket_compliance=false # Set to true to disable auto-approval of PRs if the ticket is not compliant
 # extended thinking for Claude reasoning models
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048
@@ -77,8 +79,11 @@ require_tests_review=true
 require_estimate_effort_to_review=true
 require_can_be_split_review=false
 require_security_review=true
+require_estimate_contribution_time_cost=false
+require_todo_scan=false
 require_ticket_analysis_review=true
 # general options
+publish_output_no_suggestions=true # Set to "false" if you only need the reviewer's remarks (not labels, not "security audit", etc.) and want to avoid noisy "No major issues detected" comments.
 persistent_comment=true
 extra_instructions = ""
 num_max_findings = 3
@@ -102,7 +107,8 @@ extra_instructions = ""
 enable_pr_type=true
 final_update_message = true
 enable_help_text=false
-enable_help_comment=true
+enable_help_comment=false
+enable_pr_diagram=true # adds a section with a diagram of the PR changes
 # describe as comment
 publish_description_as_comment=false
 publish_description_as_comment_persistent=true
@@ -160,7 +166,8 @@ new_score_mechanism_th_high=9
 new_score_mechanism_th_medium=7
 # params for '/improve --extended' mode
 auto_extended_mode=true
-num_code_suggestions_per_chunk=4
+num_code_suggestions_per_chunk=3
+num_best_practice_suggestions=1 # 💎
 max_number_of_calls = 3
 parallel_calls = true
 
@@ -292,6 +299,17 @@ push_commands = [
     "/describe",
     "/review",
 ]
+# Configure SSL validation for GitLab. Can be either set to the path of a custom CA or disabled entirely.
+# ssl_verify = true
+
+[gitea_app]
+url = "https://gitea.com"
+handle_push_trigger = false
+pr_commands = [
+    "/describe",
+    "/review",
+    "/improve",
+]
 
 [bitbucket_app]
 pr_commands = [
@@ -333,6 +351,7 @@ enable_callbacks = false
 success_callback = []
 failure_callback = []
 service_callback = []
+# model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
 [pr_similar_issue]
 skip_comments = false
@@ -369,6 +388,8 @@ extra_instructions = "" # public - extra instructions to the auto best practices
 content = ""
 max_patterns = 5 # max number of patterns to be detected
 
+[azure_devops]
+default_comment_status = "closed"
 
 [azure_devops_server]
 pr_commands = [

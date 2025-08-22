@@ -11,10 +11,11 @@ It can be invoked manually by commenting on any PR:
 
 ## Example usage
 
-An example [result](https://github.com/Codium-ai/pr-agent/pull/546#issuecomment-1868524805):
+Invoke the `help` tool by commenting on a PR with:
 
-![Help 1](https://codium.ai/images/pr_agent/help1.png){width=750}
+![Help tool input](https://codium.ai/images/pr_agent/help1.png){width=750}
 
-&rarr;
 
-![Analyze 2](https://codium.ai/images/pr_agent/help2.png){width=750}
+Response will include a list of available tools:
+
+![Help tool output](https://codium.ai/images/pr_agent/help2.png){width=750}

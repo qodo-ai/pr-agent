@@ -1,6 +1,6 @@
 ## Overview
 
-The `review` tool scans the PR code changes, and generates a list of feedbacks about the PR, aiming to aid the reviewing process.
+The `review` tool scans the PR code changes, and generates feedback about the PR, aiming to aid the reviewing process.
 <br>
 The tool can be triggered automatically every time a new PR is [opened](../usage-guide/automations_and_usage.md#github-app-automatic-tools-when-a-new-pr-is-opened), or can be invoked manually by commenting on any PR:
 
@@ -8,7 +8,7 @@ The tool can be triggered automatically every time a new PR is [opened](../usage
 /review
 ```
 
-Note that the main purpose of the `review` tool is to provide the **PR reviewer** with useful feedbacks and insights. The PR author, in contrast, may prefer to save time and focus on the output of the [improve](./improve.md) tool, which provides actionable code suggestions.
+Note that the main purpose of the `review` tool is to provide the **PR reviewer** with useful feedback and insights. The PR author, in contrast, may prefer to save time and focus on the output of the [improve](./improve.md) tool, which provides actionable code suggestions.
 
 (Read more about the different personas in the PR process and how Qodo Merge aims to assist them in our [blog](https://www.codium.ai/blog/understanding-the-challenges-and-pain-points-of-the-pull-request-cycle/))
 
@@ -51,7 +51,7 @@ extra_instructions = "..."
 
 ## Configuration options
 
-!!! example "General options"
+???+ example "General options"
 
     <table>
       <tr>
@@ -68,7 +68,7 @@ extra_instructions = "..."
       </tr>
       <tr>
         <td><b>enable_help_text</b></td>
-        <td>If set to true, the tool will display a help text in the comment. Default is true.</td>
+        <td>If set to true, the tool will display a help text in the comment. Default is false.</td>
       </tr>
       <tr>
         <td><b>num_max_findings</b></td>
@@ -76,7 +76,7 @@ extra_instructions = "..."
       </tr>
     </table>
 
-!!! example "Enable\\disable specific sub-sections"
+???+ example "Enable\\disable specific sub-sections"
 
     <table>
       <tr>
@@ -92,6 +92,10 @@ extra_instructions = "..."
         <td>If set to true, the tool will add a section that estimates the effort needed to review the PR. Default is true.</td>
       </tr>
       <tr>
+        <td><b>require_estimate_contribution_time_cost</b></td>
+        <td>If set to true, the tool will add a section that estimates the time required for a senior developer to create and submit such changes. Default is false.</td>
+      </tr>
+      <tr>
         <td><b>require_can_be_split_review</b></td>
         <td>If set to true, the tool will add a section that checks if the PR contains several themes, and can be split into smaller PRs. Default is false.</td>
       </tr>
@@ -99,13 +103,18 @@ extra_instructions = "..."
         <td><b>require_security_review</b></td>
         <td>If set to true, the tool will add a section that checks if the PR contains a possible security or vulnerability issue. Default is true.</td>
       </tr>
+        <tr>
+        <td><b>require_todo_scan</b></td>
+        <td>If set to true, the tool will add a section that lists TODO comments found in the PR code changes. Default is false.
+        </td>
+      </tr>
       <tr>
         <td><b>require_ticket_analysis_review</b></td>
         <td>If set to true, and the PR contains a GitHub or Jira ticket link, the tool will add a section that checks if the PR in fact fulfilled the ticket requirements. Default is true.</td>
       </tr>
     </table>
 
-!!! example "Adding PR labels"
+???+ example "Adding PR labels"
 
     You can enable\disable the `review` tool to add specific labels to the PR:
 
@@ -122,7 +131,9 @@ extra_instructions = "..."
 
 ## Usage Tips
 
-!!! tip "General guidelines"
+### General guidelines
+
+!!! tip ""
 
     The `review` tool provides a collection of configurable feedbacks about a PR.
     It is recommended to review the [Configuration options](#configuration-options) section, and choose the relevant options for your use case.
@@ -132,7 +143,9 @@ extra_instructions = "..."
 
     On the other hand, if you find one of the enabled features to be irrelevant for your use case, disable it. No default configuration can fit all use cases.
 
-!!! tip "Automation"
+### Automation
+
+!!! tip ""
     When you first install Qodo Merge app, the [default mode](../usage-guide/automations_and_usage.md#github-app-automatic-tools-when-a-new-pr-is-opened) for the `review` tool is:
     ```
     pr_commands = ["/review", ...]
@@ -140,16 +153,30 @@ extra_instructions = "..."
     Meaning the `review` tool will run automatically on every PR, without any additional configurations.
     Edit this field to enable/disable the tool, or to change the configurations used.
 
-!!! tip "Possible labels from the review tool"
+### Auto-generated PR labels by the Review Tool
 
-    The `review` tool can auto-generate two specific types of labels for a PR:
+!!! tip ""
 
-    - a `possible security issue` label that detects if a possible [security issue](https://github.com/Codium-ai/pr-agent/blob/tr/user_description/pr_agent/settings/pr_reviewer_prompts.toml#L136) exists in the PR code (`enable_review_labels_security` flag)
-    - a `Review effort x/5` label, where x is the estimated effort to review the PR on a 1–5 scale (`enable_review_labels_effort` flag)
+    The `review` can tool automatically add labels to your Pull Requests:
 
-    Both modes are useful, and we recommended to enable them.
+    - **`possible security issue`**: This label is applied if the tool detects a potential [security vulnerability](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/pr_reviewer_prompts.toml#L103) in the PR's code. This feedback is controlled by the 'enable_review_labels_security' flag (default is true).
+    - **`review effort [x/5]`**: This label estimates the [effort](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/pr_reviewer_prompts.toml#L90) required to review the PR on a relative scale of 1 to 5, where 'x' represents the assessed effort. This feedback is controlled by the 'enable_review_labels_effort' flag (default is true).
+    - **`ticket compliance`**: Adds a label indicating code compliance level ("Fully compliant" | "PR Code Verified" | "Partially compliant" | "Not compliant") to any GitHub/Jira/Linea ticket linked in the PR. Controlled by the 'require_ticket_labels' flag (default: false). If 'require_no_ticket_labels' is also enabled, PRs without ticket links will receive a "No ticket found" label.
 
-!!! tip "Extra instructions"
+
+### Auto-blocking PRs from being merged based on the generated labels
+
+!!! tip ""
+
+    You can configure a CI/CD Action to prevent merging PRs with specific labels. For example, implement a dedicated [GitHub Action](https://medium.com/sequra-tech/quick-tip-block-pull-request-merge-using-labels-6cc326936221).
+
+    This approach helps ensure PRs with potential security issues or ticket compliance problems will not be merged without further review.
+
+    Since AI may make mistakes or lack complete context, use this feature judiciously. For flexibility, users with appropriate permissions can remove generated labels when necessary. When a label is removed, this action will be automatically documented in the PR discussion, clearly indicating it was a deliberate override by an authorized user to allow the merge.
+
+### Extra instructions
+
+!!! tip "" 
 
     Extra instructions are important.
     The `review` tool can be configured with extra instructions, which can be used to guide the model to a feedback tailored to the needs of your project.
@@ -168,7 +195,3 @@ extra_instructions = "..."
     """
     ```
     Use triple quotes to write multi-line instructions. Use bullet points to make the instructions more readable.
-
-!!! tip  "Code suggestions"
-
-    The `review` tool previously included a legacy feature for providing code suggestions (controlled by `--pr_reviewer.num_code_suggestion`). This functionality has been deprecated and replaced by the [`improve`](./improve.md) tool, which offers higher quality and more actionable code suggestions.

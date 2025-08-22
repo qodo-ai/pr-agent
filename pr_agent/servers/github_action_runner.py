@@ -81,6 +81,30 @@ async def run_action():
     except Exception as e:
         get_logger().info(f"github action: failed to apply repo settings: {e}")
 
+    # Append the response language in the extra instructions
+    try:
+        response_language = get_settings().config.get('response_language', 'en-us')
+        if response_language.lower() != 'en-us':
+            get_logger().info(f'User has set the response language to: {response_language}')
+
+            lang_instruction_text = f"Your response MUST be written in the language corresponding to locale code: '{response_language}'. This is crucial."
+            separator_text = "\n======\n\nIn addition, "
+
+            for key in get_settings():
+                setting = get_settings().get(key)
+                if str(type(setting)) == "<class 'dynaconf.utils.boxing.DynaBox'>":
+                    if key.lower() in ['pr_description', 'pr_code_suggestions', 'pr_reviewer']:
+                        if hasattr(setting, 'extra_instructions'):
+                            extra_instructions = setting.extra_instructions
+
+                            if lang_instruction_text not in str(extra_instructions):
+                                updated_instructions = (
+                                    str(extra_instructions) + separator_text + lang_instruction_text
+                                    if extra_instructions else lang_instruction_text
+                                )
+                                setting.extra_instructions = updated_instructions
+    except Exception as e:
+        get_logger().info(f"github action: failed to apply language-specific instructions: {e}")
     # Handle pull request opened event
     if GITHUB_EVENT_NAME == "pull_request" or GITHUB_EVENT_NAME == "pull_request_target":
         action = event_payload.get("action")
@@ -107,7 +131,7 @@ async def run_action():
                     beekeeper_pr_best_practices = get_setting_or_env("GITHUB_ACTION_CONFIG.BEEKEEPER_PR_BEST_PRACTICES", None)
 
                 # Set the configuration for auto actions
-                get_settings().config.is_auto_command = True # Set the flag to indicate that the command is auto
+                get_settings().config.is_auto_command = True  # Set the flag to indicate that the command is auto
                 get_settings().pr_description.final_update_message = False  # No final update message when auto_describe is enabled
                 get_logger().info(f"Running auto actions: auto_describe={auto_describe}, auto_review={auto_review}, auto_improve={auto_improve}")
 

@@ -1,6 +1,6 @@
 ## Overview
 
-By combining LLM abilities with static code analysis, the `test` tool  generate tests for a selected component, based on the PR code changes.
+By combining LLM abilities with static code analysis, the `test` tool generates tests for a selected component, based on the PR code changes.
 It can be invoked manually by commenting on any PR:
 
 ```
@@ -20,7 +20,7 @@ The tool will generate tests for the selected component (if no component is stat
 (Example taken from [here](https://github.com/Codium-ai/pr-agent/pull/598#issuecomment-1913679429)):
 
 !!! note "Notes"
-    - The following languages are currently supported: Python, Java, C++, JavaScript, TypeScript, C#.
+    - The following languages are currently supported: `Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala`
     - This tool can also be triggered interactively by using the [`analyze`](./analyze.md) tool.
 
 ## Configuration options

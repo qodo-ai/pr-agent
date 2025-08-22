@@ -1,8 +1,8 @@
 from os import environ
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 import openai
-from openai import APIError, AsyncOpenAI, RateLimitError, Timeout
-from retry import retry
+from openai import AsyncOpenAI
+from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.config_loader import get_settings
@@ -38,10 +38,14 @@ class OpenAIHandler(BaseAiHandler):
         """
         return get_settings().get("OPENAI.DEPLOYMENT_ID", None)
 
-    @retry(exceptions=(APIError, Timeout, AttributeError, RateLimitError),
-           tries=OPENAI_RETRIES, delay=2, backoff=2, jitter=(1, 3))
-    async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2):
+    @retry(
+        retry=retry_if_exception_type(openai.APIError) & retry_if_not_exception_type(openai.RateLimitError),
+        stop=stop_after_attempt(OPENAI_RETRIES),
+    )
+    async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2, img_path: str = None):
         try:
+            if img_path:
+                get_logger().warning(f"Image path is not supported for OpenAIHandler. Ignoring image path: {img_path}")
             get_logger().info("System: ", system)
             get_logger().info("User: ", user)
             messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -57,12 +61,12 @@ class OpenAIHandler(BaseAiHandler):
             get_logger().info("AI response", response=resp, messages=messages, finish_reason=finish_reason,
                               model=model, usage=usage)
             return resp, finish_reason
-        except (APIError, Timeout) as e:
-            get_logger().error("Error during OpenAI inference: ", e)
+        except openai.RateLimitError as e:
+            get_logger().error(f"Rate limit error during LLM inference: {e}")
             raise
-        except (RateLimitError) as e:
-            get_logger().error("Rate limit error during OpenAI inference: ", e)
+        except openai.APIError as e:
+            get_logger().warning(f"Error during LLM inference: {e}")
             raise
-        except (Exception) as e:
-            get_logger().error("Unknown error during OpenAI inference: ", e)
-            raise
+        except Exception as e:
+            get_logger().warning(f"Unknown error during LLM inference: {e}")
+            raise openai.APIError from e

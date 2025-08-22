@@ -1,0 +1,30 @@
+pr_compliances:
+  - title: "Consistent Naming Conventions"
+    compliance_label: false
+    objective: "All new variables, functions, and classes must follow the project's established naming standards"
+    success_criteria: "All identifiers follow the established naming patterns (camelCase, snake_case, etc.)"
+    failure_criteria: "Inconsistent or non-standard naming that deviates from project conventions"
+
+  - title: "No Dead or Commented-Out Code"
+    compliance_label: false
+    objective: "Keep the codebase clean by ensuring all submitted code is active and necessary"
+    success_criteria: "All code in the PR is active and serves a purpose; no commented-out blocks"
+    failure_criteria: "Presence of unused, dead, or commented-out code sections"
+
+  - title: "Robust Error Handling"
+    compliance_label: false
+    objective: "Ensure potential errors and edge cases are anticipated and handled gracefully throughout the code"
+    success_criteria: "All error scenarios are properly caught and handled with appropriate responses"
+    failure_criteria: "Unhandled exceptions, ignored errors, or missing edge case handling"
+
+  - title: "Single Responsibility for Functions"
+    compliance_label: false
+    objective: "Each function should have a single, well-defined responsibility"
+    success_criteria: "Functions perform one cohesive task with a single purpose"
+    failure_criteria: "Functions that combine multiple unrelated operations or handle several distinct concerns"
+
+  - title: "When relevant, utilize early return"
+    compliance_label: false
+    objective: "In a code snippet containing multiple logic conditions (such as 'if-else'), prefer an early return on edge cases than deep nesting"
+    success_criteria: "When relevant, utilize early return that reduces nesting"
+    failure_criteria: "Unjustified deep nesting that can be simplified by early return"

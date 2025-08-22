@@ -1,4 +1,4 @@
-## TL;DR
+`Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
 Qodo Merge implements a **self-reflection** process where the AI model reflects, scores, and re-ranks its own suggestions, eliminating irrelevant or incorrect ones.
 This approach improves the quality and relevance of suggestions, saving users time and enhancing their experience.

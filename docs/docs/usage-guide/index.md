@@ -12,6 +12,7 @@ It includes information on how to adjust Qodo Merge configurations, define which
     - [GitHub App](./automations_and_usage.md#github-app)
     - [GitHub Action](./automations_and_usage.md#github-action)
     - [GitLab Webhook](./automations_and_usage.md#gitlab-webhook)
+    - [Gitea Webhook](./automations_and_usage.md#gitea-webhook)
     - [BitBucket App](./automations_and_usage.md#bitbucket-app)
     - [Azure DevOps Provider](./automations_and_usage.md#azure-devops-provider)
 - [Managing Mail Notifications](./mail_notifications.md)

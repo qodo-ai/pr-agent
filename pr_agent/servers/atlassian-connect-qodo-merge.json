@@ -1,0 +1,38 @@
+{
+  "name": "Qodo Merge",
+  "description": "Qodo Merge",
+  "key": "app_key",
+  "vendor": {
+    "name": "Qodo",
+    "url": "https://qodo.ai"
+  },
+  "authentication": {
+    "type": "jwt"
+  },
+  "baseUrl": "base_url",
+  "lifecycle": {
+    "installed": "/installed",
+    "uninstalled": "/uninstalled"
+  },
+  "scopes": [
+    "account",
+    "repository:write",
+    "pullrequest:write",
+    "wiki"
+  ],
+  "contexts": [
+    "account"
+  ],
+  "modules": {
+    "webhooks": [
+      {
+        "event": "*",
+        "url": "/webhook"
+      }
+    ]
+  },
+  "links": {
+    "privacy": "https://qodo.ai/privacy-policy",
+    "terms": "https://qodo.ai/terms"
+  }
+}

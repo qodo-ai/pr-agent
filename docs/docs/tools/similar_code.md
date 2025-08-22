@@ -1,10 +1,12 @@
+`Platforms supported: GitHub`
+
 ## Overview
 
 The similar code tool retrieves the most similar code components from inside the organization's codebase, or from open-source code.
 
 For example:
 
-`Global Search` for a method called `chat_completion`:
+A `Global Search` for a method called `chat_completion`:
 
 ![similar code global](https://codium.ai/images/pr_agent/similar_code_global2.png){width=768}
 
@@ -19,7 +21,7 @@ Search result link example:
 
 ![code search result single](https://codium.ai/images/pr_agent/code_search_result_single.png){width=768}
 
-`Organization Search`:
+An `Organization Search`:
 
 ![similar code org](https://codium.ai/images/pr_agent/similar_code_org.png){width=768}
 

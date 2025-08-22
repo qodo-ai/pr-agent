@@ -21,7 +21,7 @@ from pr_agent.servers.help import HelpMessage
 
 #Common code that can be called from similar tools:
 def modify_answer_section(ai_response: str) -> str | None:
-    # Gets the model's answer and relevant sources section, repacing the heading of the answer section with:
+    # Gets the model's answer and relevant sources section, replacing the heading of the answer section with:
     # :bulb: Auto-generated documentation-based answer:
     """
     For example: The following input:

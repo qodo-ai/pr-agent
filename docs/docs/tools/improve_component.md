@@ -1,6 +1,6 @@
 ## Overview
 
-The `improve_component` tool generates code suggestions for a specific code component that changed in the PR.
+The `improve_component` tool generates code suggestions for a specific code component that has changed in the PR.
 it can be invoked manually by commenting on any PR:
 
 ```
@@ -20,7 +20,7 @@ The tool will generate code suggestions for the selected component (if no compon
 ![improve_component2](https://codium.ai/images/pr_agent/improve_component2.png){width=768}
 
 !!! note "Notes"
-    - Language that are currently supported by the tool: Python, Java, C++, JavaScript, TypeScript, C#.
+    - Language that are currently supported by the tool: `Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala`
     - This tool can also be triggered interactively by using the [`analyze`](./analyze.md) tool.
 
 ## Configuration options

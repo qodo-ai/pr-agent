@@ -398,11 +398,6 @@ def get_pr_multi_diffs(git_provider: GitProvider,
     # Sort files by main language
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)
 
-    # Sort files within each language group by tokens in descending order
-    sorted_files = []
-    for lang in pr_languages:
-        sorted_files.extend(sorted(lang['files'], key=lambda x: x.tokens, reverse=True))
-
     # Get the maximum number of extra lines before and after the patch
     PATCH_EXTRA_LINES_BEFORE = get_settings().config.patch_extra_lines_before
     PATCH_EXTRA_LINES_AFTER = get_settings().config.patch_extra_lines_after
@@ -419,6 +414,11 @@ def get_pr_multi_diffs(git_provider: GitProvider,
     # if we are under the limit, return the full diff
     if total_tokens + OUTPUT_BUFFER_TOKENS_SOFT_THRESHOLD < get_max_tokens(model):
         return ["\n".join(patches_extended)] if patches_extended else []
+
+    # Sort files within each language group by tokens in descending order
+    sorted_files = []
+    for lang in pr_languages:
+        sorted_files.extend(sorted(lang['files'], key=lambda x: x.tokens, reverse=True))
 
     patches = []
     final_diff_list = []

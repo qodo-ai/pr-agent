@@ -50,7 +50,7 @@ git_provider="bitbucket_server"
 and pass the Pull request URL:
 
 ```shell
-python cli.py --pr_url https://git.onpreminstanceofbitbucket.com/projects/PROJECT/repos/REPO/pull-requests/1 review
+python cli.py --pr_url https://git.on-prem-instance-of-bitbucket.com/projects/PROJECT/repos/REPO/pull-requests/1 review
 ```
 
 ### Run it as service
@@ -63,6 +63,6 @@ docker push codiumai/pr-agent:bitbucket_server_webhook  # Push to your Docker re
 ```
 
 Navigate to `Projects` or `Repositories`, `Settings`, `Webhooks`, `Create Webhook`.
-Fill the name and URL, Authentication None select the Pull Request Opened checkbox to receive that event as webhook.
+Fill in the name and URL. For Authentication, select 'None'. Select the 'Pull Request Opened' checkbox to receive that event as a webhook.
 
 The URL should end with `/webhook`, for example: https://domain.com/webhook

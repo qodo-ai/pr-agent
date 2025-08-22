@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pr-agent"
-version = "0.2.7"
+version = "0.3.0"
 
 authors = [{ name = "QodoAI", email = "tal.r@qodo.ai" }]
 
@@ -16,7 +16,7 @@ description = "QodoAI PR-Agent aims to help efficiently review and handle pull r
 readme = "README.md"
 requires-python = ">=3.12"
 keywords = ["AI", "Agents", "Pull Request", "Automation", "Code Review"]
-license = "Apache-2.0"
+license = { file = "LICENSE" }
 
 classifiers = [
   "Intended Audience :: Developers",
@@ -34,7 +34,6 @@ dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools]
 include-package-data = true
-license-files = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["."]

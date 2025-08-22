@@ -10,6 +10,7 @@ from requests.exceptions import HTTPError
 import shlex
 import subprocess
 
+from ..algo.file_filter import filter_ignored
 from ..algo.git_patch_processing import decode_if_bytes
 from ..algo.language_handler import is_valid_file
 from ..algo.types import EDIT_TYPE, FilePatchInfo
@@ -37,10 +38,28 @@ class BitbucketServerProvider(GitProvider):
         self.diff_files = None
         self.bitbucket_pull_request_api_url = pr_url
         self.bearer_token = get_settings().get("BITBUCKET_SERVER.BEARER_TOKEN", None)
-        self.bitbucket_server_url = self._parse_bitbucket_server(url=pr_url)
-        self.bitbucket_client = bitbucket_client or Bitbucket(url=self.bitbucket_server_url,
-                                                              token=get_settings().get("BITBUCKET_SERVER.BEARER_TOKEN",
-                                                                                       None))
+        # Get username and password from settings
+        username = get_settings().get("BITBUCKET_SERVER.USERNAME", None)
+        password = get_settings().get("BITBUCKET_SERVER.PASSWORD", None)
+        if bitbucket_client: # if Bitbucket client is provided, use it
+            self.bitbucket_client = bitbucket_client
+            self.bitbucket_server_url = getattr(bitbucket_client, 'url', None) or self._parse_bitbucket_server(pr_url)
+        else:
+            self.bitbucket_server_url = self._parse_bitbucket_server(pr_url)
+            if not self.bitbucket_server_url:
+                raise ValueError("Invalid or missing Bitbucket Server URL parsed from PR URL.")
+            
+            if self.bearer_token:  # if bearer token is provided, use it
+                self.bitbucket_client = Bitbucket(
+                    url=self.bitbucket_server_url,
+                    token=self.bearer_token
+                )
+            else:  # otherwise use username and password
+                self.bitbucket_client = Bitbucket(
+                    url=self.bitbucket_server_url,
+                    username=username,
+                    password=password
+                )
         try:
             self.bitbucket_api_version = parse_version(self.bitbucket_client.get("rest/api/1.0/application-properties").get('version'))
         except Exception:
@@ -86,7 +105,7 @@ class BitbucketServerProvider(GitProvider):
 
     def get_repo_settings(self):
         try:
-            content = self.bitbucket_client.get_content_of_file(self.workspace_slug, self.repo_slug, ".pr_agent.toml", self.get_pr_branch())
+            content = self.bitbucket_client.get_content_of_file(self.workspace_slug, self.repo_slug, ".pr_agent.toml")
 
             return content
         except Exception as e:
@@ -244,7 +263,8 @@ class BitbucketServerProvider(GitProvider):
         original_file_content_str = ""
         new_file_content_str = ""
 
-        changes = self.bitbucket_client.get_pull_requests_changes(self.workspace_slug, self.repo_slug, self.pr_num)
+        changes_original = list(self.bitbucket_client.get_pull_requests_changes(self.workspace_slug, self.repo_slug, self.pr_num))
+        changes = filter_ignored(changes_original, 'bitbucket_server')
         for change in changes:
             file_path = change['path']['toString']
             if not is_valid_file(file_path.split("/")[-1]):
