@@ -57,6 +57,7 @@ class AzureDevopsProvider(GitProvider):
         Publishes code suggestions as comments on the PR.
         """
         post_parameters_list = []
+        status = get_settings().azure_devops.get("default_comment_status", "closed")
         for suggestion in code_suggestions:
             body = suggestion['body']
             relevant_file = suggestion['relevant_file']
@@ -79,7 +80,7 @@ class AzureDevopsProvider(GitProvider):
                 right_file_start=CommentPosition(offset=1, line=relevant_lines_start),
                 right_file_end=CommentPosition(offset=1, line=relevant_lines_end))
             comment = Comment(content=body, comment_type=1)
-            thread = CommentThread(comments=[comment], thread_context=thread_context)
+            thread = CommentThread(comments=[comment], thread_context=thread_context, status=status)
             try:
                 self.azure_devops_client.create_thread(
                     comment_thread=thread,
