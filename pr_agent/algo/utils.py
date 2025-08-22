@@ -763,7 +763,8 @@ def try_fix_yaml(response_text: str,
                  response_text_original="") -> dict:
     response_text_lines = response_text.split('\n')
 
-    keys_yaml = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:', 'improved code:', 'label:']
+    keys_yaml = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:',
+                 'improved code:', 'label:', 'why:', 'suggestion_summary:']
     keys_yaml = keys_yaml + keys_fix_yaml
 
     # first fallback - try to convert 'relevant line: ...' to relevant line: |-\n        ...'
@@ -838,12 +839,13 @@ def try_fix_yaml(response_text: str,
         if index_end == -1:
             index_end = len(response_text)
         response_text_copy = response_text[index_start:index_end].strip().strip('```yaml').strip('`').strip()
-        try:
-            data = yaml.safe_load(response_text_copy)
-            get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
-            return data
-        except:
-            pass
+        if response_text_copy:
+            try:
+                data = yaml.safe_load(response_text_copy)
+                get_logger().info(f"Successfully parsed AI prediction after extracting yaml snippet")
+                return data
+            except:
+                pass
 
     # fifth fallback - try to remove leading '+' (sometimes added by AI for 'existing code' and 'improved code')
     response_text_lines_copy = response_text_lines.copy()
@@ -872,20 +874,45 @@ def try_fix_yaml(response_text: str,
     response_text_copy = copy.deepcopy(response_text)
     response_text_copy_lines = response_text_copy.split('\n')
     start_line = -1
+    improve_sections = ['existing_code:', 'improved_code:', 'response:', 'why:']
+    describe_sections = ['description:', 'title:', 'changes_diagram:', 'pr_files:', 'pr_ticket:']
     for i, line in enumerate(response_text_copy_lines):
-        if 'existing_code:' in line or 'improved_code:' in line:
+        line_stripped = line.rstrip()
+        if any(key in line_stripped for key in (improve_sections+describe_sections)):
             start_line = i
-        elif line.endswith(': |') or line.endswith(': |-') or line.endswith(': |2') or line.endswith(':'):
+        elif line_stripped.endswith(': |') or line_stripped.endswith(': |-') or line_stripped.endswith(': |2') or any(line_stripped.endswith(key) for key in keys_yaml):
             start_line = -1
         elif start_line != -1:
             response_text_copy_lines[i] = '    ' + line
     response_text_copy = '\n'.join(response_text_copy_lines)
+    response_text_copy = response_text_copy.replace(' |\n', ' |2\n')
     try:
         data = yaml.safe_load(response_text_copy)
         get_logger().info(f"Successfully parsed AI prediction after adding indent for sections of code blocks")
         return data
     except:
         pass
+
+    # eighth fallback - try to remove pipe chars at the root-level dicts
+    response_text_copy = copy.deepcopy(response_text)
+    response_text_copy = response_text_copy.lstrip('|\n')
+    try:
+        data = yaml.safe_load(response_text_copy)
+        get_logger().info(f"Successfully parsed AI prediction after removing pipe chars")
+        return data
+    except:
+        pass
+
+    # ninth fallback - try to decode the response text with different encodings. GPT-5 can return text that is not utf-8 encoded.
+    encodings_to_try = ['latin-1', 'utf-16']
+    for encoding in encodings_to_try:
+        try:
+            data = yaml.safe_load(response_text.encode(encoding).decode("utf-8"))
+            if data:
+                get_logger().info(f"Successfully parsed AI prediction after decoding with {encoding} encoding")
+                return data
+        except:
+            pass
 
     # # sixth fallback - try to remove last lines
     # for i in range(1, len(response_text_lines)):
