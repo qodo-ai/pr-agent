@@ -22,6 +22,7 @@ try:
     from azure.devops.connection import Connection
     # noinspection PyUnresolvedReferences
     from azure.devops.released.git import (Comment, CommentThread, GitPullRequest, GitVersionDescriptor, GitClient, CommentThreadContext, CommentPosition)
+    from azure.devops.released.work_item_tracking import WorkItemTrackingClient
     # noinspection PyUnresolvedReferences
     from azure.identity import DefaultAzureCredential
     from msrest.authentication import BasicAuthentication
@@ -39,7 +40,7 @@ class AzureDevopsProvider(GitProvider):
                 "Azure DevOps provider is not available. Please install the required dependencies."
             )
 
-        self.azure_devops_client = self._get_azure_devops_client()
+        self.azure_devops_client, self.azure_devops_board_client = self._get_azure_devops_client()
         self.diff_files = None
         self.workspace_slug = None
         self.repo_slug = None
@@ -350,7 +351,9 @@ class AzureDevopsProvider(GitProvider):
             get_logger().debug(f"Skipping publish_comment for temporary comment: {pr_comment}")
             return None
         comment = Comment(content=pr_comment)
-        thread = CommentThread(comments=[comment], thread_context=thread_context, status="closed")
+
+        status = get_settings().azure_devops.get("default_comment_status", "closed")
+        thread = CommentThread(comments=[comment], thread_context=thread_context, status=status)
         thread_response = self.azure_devops_client.create_thread(
             comment_thread=thread,
             project=self.workspace_slug,
@@ -379,7 +382,7 @@ class AzureDevopsProvider(GitProvider):
                 pr_body = pr_body[:ind]
 
             if len(pr_body) > MAX_PR_DESCRIPTION_AZURE_LENGTH:
-                changes_walkthrough_text = PRDescriptionHeader.CHANGES_WALKTHROUGH.value
+                changes_walkthrough_text = PRDescriptionHeader.FILE_WALKTHROUGH.value
                 ind = pr_body.find(changes_walkthrough_text)
                 if ind != -1:
                     pr_body = pr_body[:ind]
@@ -566,7 +569,7 @@ class AzureDevopsProvider(GitProvider):
         return workspace_slug, repo_slug, pr_number
 
     @staticmethod
-    def _get_azure_devops_client() -> GitClient:
+    def _get_azure_devops_client() -> Tuple[GitClient, WorkItemTrackingClient]:
         org = get_settings().azure_devops.get("org", None)
         pat = get_settings().azure_devops.get("pat", None)
 
@@ -589,12 +592,11 @@ class AzureDevopsProvider(GitProvider):
                 raise
 
         credentials = BasicAuthentication("", auth_token)
-
-        credentials = BasicAuthentication("", auth_token)
         azure_devops_connection = Connection(base_url=org, creds=credentials)
         azure_devops_client = azure_devops_connection.clients.get_git_client()
+        azure_devops_board_client = azure_devops_connection.clients.get_work_item_tracking_client()
 
-        return azure_devops_client
+        return azure_devops_client, azure_devops_board_client
 
     def _get_repo(self):
         if self.repo is None:
@@ -635,4 +637,50 @@ class AzureDevopsProvider(GitProvider):
         last = commits[0]
         url = self.azure_devops_client.normalized_url + "/" + self.workspace_slug + "/_git/" + self.repo_slug + "/commit/" + last.commit_id
         return url
-    
+
+    def get_linked_work_items(self) -> list:
+        """
+        Get linked work items from the PR.
+        """
+        try:
+            work_items = self.azure_devops_client.get_pull_request_work_item_refs(
+                project=self.workspace_slug,
+                repository_id=self.repo_slug,
+                pull_request_id=self.pr_num,
+            )
+            ids = [work_item.id for work_item in work_items]
+            if not work_items:
+                return []
+            items = self.get_work_items(ids)
+            return items
+        except Exception as e:
+            get_logger().exception(f"Failed to get linked work items, error: {e}")
+            return []
+
+    def get_work_items(self, work_item_ids: list) -> list:
+        """
+        Get work items by their IDs.
+        """
+        try:
+            raw_work_items = self.azure_devops_board_client.get_work_items(
+                project=self.workspace_slug,
+                ids=work_item_ids,
+            )
+            work_items = []
+            for item in raw_work_items:
+                work_items.append(
+                    {
+                        "id": item.id,
+                        "title": item.fields.get("System.Title", ""),
+                        "url": item.url,
+                        "body": item.fields.get("System.Description", ""),
+                        "acceptance_criteria": item.fields.get(
+                            "Microsoft.VSTS.Common.AcceptanceCriteria", ""
+                        ),
+                        "tags": item.fields.get("System.Tags", "").split("; ") if item.fields.get("System.Tags") else [],
+                    }
+                )
+            return work_items
+        except Exception as e:
+            get_logger().exception(f"Failed to get work items, error: {e}")
+            return []

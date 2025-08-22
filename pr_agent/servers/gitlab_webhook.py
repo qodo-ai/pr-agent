@@ -18,6 +18,7 @@ from pr_agent.config_loader import get_settings, global_settings
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.secret_providers import get_secret_provider
+from pr_agent.git_providers import get_git_provider_with_context
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
@@ -25,15 +26,14 @@ router = APIRouter()
 secret_provider = get_secret_provider() if get_settings().get("CONFIG.SECRET_PROVIDER") else None
 
 
-async def handle_request(api_url: str, body: str, log_context: dict, sender_id: str):
+async def handle_request(api_url: str, body: str, log_context: dict, sender_id: str, notify=None):
     log_context["action"] = body
     log_context["event"] = "pull_request" if body == "/review" else "comment"
     log_context["api_url"] = api_url
     log_context["app_name"] = get_settings().get("CONFIG.APP_NAME", "Unknown")
 
     with get_logger().contextualize(**log_context):
-        await PRAgent().handle_request(api_url, body)
-
+        await PRAgent().handle_request(api_url, body, notify)
 
 async def _perform_commands_gitlab(commands_conf: str, agent: PRAgent, api_url: str,
                                    log_context: dict, data: dict):
@@ -125,7 +125,7 @@ def should_process_pr_logic(data) -> bool:
         # logic to ignore PRs from specific users
         ignore_pr_users = get_settings().get("CONFIG.IGNORE_PR_AUTHORS", [])
         if ignore_pr_users and sender:
-            if sender in ignore_pr_users:
+            if any(re.search(regex, sender) for regex in ignore_pr_users):
                 get_logger().info(f"Ignoring PR from user '{sender}' due to 'config.ignore_pr_authors' settings")
                 return False
 
@@ -234,6 +234,9 @@ async def gitlab_webhook(background_tasks: BackgroundTasks, request: Request):
                     get_logger().info(f"Skipping draft MR: {url}")
                     return JSONResponse(status_code=status.HTTP_200_OK, content=jsonable_encoder({"message": "success"}))
 
+                # Apply repo settings before checking push commands or handle_push_trigger
+                apply_repo_settings(url)
+
                 commands_on_push = get_settings().get(f"gitlab.push_commands", {})
                 handle_push_trigger = get_settings().get(f"gitlab.handle_push_trigger", False)
                 if not commands_on_push or not handle_push_trigger:
@@ -256,13 +259,15 @@ async def gitlab_webhook(background_tasks: BackgroundTasks, request: Request):
             if 'merge_request' in data:
                 mr = data['merge_request']
                 url = mr.get('url')
+                comment_id = data.get('object_attributes', {}).get('id')
+                provider = get_git_provider_with_context(pr_url=url)
 
                 get_logger().info(f"A comment has been added to a merge request: {url}")
                 body = data.get('object_attributes', {}).get('note')
                 if data.get('object_attributes', {}).get('type') == 'DiffNote' and '/ask' in body: # /ask_line
                     body = handle_ask_line(body, data)
 
-                await handle_request(url, body, log_context, sender_id)
+                await handle_request(url, body, log_context, sender_id, notify=lambda: provider.add_eyes_reaction(comment_id))
 
     background_tasks.add_task(inner, request_json)
     end_time = datetime.now()
@@ -283,7 +288,7 @@ def handle_ask_line(body, data):
         path = data['object_attributes']['position']['new_path']
         side = 'RIGHT'  # if line_range_['start']['type'] == 'new' else 'LEFT'
         comment_id = data['object_attributes']["discussion_id"]
-        get_logger().info("Handling line comment")
+        get_logger().info("Handling line ")
         body = f"/ask_line --line_start={start_line} --line_end={end_line} --side={side} --file_name={path} --comment_id={comment_id} {question}"
     except Exception as e:
         get_logger().error(f"Failed to handle ask line comment: {e}")

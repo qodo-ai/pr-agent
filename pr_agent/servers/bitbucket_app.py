@@ -139,7 +139,7 @@ def should_process_pr_logic(data) -> bool:
         # logic to ignore PRs from specific users
         ignore_pr_users = get_settings().get("CONFIG.IGNORE_PR_AUTHORS", [])
         if ignore_pr_users and sender:
-            if sender in ignore_pr_users:
+            if any(re.search(regex, sender) for regex in ignore_pr_users):
                 get_logger().info(f"Ignoring PR from user '{sender}' due to 'config.ignore_pr_authors' setting")
                 return False
 

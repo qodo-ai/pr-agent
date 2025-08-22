@@ -1,4 +1,6 @@
-## Local and global metadata injection with multi-stage analysis
+# Local and global metadata injection with multi-stage analysis
+
+`Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
 1\.
 Qodo Merge initially retrieves for each PR the following data:

@@ -1,5 +1,8 @@
 
-## Overview - PR Compression Strategy
+`Supported Git Platforms: GitHub, GitLab, Bitbucket`
+
+
+## Overview
 
 There are two scenarios:
 

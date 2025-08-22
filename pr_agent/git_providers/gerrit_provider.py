@@ -103,7 +103,7 @@ def prepare_repo(url: urllib3.util.Url, project, refspec):
     repo_url = (f"{url.scheme}://{url.auth}@{url.host}:{url.port}/{project}")
 
     directory = pathlib.Path(mkdtemp())
-    clone(repo_url, directory),
+    clone(repo_url, directory)
     fetch(repo_url, refspec, cwd=directory)
     checkout(cwd=directory)
     return directory

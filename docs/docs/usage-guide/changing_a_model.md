@@ -32,6 +32,16 @@ OPENAI__API_BASE=https://api.openai.com/v1
 OPENAI__KEY=sk-...
 ```
 
+### OpenAI Flex Processing
+
+To reduce costs for non-urgent/background tasks, enable Flex Processing:
+
+```toml
+[litellm]
+extra_body='{"processing_mode": "flex"}'
+```
+
+See [OpenAI Flex Processing docs](https://platform.openai.com/docs/guides/flex-processing) for details.
 
 ### Azure
 
@@ -90,14 +100,14 @@ duplicate_examples=true # will duplicate the examples in the prompt, to help the
 api_base = "http://localhost:11434" # or whatever port you're running Ollama on
 ```
 
-By default, Ollama uses a context window size of 2048 tokens. In most cases this is not enough to cover pr-agent promt and pull-request diff. Context window size can be overridden with the `OLLAMA_CONTEXT_LENGTH` environment variable. For example, to set the default context length to 8K, use: `OLLAMA_CONTEXT_LENGTH=8192 ollama serve`. More information you can find on the [official ollama faq](https://github.com/ollama/ollama/blob/main/docs/faq.md#how-can-i-specify-the-context-window-size).
+By default, Ollama uses a context window size of 2048 tokens. In most cases this is not enough to cover pr-agent prompt and pull-request diff. Context window size can be overridden with the `OLLAMA_CONTEXT_LENGTH` environment variable. For example, to set the default context length to 8K, use: `OLLAMA_CONTEXT_LENGTH=8192 ollama serve`. More information you can find on the [official ollama faq](https://github.com/ollama/ollama/blob/main/docs/faq.md#how-can-i-specify-the-context-window-size).
 
 Please note that the `custom_model_max_tokens` setting should be configured in accordance with the `OLLAMA_CONTEXT_LENGTH`. Failure to do so may result in unexpected model output.
 
 !!! note "Local models vs commercial models"
     Qodo Merge is compatible with almost any AI model, but analyzing complex code repositories and pull requests requires a model specifically optimized for code analysis.
 
-    Commercial models such as GPT-4, Claude Sonnet, and Gemini have demonstrated robust capabilities in generating structured output for code analysis tasks with large input. In contrast, most open-source models currently available (as of January 2025) face challenges with these complex tasks.
+    Commercial models such as GPT-5, Claude Sonnet, and Gemini have demonstrated robust capabilities in generating structured output for code analysis tasks with large input. In contrast, most open-source models currently available (as of January 2025) face challenges with these complex tasks.
 
     Based on our testing, local open-source models are suitable for experimentation and learning purposes (mainly for the `ask` command), but they are not suitable for production-level code analysis tasks.
     
@@ -232,6 +242,34 @@ AWS_SECRET_ACCESS_KEY="..."
 AWS_REGION_NAME="..."
 ```
 
+You can also use the new Meta Llama 4 models available on Amazon Bedrock:
+
+```toml
+[config] # in configuration.toml
+model="bedrock/us.meta.llama4-scout-17b-instruct-v1:0"
+fallback_models=["bedrock/us.meta.llama4-maverick-17b-instruct-v1:0"]
+```
+
+#### Custom Inference Profiles
+
+To use a custom inference profile with Amazon Bedrock (for cost allocation tags and other configuration settings), add the `model_id` parameter to your configuration:
+
+```toml
+[config] # in configuration.toml
+model="bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"
+fallback_models=["bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0"]
+
+[aws]
+AWS_ACCESS_KEY_ID="..."
+AWS_SECRET_ACCESS_KEY="..."
+AWS_REGION_NAME="..."
+
+[litellm]
+model_id = "your-custom-inference-profile-id"
+```
+
+The `model_id` parameter will be passed to all Bedrock completion calls, allowing you to use custom inference profiles for better cost allocation and reporting.
+
 See [litellm](https://docs.litellm.ai/docs/providers/bedrock#usage) documentation for more information about the environment variables required for Amazon Bedrock.
 
 ### DeepSeek
@@ -341,7 +379,7 @@ To bypass chat templates and temperature controls, set `config.custom_reasoning_
 
 ```toml
 [config]
-reasoning_efffort= = "medium" # "low", "medium", "high"
+reasoning_effort = "medium" # "low", "medium", "high"
 ```
 
 With the OpenAI models that support reasoning effort (eg: o4-mini), you can specify its reasoning effort via `config` section. The default value is `medium`. You can change it to `high` or `low` based on your usage.

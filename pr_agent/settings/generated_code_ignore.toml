@@ -1,0 +1,42 @@
+[generated_code]
+
+# Protocol Buffers
+protobuf = [
+  "**/*.pb.go",
+  "**/*.pb.cc",
+  "**/*_pb2.py",
+  "**/*.pb.swift",
+  "**/*.pb.rb",
+  "**/*.pb.php",
+  "**/*.pb.h"
+]
+
+# OpenAPI / Swagger stubs
+openapi = [
+  "**/__generated__/**",
+  "**/openapi_client/**",
+  "**/openapi_server/**"
+]
+swagger = [
+  "**/swagger.json",
+  "**/swagger.yaml"
+]
+
+# GraphQL codegen
+graphql = [
+  "**/*.graphql.ts",
+  "**/*.generated.ts",
+  "**/*.graphql.js"
+]
+
+# RPC / gRPC Generators 
+grpc_python      = ["**/*_grpc.py"]
+grpc_java        = ["**/*Grpc.java"]
+grpc_csharp      = ["**/*Grpc.cs"]
+grpc_typescript  = ["**/*_grpc.ts", "**/*_grpc.js"]
+
+# Go code generators
+go_gen = [
+  "**/*_gen.go",
+  "**/*generated.go"
+]

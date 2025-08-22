@@ -1,11 +1,14 @@
-## Overview - Static Code Analysis 💎
+# Static Code Analysis 💎
+
+` Supported Git Platforms: GitHub, GitLab, Bitbucket`
+
 
 By combining static code analysis with LLM capabilities, Qodo Merge can provide a comprehensive analysis of the PR code changes on a component level.
 
 It scans the PR code changes, finds all the code components (methods, functions, classes) that changed, and enables to interactively generate tests, docs, code suggestions and similar code search for each component.
 
 !!! note "Language that are currently supported:"
-    Python, Java, C++, JavaScript, TypeScript, C#.
+    Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala
 
 ## Capabilities
 

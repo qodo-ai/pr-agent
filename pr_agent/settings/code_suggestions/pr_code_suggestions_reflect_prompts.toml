@@ -5,7 +5,7 @@ In addition to evaluating the suggestion correctness and importance, another sub
 
 Examine each suggestion meticulously, assessing its quality, relevance, and accuracy within the context of PR. Keep in mind that the suggestions may vary in their correctness, accuracy and impact.
 Consider the following components of each suggestion:
-    1. 'one_sentence_summary' - A one-liner summary summary of the suggestion's purpose
+    1. 'one_sentence_summary' - A one-liner summary of the suggestion's purpose
     2. 'suggestion_content' - The suggestion content, explaining the proposed modification
     3. 'existing_code' - a code snippet from a __new hunk__ section in the PR code diff that the suggestion addresses
     4. 'improved_code' - a code snippet demonstrating how the 'existing_code' should be after the suggestion is applied

@@ -79,13 +79,14 @@ class TestSortFilesByMainLanguages:
         files = [
             type('', (object,), {'filename': 'file1.py'})(),
             type('', (object,), {'filename': 'file2.java'})(),
-            type('', (object,), {'filename': 'file3.cpp'})()
+            type('', (object,), {'filename': 'file3.cpp'})(),
+            type('', (object,), {'filename': 'file3.test'})()
         ]
         expected_output = [
             {'language': 'Python', 'files': [files[0]]},
             {'language': 'Java', 'files': [files[1]]},
             {'language': 'C++', 'files': [files[2]]},
-            {'language': 'Other', 'files': []}
+            {'language': 'Other', 'files': [files[3]]}
         ]
         assert sort_files_by_main_languages(languages, files) == expected_output
 

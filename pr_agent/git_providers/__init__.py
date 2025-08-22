@@ -8,6 +8,7 @@ from pr_agent.git_providers.bitbucket_server_provider import \
 from pr_agent.git_providers.codecommit_provider import CodeCommitProvider
 from pr_agent.git_providers.gerrit_provider import GerritProvider
 from pr_agent.git_providers.git_provider import GitProvider
+from pr_agent.git_providers.gitea_provider import GiteaProvider
 from pr_agent.git_providers.github_provider import GithubProvider
 from pr_agent.git_providers.gitlab_provider import GitLabProvider
 from pr_agent.git_providers.local_git_provider import LocalGitProvider
@@ -22,7 +23,7 @@ _GIT_PROVIDERS = {
     'codecommit': CodeCommitProvider,
     'local': LocalGitProvider,
     'gerrit': GerritProvider,
-    'gitea': GiteaProvider,
+    'gitea': GiteaProvider
 }
 
 

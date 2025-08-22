@@ -1,6 +1,6 @@
 # Incremental Update 💎
 
-`Supported Git Platforms: GitHub`
+`Supported Git Platforms: GitHub, GitLab (Both cloud & server. For server: Version 17 and above)`
 
 ## Overview
 The Incremental Update feature helps users focus on feedback for their newest changes, making large PRs more manageable.

@@ -1,6 +1,6 @@
 # RAG Context Enrichment 💎
 
-`Supported Git Platforms: GitHub, Bitbucket Data Center`
+`Supported Git Platforms: GitHub, GitLab, Bitbucket Data Center`
 
 !!! info "Prerequisites"
     - RAG is available only for Qodo enterprise plan users, with single tenant or on-premises setup.
@@ -27,7 +27,7 @@ In order to enable the RAG feature, add the following lines to your configuratio
 enable_rag=true
 ```
 
-!!! example "RAG Arguments Options"
+???+ example "RAG Arguments Options"
 
     <table>
       <tr>
@@ -44,11 +44,18 @@ enable_rag=true
 
 RAG capability is exclusively available in the following tools:
 
-=== "`/review`"
-    The [`/review`](https://qodo-merge-docs.qodo.ai/tools/review/) tool offers the _Focus area from RAG data_ which contains feedback based on the RAG references analysis.
-    The complete list of references found relevant to the PR will be shown in the _References_ section, helping developers understand the broader context by exploring the provided references.
+=== "`/ask`"
+    The [`/ask`](https://qodo-merge-docs.qodo.ai/tools/ask/) tool can access broader repository context through the RAG feature when answering questions that go beyond the PR scope alone.
+    The _References_ section displays the additional repository content consulted to formulate the answer.
 
-    ![RAGed review tool](https://codium.ai/images/pr_agent/rag_review.png){width=640}
+    ![RAGed ask tool](https://codium.ai/images/pr_agent/rag_ask.png){width=640}
+
+
+=== "`/compliance`"
+    The [`/compliance`](https://qodo-merge-docs.qodo.ai/tools/compliance/) tool offers the _Codebase Code Duplication Compliance_ section which contains feedback based on the RAG references.
+    This section highlights possible code duplication issues in the PR, providing developers with insights into potential code quality concerns.
+
+    ![RAGed compliance tool](https://codium.ai/images/pr_agent/rag_compliance.png){width=640}
 
 === "`/implement`"
     The [`/implement`](https://qodo-merge-docs.qodo.ai/tools/implement/) tool utilizes the RAG feature to provide comprehensive context of the repository codebase, allowing it to generate more refined code output.
@@ -56,11 +63,11 @@ RAG capability is exclusively available in the following tools:
 
     ![RAGed implement tool](https://codium.ai/images/pr_agent/rag_implement.png){width=640}
 
-=== "`/ask`"
-    The [`/ask`](https://qodo-merge-docs.qodo.ai/tools/ask/) tool can access broader repository context through the RAG feature when answering questions that go beyond the PR scope alone.
-    The _References_ section displays the additional repository content consulted to formulate the answer.
+=== "`/review`"
+    The [`/review`](https://qodo-merge-docs.qodo.ai/tools/review/) tool offers the _Focus area from RAG data_ which contains feedback based on the RAG references analysis.
+    The complete list of references found relevant to the PR will be shown in the _References_ section, helping developers understand the broader context by exploring the provided references.
 
-    ![RAGed ask tool](https://codium.ai/images/pr_agent/rag_ask.png){width=640}
+    ![RAGed review tool](https://codium.ai/images/pr_agent/rag_review.png){width=640}
 
 ## Limitations
 

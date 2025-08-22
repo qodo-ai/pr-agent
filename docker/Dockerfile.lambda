@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.12
+FROM public.ecr.aws/lambda/python:3.12 AS base
 
 RUN dnf update -y && \
     dnf install -y gcc python3-devel git && \
@@ -9,4 +9,10 @@ RUN pip install --no-cache-dir . && rm pyproject.toml
 RUN pip install --no-cache-dir mangum==0.17.0
 COPY pr_agent/ ${LAMBDA_TASK_ROOT}/pr_agent/
 
-CMD ["pr_agent.servers.serverless.serverless"]
+FROM base AS github_lambda
+CMD ["pr_agent.servers.github_lambda_webhook.lambda_handler"]
+
+FROM base AS gitlab_lambda
+CMD ["pr_agent.servers.gitlab_lambda_webhook.lambda_handler"]
+
+FROM github_lambda

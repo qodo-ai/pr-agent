@@ -46,14 +46,11 @@ pr_commands = [
 The `pr_commands` list defines commands that run automatically when a PR is opened.
 Since this is under the [github_app] section, it only applies when using the Qodo Merge GitHub App in GitHub environments.
 
-!!! note
-By default, /add_docs is not triggered automatically. You must explicitly include it in pr_commands to enable this behavior.
-
 ## Configuration options
 
 - `docs_style`: The exact style of the documentation (for python docstring). you can choose between: `google`, `numpy`, `sphinx`, `restructuredtext`, `plain`. Default is `sphinx`.
 - `extra_instructions`: Optional extra instructions to the tool. For example: "focus on the changes in the file X. Ignore change in ...".
 
 !!! note "Notes"
-    - The following languages are currently supported: Python, Java, C++, JavaScript, TypeScript, C#.
+    - The following languages are currently supported: `Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala`
     - This tool can also be triggered interactively by using the [`analyze`](./analyze.md) tool.

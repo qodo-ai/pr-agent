@@ -1,7 +1,7 @@
 ## Azure DevOps Pipeline
 
 You can use a pre-built Action Docker image to run PR-Agent as an Azure devops pipeline.
-add the following file to your repository under `azure-pipelines.yml`:
+Add the following file to your repository under `azure-pipelines.yml`:
 
 ```yaml
 # Opt out of CI triggers
@@ -71,7 +71,7 @@ git_provider="azure"
 ```
 
 Azure DevOps provider supports [PAT token](https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=Windows) or [DefaultAzureCredential](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-overview#authentication-in-server-environments) authentication.
-PAT is faster to create, but has build in expiration date, and will use the user identity for API calls.
+PAT is faster to create, but has built-in expiration date, and will use the user identity for API calls.
 Using DefaultAzureCredential you can use managed identity or Service principle, which are more secure and will create separate ADO user identity (via AAD) to the agent.
 
 If PAT was chosen, you can assign the value in .secrets.toml.

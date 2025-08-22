@@ -1,3 +1,5 @@
+`Platforms supported: GitHub, GitLab`
+
 ## Overview
 
 The `generate_labels` tool scans the PR code changes, and given a list of labels and their descriptions, it automatically suggests labels that match the PR code changes.
@@ -66,3 +68,7 @@ description = "Description of when AI should suggest this label"
 [custom_labels."Custom Label 2"]
 description = "Description of when AI should suggest this label 2"
 ```
+
+???+ tip "Auto-remove custom label when no longer relevant"
+    If the custom label is no longer relevant, it will be automatically removed from the PR by running the `generate_labels` tool or the `describe` tool.
+

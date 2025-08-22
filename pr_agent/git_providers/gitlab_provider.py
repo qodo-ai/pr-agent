@@ -1,16 +1,17 @@
 import difflib
 import hashlib
 import re
-from typing import Optional, Tuple
-from urllib.parse import urlparse
+from typing import Optional, Tuple, Any, Union
+from urllib.parse import urlparse, parse_qs
 
 import gitlab
 import requests
-from gitlab import GitlabGetError
+from gitlab import GitlabGetError, GitlabAuthenticationError, GitlabCreateError, GitlabUpdateError
 
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 
 from ..algo.file_filter import filter_ignored
+from ..algo.git_patch_processing import decode_if_bytes
 from ..algo.language_handler import is_valid_file
 from ..algo.utils import (clip_tokens,
                           find_line_number_of_relevant_line_in_file,
@@ -31,13 +32,34 @@ class GitLabProvider(GitProvider):
         if not gitlab_url:
             raise ValueError("GitLab URL is not set in the config file")
         self.gitlab_url = gitlab_url
+        ssl_verify = get_settings().get("GITLAB.SSL_VERIFY", True)
         gitlab_access_token = get_settings().get("GITLAB.PERSONAL_ACCESS_TOKEN", None)
         if not gitlab_access_token:
             raise ValueError("GitLab personal access token is not set in the config file")
-        self.gl = gitlab.Gitlab(
-            url=gitlab_url,
-            oauth_token=gitlab_access_token
-        )
+        # Authentication method selection via configuration
+        auth_method = get_settings().get("GITLAB.AUTH_TYPE", "oauth_token")
+        
+        # Basic validation of authentication type
+        if auth_method not in ["oauth_token", "private_token"]:
+            raise ValueError(f"Unsupported GITLAB.AUTH_TYPE: '{auth_method}'. "
+                           f"Must be 'oauth_token' or 'private_token'.")
+        
+        # Create GitLab instance based on authentication method
+        try:
+            if auth_method == "oauth_token":
+                self.gl = gitlab.Gitlab(
+                    url=gitlab_url,
+                    oauth_token=gitlab_access_token,
+                    ssl_verify=ssl_verify
+                )
+            else:  # private_token
+                self.gl = gitlab.Gitlab(
+                    url=gitlab_url,
+                    private_token=gitlab_access_token
+                )
+        except Exception as e:
+            get_logger().error(f"Failed to create GitLab instance: {e}")
+            raise ValueError(f"Unable to authenticate with GitLab: {e}")
         self.max_comment_chars = 65000
         self.id_project = None
         self.id_mr = None
@@ -50,6 +72,7 @@ class GitLabProvider(GitProvider):
         self.RE_HUNK_HEADER = re.compile(
             r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@[ ]?(.*)")
         self.incremental = incremental
+
 
     def is_supported(self, capability: str) -> bool:
         if capability in ['get_issue_comments', 'create_inline_comment', 'publish_inline_comments',
@@ -112,14 +135,50 @@ class GitLabProvider(GitProvider):
             get_logger().error(f"Could not get diff for merge request {self.id_mr}")
             raise DiffNotFoundError(f"Could not get diff for merge request {self.id_mr}") from e
 
-
     def get_pr_file_content(self, file_path: str, branch: str) -> str:
         try:
-            return self.gl.projects.get(self.id_project).files.get(file_path, branch).decode()
+            file_obj = self.gl.projects.get(self.id_project).files.get(file_path, branch)
+            content = file_obj.decode()
+            return decode_if_bytes(content)
         except GitlabGetError:
             # In case of file creation the method returns GitlabGetError (404 file not found).
             # In this case we return an empty string for the diff.
             return ''
+        except Exception as e:
+            get_logger().warning(f"Error retrieving file {file_path} from branch {branch}: {e}")
+            return ''
+
+    def create_or_update_pr_file(self, file_path: str, branch: str, contents="", message="") -> None:
+        """Create or update a file in the GitLab repository."""
+        try:
+            project = self.gl.projects.get(self.id_project)
+            
+            if not message:
+                action = "Update" if contents else "Create"
+                message = f"{action} {file_path}"
+            
+            try:
+                existing_file = project.files.get(file_path, branch)
+                existing_file.content = contents
+                existing_file.save(branch=branch, commit_message=message)
+                get_logger().debug(f"Updated file {file_path} in branch {branch}")
+            except GitlabGetError:
+                project.files.create({
+                    'file_path': file_path,
+                    'branch': branch,
+                    'content': contents,
+                    'commit_message': message
+                })
+                get_logger().debug(f"Created file {file_path} in branch {branch}")
+        except GitlabAuthenticationError as e:
+            get_logger().error(f"Authentication failed while creating/updating file {file_path} in branch {branch}: {e}")
+            raise
+        except (GitlabCreateError, GitlabUpdateError) as e:
+            get_logger().error(f"Permission denied or validation error for file {file_path} in branch {branch}: {e}")
+            raise
+        except Exception as e:
+            get_logger().exception(f"Unexpected error creating/updating file {file_path} in branch {branch}: {e}")
+            raise
 
     def get_diff_files(self) -> list[FilePatchInfo]:
         """
@@ -167,14 +226,9 @@ class GitLabProvider(GitProvider):
                 original_file_content_str = ''
                 new_file_content_str = ''
 
-            try:
-                if isinstance(original_file_content_str, bytes):
-                    original_file_content_str = bytes.decode(original_file_content_str, 'utf-8')
-                if isinstance(new_file_content_str, bytes):
-                    new_file_content_str = bytes.decode(new_file_content_str, 'utf-8')
-            except UnicodeDecodeError:
-                get_logger().warning(
-                    f"Cannot decode file {diff['old_path']} or {diff['new_path']} in merge request {self.id_mr}")
+            # Ensure content is properly decoded
+            original_file_content_str = decode_if_bytes(original_file_content_str)
+            new_file_content_str = decode_if_bytes(new_file_content_str)
 
             edit_type = EDIT_TYPE.MODIFIED
             if diff['new_file']:
@@ -529,10 +583,52 @@ class GitLabProvider(GitProvider):
         return self.id_project.split('/')[0]
 
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        return True
+        if disable_eyes:
+            return None
+        try:
+            if not self.id_mr:
+                get_logger().warning("Cannot add eyes reaction: merge request ID is not set.")
+                return None
+            
+            mr = self.gl.projects.get(self.id_project).mergerequests.get(self.id_mr)
+            comment = mr.notes.get(issue_comment_id)
+            
+            if not comment:
+                get_logger().warning(f"Comment with ID {issue_comment_id} not found in merge request {self.id_mr}.")
+                return None
+            
+            award_emoji = comment.awardemojis.create({
+                'name': 'eyes'
+            })
+            return award_emoji.id
+        except Exception as e:
+            get_logger().warning(f"Failed to add eyes reaction, error: {e}")
+            return None
 
-    def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
-        return True
+    def remove_reaction(self, issue_comment_id: int, reaction_id: str) -> bool:
+        try:
+            if not self.id_mr:
+                get_logger().warning("Cannot remove reaction: merge request ID is not set.")
+                return False
+            
+            mr = self.gl.projects.get(self.id_project).mergerequests.get(self.id_mr)
+            comment = mr.notes.get(issue_comment_id)
+
+            if not comment:
+                get_logger().warning(f"Comment with ID {issue_comment_id} not found in merge request {self.id_mr}.")
+                return False
+            
+            reactions = comment.awardemojis.list()
+            for reaction in reactions:
+                if reaction.name == reaction_id:
+                    reaction.delete()
+                    return True
+            
+            get_logger().warning(f"Reaction '{reaction_id}' not found in comment {issue_comment_id}.")
+            return False
+        except Exception as e:
+            get_logger().warning(f"Failed to remove reaction, error: {e}")
+            return False
 
     def _parse_merge_request_url(self, merge_request_url: str) -> Tuple[str, int]:
         parsed_url = urlparse(merge_request_url)
@@ -645,7 +741,7 @@ class GitLabProvider(GitProvider):
             get_logger().error(f"Repo URL: {repo_url_to_clone} is not a valid gitlab URL.")
             return None
         (scheme, base_url) = repo_url_to_clone.split("gitlab.")
-        access_token = self.gl.oauth_token
+        access_token = getattr(self.gl, 'oauth_token', None) or getattr(self.gl, 'private_token', None)
         if not all([scheme, access_token, base_url]):
             get_logger().error(f"Either no access token found, or repo URL: {repo_url_to_clone} "
                                f"is missing prefix: {scheme} and/or base URL: {base_url}.")

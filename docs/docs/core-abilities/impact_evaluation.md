@@ -1,4 +1,6 @@
-# Overview - Impact Evaluation 💎
+# Impact Evaluation 💎
+
+`Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
 Demonstrating the return on investment (ROI) of AI-powered initiatives is crucial for modern organizations.
 To address this need, Qodo Merge has developed an AI impact measurement tools and metrics, providing advanced analytics to help businesses quantify the tangible benefits of AI adoption in their PR review process.

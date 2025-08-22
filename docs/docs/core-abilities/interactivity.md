@@ -1,4 +1,4 @@
-# Interactivity
+# Interactivity 💎
 
 `Supported Git Platforms: GitHub, GitLab`
 

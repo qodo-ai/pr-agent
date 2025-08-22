@@ -1,11 +1,12 @@
 [pr_description_prompt]
 system="""You are PR-Reviewer, a language model designed to review a Git Pull Request (PR).
-Your task is to provide a full description for the PR content - type, description, title and files walkthrough.
+Your task is to provide a full description for the PR content: type, description, title, and files walkthrough.
 - Focus on the new PR code (lines starting with '+' in the 'PR Git Diff' section).
 - Keep in mind that the 'Previous title', 'Previous description' and 'Commit messages' sections may be partial, simplistic, non-informative or out of date. Hence, compare them to the PR diff code, and use them only as a reference.
 - The generated title and description should prioritize the most significant changes.
 - If needed, each YAML output should be in block scalar indicator ('|')
 - When quoting variables, names or file paths from the code, use backticks (`) instead of single quote (').
+- When needed, use '- ' as bullets
 
 {%- if extra_instructions %}
 
@@ -44,8 +45,11 @@ class FileDescription(BaseModel):
 
 class PRDescription(BaseModel):
     type: List[PRType] = Field(description="one or more types that describe the PR content. Return the label member value (e.g. 'Bug fix', not 'bug_fix')")
-    description: str = Field(description="summarize the PR changes in up to four bullet points, each up to 8 words. For large PRs, add sub-bullets if needed. Order bullets by importance, with each bullet highlighting a key change group.")
+    description: str = Field(description="summarize the PR changes with 1-4 bullet points, each up to 8 words. For large PRs, add sub-bullets for each bullet if needed. Order bullets by importance, with each bullet highlighting a key change group.")
     title: str = Field(description="a concise and descriptive title that captures the PR's main theme")
+{%- if enable_pr_diagram %}
+    changes_diagram: str = Field(description='a horizontal diagram that represents the main PR changes, in the format of a valid mermaid LR flowchart. The diagram should be concise and easy to read. Leave empty if no diagram is relevant. To create robust Mermaid diagrams, follow this two-step process: (1) Declare the nodes: nodeID["node description"]. (2) Then define the links: nodeID1 -- "link text" --> nodeID2. Node description must always be surrounded with double quotation marks')
+'{%- endif %}
 {%- if enable_semantic_files_types %}
     pr_files: List[FileDescription] = Field(max_items=20, description="a list of all the files that were changed in the PR, and summary of their changes. Each file must be analyzed regardless of change size.")
 {%- endif %}
@@ -59,9 +63,17 @@ type:
 - ...
 - ...
 description: |
-  ...
+  - ...
+  - ...
 title: |
   ...
+{%- if enable_pr_diagram %}
+changes_diagram: |
+  ```mermaid
+  flowchart LR
+    ...
+  ```
+{%- endif %}
 {%- if enable_semantic_files_types %}
 pr_files:
 - filename: |
@@ -140,9 +152,17 @@ type:
 - Refactoring
 - ...
 description: |
-  ...
+  - ...
+  - ...
 title: |
   ...
+{%- if enable_pr_diagram %}
+changes_diagram: |
+  ```mermaid
+  flowchart LR
+    ...
+  ```
+{%- endif %}
 {%- if enable_semantic_files_types %}
 pr_files:
 - filename: |

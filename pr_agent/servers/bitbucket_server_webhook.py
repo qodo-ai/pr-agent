@@ -1,6 +1,7 @@
 import ast
 import json
 import os
+import re
 from typing import List
 
 import uvicorn
@@ -40,6 +41,88 @@ def handle_request(
 
     background_tasks.add_task(inner)
 
+def should_process_pr_logic(data) -> bool:
+    try:
+        pr_data = data.get("pullRequest", {})
+        title = pr_data.get("title", "")
+        
+        from_ref = pr_data.get("fromRef", {})
+        source_branch = from_ref.get("displayId", "") if from_ref else ""
+        
+        to_ref = pr_data.get("toRef", {})
+        target_branch = to_ref.get("displayId", "") if to_ref else ""
+        
+        author = pr_data.get("author", {})
+        user = author.get("user", {}) if author else {}
+        sender = user.get("name", "") if user else ""
+        
+        repository = to_ref.get("repository", {}) if to_ref else {}
+        project = repository.get("project", {}) if repository else {}
+        project_key = project.get("key", "") if project else ""
+        repo_slug = repository.get("slug", "") if repository else ""
+        
+        repo_full_name = f"{project_key}/{repo_slug}" if project_key and repo_slug else ""
+        pr_id = pr_data.get("id", None)
+
+        # To ignore PRs from specific repositories
+        ignore_repos = get_settings().get("CONFIG.IGNORE_REPOSITORIES", [])
+        if repo_full_name and ignore_repos:
+            if any(re.search(regex, repo_full_name) for regex in ignore_repos):
+                get_logger().info(f"Ignoring PR from repository '{repo_full_name}' due to 'config.ignore_repositories' setting")
+                return False
+
+        # To ignore PRs from specific users
+        ignore_pr_users = get_settings().get("CONFIG.IGNORE_PR_AUTHORS", [])
+        if ignore_pr_users and sender:
+            if any(re.search(regex, sender) for regex in ignore_pr_users):
+                get_logger().info(f"Ignoring PR from user '{sender}' due to 'config.ignore_pr_authors' setting")
+                return False
+
+        # To ignore PRs with specific titles
+        if title:
+            ignore_pr_title_re = get_settings().get("CONFIG.IGNORE_PR_TITLE", [])
+            if not isinstance(ignore_pr_title_re, list):
+                ignore_pr_title_re = [ignore_pr_title_re]
+            if ignore_pr_title_re and any(re.search(regex, title) for regex in ignore_pr_title_re):
+                get_logger().info(f"Ignoring PR with title '{title}' due to config.ignore_pr_title setting")
+                return False
+
+        ignore_pr_source_branches = get_settings().get("CONFIG.IGNORE_PR_SOURCE_BRANCHES", [])
+        ignore_pr_target_branches = get_settings().get("CONFIG.IGNORE_PR_TARGET_BRANCHES", [])
+        if (ignore_pr_source_branches or ignore_pr_target_branches):
+            if any(re.search(regex, source_branch) for regex in ignore_pr_source_branches):
+                get_logger().info(
+                    f"Ignoring PR with source branch '{source_branch}' due to config.ignore_pr_source_branches settings")
+                return False
+            if any(re.search(regex, target_branch) for regex in ignore_pr_target_branches):
+                get_logger().info(
+                    f"Ignoring PR with target branch '{target_branch}' due to config.ignore_pr_target_branches settings")
+                return False
+
+        # Allow_only_specific_folders
+        allowed_folders = get_settings().config.get("allow_only_specific_folders", [])
+        if allowed_folders and pr_id and project_key and repo_slug:
+            from pr_agent.git_providers.bitbucket_server_provider import BitbucketServerProvider
+            bitbucket_server_url = get_settings().get("BITBUCKET_SERVER.URL", "")
+            pr_url = f"{bitbucket_server_url}/projects/{project_key}/repos/{repo_slug}/pull-requests/{pr_id}"
+            provider = BitbucketServerProvider(pr_url=pr_url)
+            changed_files = provider.get_files()
+            if changed_files:
+                # Check if ALL files are outside allowed folders
+                all_files_outside = True
+                for file_path in changed_files:
+                    if any(file_path.startswith(folder) for folder in allowed_folders):
+                        all_files_outside = False
+                        break
+                
+                if all_files_outside:
+                    get_logger().info(f"Ignoring PR because all files {changed_files} are outside allowed folders {allowed_folders}")
+                    return False
+    except Exception as e:
+        get_logger().error(f"Failed 'should_process_pr_logic': {e}")
+        return True # On exception - we continue. Otherwise, we could just end up with filtering all PRs
+    return True
+
 @router.post("/")
 async def redirect_to_webhook():
     return RedirectResponse(url="/webhook")
@@ -73,6 +156,11 @@ async def handle_webhook(background_tasks: BackgroundTasks, request: Request):
 
     if data["eventKey"] == "pr:opened":
         apply_repo_settings(pr_url)
+        if not should_process_pr_logic(data):
+            get_logger().info(f"PR ignored due to config settings", **log_context)
+            return JSONResponse(
+                status_code=status.HTTP_200_OK, content=jsonable_encoder({"message": "PR ignored by config"})
+            )
         if get_settings().config.disable_auto_feedback:  # auto commands for PR, and auto feedback is disabled
             get_logger().info(f"Auto feedback is disabled, skipping auto commands for PR {pr_url}", **log_context)
             return
