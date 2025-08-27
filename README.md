@@ -27,8 +27,8 @@
 
 | **Option** | **Best For** | **Setup Time** | **Cost** |
 |------------|--------------|----------------|----------|
-| **PR-Agent (Open Source)** | Developers who want full control, self-hosting, or custom integrations | 5-15 minutes | Free |
-| **Qodo Merge** | Teams wanting zero-setup, enhancing the open-source features, additional enterprise features, and managed hosting | 2 minutes | Free tier available |
+| **[PR-Agent (Open Source)](#-quick-start-for-pr-agent-open-source)** | Developers who want full control, self-hosting, or custom integrations | 5-15 minutes | Free |
+| **[Qodo Merge](#-try-qodo-merge-zero-setup)** | Teams wanting zero-setup, enhancing the open-source features, additional enterprise features, and managed hosting | 2 minutes | Free tier available |
 </div>
 
 [![Static Badge](https://img.shields.io/badge/Chrome-Extension-violet)](https://chromewebstore.google.com/detail/qodo-merge-ai-powered-cod/ephlnjeghhogofkifjloamocljapahnl)
@@ -131,7 +131,7 @@ pr-agent --pr_url https://github.com/owner/repo/pull/123 review
 - [BitBucket app installation](https://qodo-merge-docs.qodo.ai/installation/bitbucket/)
 - [Azure DevOps setup](https://qodo-merge-docs.qodo.ai/installation/azure/)
 
-### 💎 Want Zero-Setup? Try Qodo Merge
+### 💎 Try Qodo Merge (Zero Setup)
 
 If you prefer a hosted solution without managing infrastructure:
 
