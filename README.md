@@ -28,7 +28,7 @@
 | **Option** | **Best For** | **Setup Time** | **Cost** |
 |------------|--------------|----------------|----------|
 | **PR-Agent (Open Source)** | Developers who want full control, self-hosting, or custom integrations | 5-15 minutes | Free |
-| **Qodo Merge** | Teams wanting zero-setup, advanced features, and enterprise support | 2 minutes | Free tier available |
+| **Qodo Merge** | Teams wanting zero-setup, enhancing the open-source features, additional enterprise features, and managed hosting | 2 minutes | Free tier available |
 </div>
 
 [![Static Badge](https://img.shields.io/badge/Chrome-Extension-violet)](https://chromewebstore.google.com/detail/qodo-merge-ai-powered-cod/ephlnjeghhogofkifjloamocljapahnl)
