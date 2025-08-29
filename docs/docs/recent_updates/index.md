@@ -8,6 +8,7 @@ It also outlines our development roadmap for the upcoming three months. Please n
 === "Recent Updates"
     | Date | Feature | Description |
     |---|---|---|
+    | 2025-08-27 | **GitLab submodule diff expansion** | Optionally expand GitLab submodule updates into full diffs. ([Learn more](https://qodo-merge-docs.qodo.ai/usage-guide/additional_configurations/#expand-gitlab-submodule-diffs)) |
     | 2025-08-11 | **RAG support for GitLab** | All Qodo Merge RAG features are now available in GitLab. ([Learn more](https://qodo-merge-docs.qodo.ai/core-abilities/rag_context_enrichment/)) |
     | 2025-07-29 | **High-level Suggestions** | Qodo Merge now also provides high-level code suggestion for PRs. ([Learn more](https://qodo-merge-docs.qodo.ai/core-abilities/high_level_suggestions/)) |
     | 2025-07-20 | **PR to Ticket** | Generate tickets in your tracking systems based on PR content. ([Learn more](https://qodo-merge-docs.qodo.ai/tools/pr_to_ticket/)) |
