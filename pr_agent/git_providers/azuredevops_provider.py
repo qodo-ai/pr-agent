@@ -196,7 +196,7 @@ class AzureDevopsProvider(GitProvider):
                 return self.diff_files
 
             base_sha = self.pr.last_merge_target_commit
-            head_sha = self.pr.last_merge_source_commit
+            head_sha = self.pr.last_merge_commit
 
             # Get PR iterations
             iterations = self.azure_devops_client.get_pull_request_iterations(
