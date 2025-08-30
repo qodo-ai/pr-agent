@@ -1,19 +1,15 @@
 ## Azure DevOps Pipeline
 
-You can use a pre-built Action Docker image to run PR-Agent as an Azure devops pipeline.
+You can use a pre-built Action Docker image to run PR-Agent as an Azure DevOps pipeline.
 Add the following file to your repository under `azure-pipelines.yml`:
 
 ```yaml
 # Opt out of CI triggers
 trigger: none
 
-# Configure PR trigger
-pr:
-  branches:
-    include:
-    - '*'
-  autoCancel: true
-  drafts: false
+# NOTE for Azure Repos Git:
+# Azure Repos does not honor YAML pr: triggers. Configure Build Validation
+# via Branch Policies instead (see note below). You can safely omit pr:.
 
 stages:
 - stage: pr_agent
@@ -60,6 +56,19 @@ Note that you need to export the `azure_devops__pat` and `OPENAI_KEY` variables 
 Make sure to give pipeline permissions to the `pr_agent` variable group.
 
 > Note that Azure Pipelines lacks support for triggering workflows from PR comments. If you find a viable solution, please contribute it to our [issue tracker](https://github.com/Codium-ai/pr-agent/issues)
+
+### Azure Repos Git PR triggers and Build Validation
+
+Azure Repos Git does not use YAML `pr:` triggers for pipelines. Instead, configure Build Validation on the target branch to run the PR Agent pipeline for pull requests:
+
+1. Go to Project Settings → Repositories → Branches.
+2. Select the target branch and open Branch Policies.
+3. Under Build Validation, add a policy:
+   - Select the PR Agent pipeline (the `azure-pipelines.yml` above).
+   - Set it as Required.
+4. Remove the `pr:` section from your YAML (not needed for Azure Repos Git).
+
+This distinction applies specifically to Azure Repos Git. Other providers like GitHub and Bitbucket Cloud can use YAML-based PR triggers.
 
 ## Azure DevOps from CLI
 
