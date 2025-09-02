@@ -21,7 +21,7 @@ nav:
     - Changing a Model: 'usage-guide/changing_a_model.md'
     - Additional Configurations: 'usage-guide/additional_configurations.md'
     - Frequently Asked Questions: 'faq/index.md'
-    - 💎 Qodo Merge Models: 'usage-guide/qodo_merge_models.md'
+    - Qodo Merge Models: 'usage-guide/qodo_merge_models.md'
   - Tools:
      - 'tools/index.md'
      - Describe: 'tools/describe.md'

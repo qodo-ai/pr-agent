@@ -97,33 +97,6 @@ This will set the response language globally for all the commands to Italian.
 
 [//]: # (which divides the PR into chunks, and processes each chunk separately. With this mode, regardless of the model, no compression will be done &#40;but for large PRs, multiple model calls may occur&#41;)
 
-## Patch Extra Lines
-
-By default, around any change in your PR, git patch provides three lines of context above and below the change.
-
-```
-@@ -12,5 +12,5 @@ def func1():
- code line that already existed in the file...
- code line that already existed in the file...
- code line that already existed in the file....
--code line that was removed in the PR
-+new code line added in the PR
- code line that already existed in the file...
- code line that already existed in the file...
- code line that already existed in the file...
-```
-
-Qodo Merge will try to increase the number of lines of context, via the parameter:
-
-```
-[config]
-patch_extra_lines_before=3
-patch_extra_lines_after=1
-```
-
-Increasing this number provides more context to the model, but will also increase the token budget, and may overwhelm the model with too much information, unrelated to the actual PR code changes.
-
-If the PR is too large (see [PR Compression strategy](https://github.com/Codium-ai/pr-agent/blob/main/PR_COMPRESSION.md)), Qodo Merge may automatically set this number to 0, and will use the original git patch.
 
 ## Log Level
 
@@ -156,6 +129,27 @@ Then set the following environment variables:
 LANGSMITH_API_KEY=<api_key>
 LANGSMITH_PROJECT=<project>
 LANGSMITH_BASE_URL=<url>
+```
+
+## Bringing additional repository metadata to Qodo Merge 💎
+
+To provide Qodo Merge with additional context about your project, you can enable automatic repository metadata detection. 
+
+If you set
+
+```toml
+[config]
+add_repo_metadata = true
+```
+
+Qodo Merge will attempt to fetch repository metadata from the root directory of your PR's head branch, looking for common metadata files such as:
+[AGENT.MD](https://agents.md/), [QODO.MD](https://docs.qodo.ai/qodo-documentation/qodo-command/getting-started/setup-and-quickstart), [CLAUDE.MD](https://www.anthropic.com/engineering/claude-code-best-practices), etc.
+
+You can also specify custom filenames to search for:
+
+```toml
+[config]
+add_repo_metadata_file_list= ["file1.md", "file2.md", ...]
 ```
 
 ## Ignoring automatic commands in PRs

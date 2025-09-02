@@ -1,5 +1,5 @@
 
-The default models used by Qodo Merge (August 2025) are a combination of GPT-5 and Gemini 2.5 Pro.
+The default models used by Qodo Merge 💎 (August 2025) are a combination of GPT-5, Sonnet-4, and Gemini 2.5 Pro.
 
 ### Selecting a Specific Model
 
