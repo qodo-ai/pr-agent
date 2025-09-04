@@ -7,6 +7,14 @@ Add the following file to your repository under `azure-pipelines.yml`:
 # Opt out of CI triggers
 trigger: none
 
+# Configure PR trigger
+# pr:
+#   branches:
+#     include:
+#     - '*'
+#   autoCancel: true
+#   drafts: false
+
 # NOTE for Azure Repos Git:
 # Azure Repos does not honor YAML pr: triggers. Configure Build Validation
 # via Branch Policies instead (see note below). You can safely omit pr:.
