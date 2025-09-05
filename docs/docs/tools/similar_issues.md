@@ -27,6 +27,7 @@ Choose from the following Vector Databases:
 
 1. LanceDB
 2. Pinecone
+3. Qdrant
 
 #### Pinecone Configuration
 
@@ -39,6 +40,25 @@ environment = "..."
 ```
 
 These parameters can be obtained by registering to [Pinecone](https://app.pinecone.io/?sessionType=signup/).
+
+#### Qdrant Configuration
+
+To use Qdrant with the `similar issue` tool, add these credentials to `.secrets.toml` (or set as environment variables):
+
+```
+[qdrant]
+url = "https://YOUR-QDRANT-URL" # e.g., https://xxxxxxxx-xxxxxxxx.eu-central-1-0.aws.cloud.qdrant.io
+api_key = "..."
+```
+
+Then select Qdrant in `configuration.toml`:
+
+```
+[pr_similar_issue]
+vectordb = "qdrant"
+```
+
+You can get a free managed Qdrant instance from [Qdrant Cloud](https://cloud.qdrant.io/).
 
 ## How to use
 
