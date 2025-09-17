@@ -1,0 +1,4 @@
+root: ./docs/docs
+
+structure:
+  summary: SUMMARY.md
