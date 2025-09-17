@@ -49,27 +49,27 @@
 ## Core Abilities
 
 * [Core Abilities](core-abilities/index.md)
-* [Auto approval](core-abilities/auto_approval.md)
-* [Auto best practices](core-abilities/auto_best_practices.md)
-* [Chat on code suggestions](core-abilities/chat_on_code_suggestions.md)
-* [Chrome extension](chrome-extension/index.md)
-* [Code validation](core-abilities/code_validation.md)
-* [Dynamic context](core-abilities/dynamic_context.md)
-* [Fetching ticket context](core-abilities/fetching_ticket_context.md)
-* [High-level Suggestions](core-abilities/high_level_suggestions.md)
-* [Impact evaluation](core-abilities/impact_evaluation.md)
-* [Incremental Update](core-abilities/incremental_update.md)
-* [Interactivity](core-abilities/interactivity.md)
-* [Local and global metadata](core-abilities/metadata.md)
-* [RAG context enrichment](core-abilities/rag_context_enrichment.md)
-* [Self-reflection](core-abilities/self_reflection.md)
-* [Static code analysis](core-abilities/static_code_analysis.md)
+  * [Auto approval](core-abilities/auto_approval.md)
+  * [Auto best practices](core-abilities/auto_best_practices.md)
+  * [Chat on code suggestions](core-abilities/chat_on_code_suggestions.md)
+  * [Chrome extension](chrome-extension/index.md)
+  * [Code validation](core-abilities/code_validation.md)
+  * [Dynamic context](core-abilities/dynamic_context.md)
+  * [Fetching ticket context](core-abilities/fetching_ticket_context.md)
+  * [High-level Suggestions](core-abilities/high_level_suggestions.md)
+  * [Impact evaluation](core-abilities/impact_evaluation.md)
+  * [Incremental Update](core-abilities/incremental_update.md)
+  * [Interactivity](core-abilities/interactivity.md)
+  * [Local and global metadata](core-abilities/metadata.md)
+  * [RAG context enrichment](core-abilities/rag_context_enrichment.md)
+  * [Self-reflection](core-abilities/self_reflection.md)
+  * [Static code analysis](core-abilities/static_code_analysis.md)
 
 ## Qodo Merge CLI
 
 * [Overview](qodo-merge-cli/index.md)
-* [Installation](qodo-merge-cli/installation.md)
-* [Usage](qodo-merge-cli/usage.md)
+  * [Installation](qodo-merge-cli/installation.md)
+  * [Usage](qodo-merge-cli/usage.md)
 
 ## PR Benchmark
 
