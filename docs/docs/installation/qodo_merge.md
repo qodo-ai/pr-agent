@@ -51,43 +51,75 @@ To use Qodo Merge application on your private Bitbucket Server, you will need to
 
 ### GitLab Cloud
 
-Since GitLab platform does not support apps, installing Qodo Merge for GitLab is a bit more involved, and requires the following steps:
+Installing Qodo Merge for GitLab uses GitLab's OAuth 2.0 application system and requires the following steps:
 
-#### Step 1
+#### Step 1: Create a GitLab OAuth 2.0 Application
 
-Acquire a personal, project or group level access token. Enable the “api” scope in order to allow Qodo Merge to read pull requests, comment and respond to requests.
+Create a new OAuth 2.0 application in your GitLab instance:
 
-<figure markdown="1">
-![Step 1](https://www.codium.ai/images/pr_agent/gitlab_pro_pat.png){width=750}
-</figure>
+1. Navigate to your GitLab group or subgroup settings
+2. Go to "Applications" in the left sidebar
+3. Click on "Add new application"
+4. Fill in the application details:
+   - **Name**: You can give any name you wish (e.g., "Qodo Merge")
+   - **Redirect URI**: `https://register.oauth.app.gitlab.merge.qodo.ai/oauth/callback`
+   - **Confidential**: Check this checkbox
+   - **Scopes**: Check the "api" scope
+   
+    <figure markdown="1">
+    ![Step 1](https://www.codium.ai/images/pr_agent/gitlab_pro_oauth_app_creation_image){width=750}
+    </figure>
 
-Store the token in a safe place, you won’t be able to access it again after it was generated.
+5. Click "Save application"
+6. Copy both the **Application ID** and **Secret** - store them safely as you'll need them for the next step
 
-#### Step 2
+#### Step 2: Register Your OAuth Application
 
-Generate a shared secret and link it to the access token. Browse to [https://register.gitlab.pr-agent.codium.ai](https://register.gitlab.pr-agent.codium.ai).
-Fill in your generated GitLab token and your company or personal name in the appropriate fields and click "Submit".
+1. Browse to: <https://register.oauth.app.gitlab.merge.qodo.ai>
+2. Fill in the registration form:
+   - **Host Address**: Leave empty if using gitlab.com ([for self-hosted GitLab servers](#gitlab-server), enter your GitLab instance URL)
+   - **OAuth Application ID**: Enter the Application ID from Step 1
+   - **OAuth Application Secret**: Enter the Secret from Step 1
+   
+    <figure markdown="1">
+    ![Step 2](https://www.codium.ai/images/pr_agent/gitlab_pro_registration_form_image){width=750}
+    </figure>
 
-You should see "Success!" displayed above the Submit button, and a shared secret will be generated. Store it in a safe place, you won’t be able to access it again after it was generated.
+3. Click "Submit"
 
-#### Step 3
+#### Step 3: Authorize the OAuth Application
 
-Install a webhook for your repository or groups, by clicking “webhooks” on the settings menu. Click the “Add new webhook” button.
+If all fields show green checkmarks, a redirect popup from GitLab will appear requesting authorization for the OAuth app to access the "api" scope. Click "Authorize" to approve the application.
 
-<figure markdown="1">
-![Step 3.1](https://www.codium.ai/images/pr_agent/gitlab_pro_add_webhook.png)
-</figure>
+#### Step 4: Copy the Webhook Secret Token
 
-In the webhook definition form, fill in the following fields:
-URL: https://pro.gitlab.pr-agent.codium.ai/webhook
+If the authorization is successful, a message will appear displaying a generated webhook secret token. Copy this token and store it safely - you'll need it for the next step.
 
-Secret token: Your QodoAI key
-Trigger: Check the ‘comments’ and ‘merge request events’ boxes.
-Enable SSL verification: Check the box.
+#### Step 5: Install Webhooks
 
-<figure markdown="1">
-![Step 3.2](https://www.codium.ai/images/pr_agent/gitlab_pro_webhooks.png){width=750}
-</figure>
+Install a webhook for your repository or groups by following these steps:
+
+1. Navigate to your repository or group settings
+2. Click "Webhooks" in the settings menu
+3. Click the "Add new webhook" button
+
+    <figure markdown="1">
+    ![Step 5.1](https://www.codium.ai/images/pr_agent/gitlab_pro_add_webhook.png)
+    </figure>
+
+4. In the webhook definition form, fill in the following fields:
+   - **URL**: `https://pro.gitlab.pr-agent.codium.ai/webhook`
+   - **Secret token**: The webhook secret token generated in Step 4
+   - **Trigger**: Check the 'Comments' and 'Merge request events' boxes
+   - **Enable SSL verification**: Check this box
+
+    <figure markdown="1">
+    ![Step 5.2](https://www.codium.ai/images/pr_agent/gitlab_pro_webhooks.png){width=750}
+    </figure>
+
+5. Click "Add webhook"
+
+**Note**: Repeat this webhook installation for each group or repository that is under the group or subgroup where the OAuth 2.0 application was created in Step 1.
 
 #### Step 4
 
@@ -97,4 +129,4 @@ Open a new merge request or add a MR comment with one of Qodo Merge’s commands
 
 ### GitLab Server
 
-For [limited free usage](https://qodo-merge-docs.qodo.ai/installation/qodo_merge/#cloud-users) on private GitLab Server, the same [installation steps](#gitlab-cloud) as for GitLab Cloud apply. For unlimited usage, you will need to [contact](https://www.qodo.ai/contact/#pricing) Qodo for moving to an Enterprise account.
+For [limited free usage](https://qodo-merge-docs.qodo.ai/installation/qodo_merge/#cloud-users) on private GitLab Server, the same [installation steps](#gitlab-cloud) as for GitLab Cloud apply, aside from the [Host Address field mentioned in Step 2](#step-2-register-your-oauth-application) (where you fill in the hostname for your GitLab server, such as: https://gitlab.mycorp-inc.com). For unlimited usage, you will need to [contact](https://www.qodo.ai/contact/#pricing) Qodo for moving to an Enterprise account.
