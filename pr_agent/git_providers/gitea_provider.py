@@ -1,7 +1,7 @@
 import hashlib
 import json
 from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 import giteapy
 from giteapy.rest import ApiException
@@ -506,11 +506,11 @@ class GiteaProvider(GitProvider):
 
     def get_line_link(self, relevant_file, relevant_line_start, relevant_line_end = None) -> str:
         if relevant_line_start == -1:
-            link = f"{self.base_url}/{self.owner}/{self.repo}/src/branch/{self.get_pr_branch()}/{relevant_file}"
+            link = f"{self.base_url}/{self.owner}/{self.repo}/src/branch/{quote(self.get_pr_branch(), safe='')}/{relevant_file}"
         elif relevant_line_end:
-            link = f"{self.base_url}/{self.owner}/{self.repo}/src/branch/{self.get_pr_branch()}/{relevant_file}#L{relevant_line_start}-L{relevant_line_end}"
+            link = f"{self.base_url}/{self.owner}/{self.repo}/src/branch/{quote(self.get_pr_branch(), safe='')}/{relevant_file}#L{relevant_line_start}-L{relevant_line_end}"
         else:
-            link = f"{self.base_url}/{self.owner}/{self.repo}/src/branch/{self.get_pr_branch()}/{relevant_file}#L{relevant_line_start}"
+            link = f"{self.base_url}/{self.owner}/{self.repo}/src/branch/{quote(self.get_pr_branch(), safe='')}/{relevant_file}#L{relevant_line_start}"
 
         self.logger.info(f"Generated link: {link}")
         return link

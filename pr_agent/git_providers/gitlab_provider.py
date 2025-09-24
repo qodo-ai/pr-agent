@@ -2,7 +2,7 @@ import difflib
 import hashlib
 import re
 from typing import Optional, Tuple, Any, Union
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 import gitlab
 import requests
@@ -95,7 +95,7 @@ class GitLabProvider(GitProvider):
                 return ("", "")
         else: #Use repo git url
             repo_path = repo_git_url.split('.git')[0].split('.com/')[-1]
-        prefix = f"{self.gitlab_url}/{repo_path}/-/blob/{desired_branch}"
+        prefix = f"{self.gitlab_url}/{repo_path}/-/blob/{quote(desired_branch, safe='')}"
         suffix = "?ref_type=heads"  # gitlab cloud adds this suffix. gitlab server does not, but it is harmless.
         return (prefix, suffix)
 
@@ -640,11 +640,11 @@ class GitLabProvider(GitProvider):
 
     def get_line_link(self, relevant_file: str, relevant_line_start: int, relevant_line_end: int = None) -> str:
         if relevant_line_start == -1:
-            link = f"{self.gl.url}/{self.id_project}/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads"
+            link = f"{self.gl.url}/{self.id_project}/-/blob/{quote(self.mr.source_branch, safe='')}/{relevant_file}?ref_type=heads"
         elif relevant_line_end:
-            link = f"{self.gl.url}/{self.id_project}/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads#L{relevant_line_start}-{relevant_line_end}"
+            link = f"{self.gl.url}/{self.id_project}/-/blob/{quote(self.mr.source_branch, safe='')}/{relevant_file}?ref_type=heads#L{relevant_line_start}-{relevant_line_end}"
         else:
-            link = f"{self.gl.url}/{self.id_project}/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads#L{relevant_line_start}"
+            link = f"{self.gl.url}/{self.id_project}/-/blob/{quote(self.mr.source_branch, safe='')}/{relevant_file}?ref_type=heads#L{relevant_line_start}"
         return link
 
 
@@ -660,7 +660,7 @@ class GitLabProvider(GitProvider):
 
             if absolute_position != -1:
                 # link to right file only
-                link = f"{self.gl.url}/{self.id_project}/-/blob/{self.mr.source_branch}/{relevant_file}?ref_type=heads#L{absolute_position}"
+                link = f"{self.gl.url}/{self.id_project}/-/blob/{quote(self.mr.source_branch, safe='')}/{relevant_file}?ref_type=heads#L{absolute_position}"
 
                 # # link to diff
                 # sha_file = hashlib.sha1(relevant_file.encode('utf-8')).hexdigest()

@@ -8,7 +8,7 @@ import traceback
 import json
 from datetime import datetime
 from typing import Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 from github.Issue import Issue
 from github import AppAuthentication, Auth, Github, GithubException
@@ -138,7 +138,7 @@ class GithubProvider(GitProvider):
             get_logger().error(f"Unable to get canonical url parts since missing context (PR or explicit git url)")
             return ("", "")
 
-        prefix = f"{scheme_and_netloc}/{owner}/{repo}/blob/{desired_branch}"
+        prefix = f"{scheme_and_netloc}/{owner}/{repo}/blob/{quote(desired_branch, safe='')}"
         suffix = ""  # github does not add a suffix
         return (prefix, suffix)
 

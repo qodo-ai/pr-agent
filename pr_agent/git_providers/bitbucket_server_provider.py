@@ -3,7 +3,7 @@ import re
 
 from packaging.version import parse as parse_version
 from typing import Optional, Tuple
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urlparse, quote
 
 from atlassian.bitbucket import Bitbucket
 from requests.exceptions import HTTPError
@@ -81,7 +81,7 @@ class BitbucketServerProvider(GitProvider):
             get_logger().error(f"workspace_name or project_name not found in context, either git url: {repo_git_url} or uninitialized workspace/project.")
             return ("", "")
         prefix = f"{self.bitbucket_server_url}/projects/{workspace_name}/repos/{project_name}/browse"
-        suffix = f"?at=refs%2Fheads%2F{desired_branch}"
+        suffix = f"?at=refs%2Fheads%2F{quote(desired_branch, safe='')}"
         return (prefix, suffix)
 
     def get_repo_settings(self):
