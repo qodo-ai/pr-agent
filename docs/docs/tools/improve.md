@@ -488,7 +488,6 @@ Available options:
 
 We recommend starting with `regular` mode, then exploring `exhaustive` mode, which can provide more comprehensive suggestions and enhanced bug detection.
 
-
 ### Self-review
 
 > `💎 feature. Platforms supported: GitHub, GitLab`
@@ -555,6 +554,36 @@ This approach has two main benefits:
 - Quality: By processing smaller chunks, the AI can maintain higher quality suggestions, as larger contexts tend to decrease AI performance.
 
 Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 lines of code), Qodo Merge will be able to process the entire code in a single call.
+
+#### Maximum coverage configuration
+> `💎 feature`
+
+For critical code reviews requiring maximum coverage, you can combine several settings to achieve a "super exhaustive" analysis. This is not a built-in mode, but a configuration recipe for advanced use cases.
+
+```toml
+# Recipe for maximum suggestion comprehensiveness
+[pr_code_suggestions]
+suggestions_depth = "exhaustive"
+enable_suggestion_type_reuse = true
+num_code_suggestions_per_chunk = 100
+num_best_practice_suggestions = 100
+```
+
+This configuration is recommended for:
+
+- Critical code reviews requiring maximum coverage
+- Final reviews before major releases
+- Code quality audits
+
+???- warning "Performance considerations"
+
+    This configuration will significantly increase:
+
+    - Analysis time and API costs
+    - Number of suggestions generated (potentially overwhelming)
+    - Comment volume in your PR
+    
+    Use this configuration judiciously and consider your team's review capacity.
 
 ## Configuration options
 
