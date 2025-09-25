@@ -77,7 +77,7 @@ Create a new OAuth 2.0 application in your GitLab instance:
 
 1. Browse to: <https://register.oauth.app.gitlab.merge.qodo.ai>
 2. Fill in the registration form:
-   - **Host Address**: Leave empty if using gitlab.com ([for self-hosted GitLab servers](#gitlab-server), enter your GitLab instance URL)
+   - **Host Address**: Leave empty if using gitlab.com ([for self-hosted GitLab servers](#gitlab-server), enter your GitLab base URL including scheme (e.g., https://gitlab.mycorp-inc.com) without trailing slash. Do not include paths or query strings.
    - **OAuth Application ID**: Enter the Application ID from Step 1
    - **OAuth Application Secret**: Enter the Secret from Step 1 
    
