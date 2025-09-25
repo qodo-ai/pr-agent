@@ -67,7 +67,7 @@ Create a new OAuth 2.0 application in your GitLab instance:
    - **Scopes**: Check the "api" scope
    
     <figure markdown="1">
-    ![Step 1](https://www.codium.ai/images/pr_agent/gitlab_pro_oauth_app_creation_image){width=750}
+    ![Step 1](https://www.codium.ai/images/pr_agent/gitlab_pro_oauth_app_creation_image.png){width=750}
     </figure>
 
 5. Click "Save application"
@@ -79,10 +79,10 @@ Create a new OAuth 2.0 application in your GitLab instance:
 2. Fill in the registration form:
    - **Host Address**: Leave empty if using gitlab.com ([for self-hosted GitLab servers](#gitlab-server), enter your GitLab instance URL)
    - **OAuth Application ID**: Enter the Application ID from Step 1
-   - **OAuth Application Secret**: Enter the Secret from Step 1
+   - **OAuth Application Secret**: Enter the Secret from Step 1 
    
     <figure markdown="1">
-    ![Step 2](https://www.codium.ai/images/pr_agent/gitlab_pro_registration_form_image){width=750}
+    ![Step 2](https://www.codium.ai/images/pr_agent/gitlab_pro_registration_form_image.png){width=750}
     </figure>
 
 3. Click "Submit"
@@ -121,9 +121,7 @@ Install a webhook for your repository or groups by following these steps:
 
 **Note**: Repeat this webhook installation for each group or repository that is under the group or subgroup where the OAuth 2.0 application was created in Step 1.
 
-#### Step 4
-
-You’re all set!
+#### Step 6: You’re all set!
 
 Open a new merge request or add a MR comment with one of Qodo Merge’s commands such as /review, /describe or /improve.
 
