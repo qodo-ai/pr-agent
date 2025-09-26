@@ -70,10 +70,21 @@ async def relay(record: Dict[str, Any]):
 
     text = _to_slack_text(record)
 
-    body = {
-        "text": text,
-        "mrkdwn": True,
-    }
+    # If using a Slack Workflow "triggers" URL, the workflow expects top-level fields
+    # that match the configured variables in the Workflow (e.g., "markdown", "payload").
+    # Otherwise, for Incoming Webhooks ("services" URL), use the standard {text, mrkdwn}.
+    if "hooks.slack.com/triggers/" in slack_url:
+        body = {
+            # Map our computed text to the workflow variable named "markdown"
+            "markdown": text,
+            # Provide original payload if the workflow defines a variable for it
+            "payload": record.get("payload", {}),
+        }
+    else:
+        body = {
+            "text": text,
+            "mrkdwn": True,
+        }
 
     try:
         resp = requests.post(slack_url, json=body, timeout=8)
