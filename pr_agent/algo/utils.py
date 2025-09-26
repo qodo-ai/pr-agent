@@ -1264,6 +1264,63 @@ def github_action_output(output_data: dict, key_name: str):
     return
 
 
+# Generic push mechanism to external sinks (provider-agnostic)
+# Config section: [push_outputs]
+#   enable = false
+#   channels = ["stdout"]  # supported: "stdout", "file", "webhook"
+#   file_path = "pr-agent-outputs/reviews.jsonl"
+#   webhook_url = ""
+#   presentation = "markdown"  # reserved for future presentation controls
+
+def push_outputs(message_type: str, payload: dict | None = None, markdown: str | None = None) -> None:
+    try:
+        cfg = get_settings().get('push_outputs', {}) or {}
+        if not cfg.get('enable', False):
+            return
+
+        channels = cfg.get('channels', []) or []
+        record = {
+            "type": message_type,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "payload": payload or {},
+        }
+        if markdown is not None:
+            record["markdown"] = markdown
+
+        # stdout channel
+        if "stdout" in channels:
+            try:
+                print(json.dumps(record, ensure_ascii=False))
+            except Exception:
+                # Do not fail the flow if stdout printing fails
+                get_logger().warning("Failed to print push_outputs to stdout")
+
+        # file channel (append JSONL)
+        if "file" in channels:
+            try:
+                file_path = cfg.get('file_path', 'pr-agent-outputs/reviews.jsonl')
+                folder = os.path.dirname(file_path)
+                if folder:
+                    os.makedirs(folder, exist_ok=True)
+                with open(file_path, 'a', encoding='utf-8') as fh:
+                    fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+            except Exception as e:
+                get_logger().warning(f"Failed to write push_outputs to file: {e}")
+
+        # webhook channel (generic HTTP POST)
+        if "webhook" in channels:
+            url = cfg.get('webhook_url', '')
+            if url:
+                try:
+                    headers = {'Content-Type': 'application/json'}
+                    requests.post(url, data=json.dumps(record), headers=headers, timeout=5)
+                except Exception as e:
+                    get_logger().warning(f"Failed to POST push_outputs to webhook: {e}")
+    except Exception as e:
+        get_logger().error(f"push_outputs failed: {e}")
+    return
+
+
 def show_relevant_configurations(relevant_section: str) -> str:
     skip_keys = ['ai_disclaimer', 'ai_disclaimer_title', 'ANALYTICS_FOLDER', 'secret_provider', "skip_keys", "app_id", "redirect",
                       'trial_prefix_message', 'no_eligible_message', 'identity_provider', 'ALLOWED_REPOS','APP_NAME']
