@@ -39,6 +39,13 @@ Generate the token and add it to .secret.toml under `bitbucket_server` section
 bearer_token = "<your key>"
 ```
 
+Don't forget to also set the URL of your Bitbucket Server instance (either in `.secret.toml` or in `configuration.toml`):
+
+```toml
+[bitbucket_server]
+url = "<full URL to your Bitbucket instance, e.g.: https://git.bitbucket.com>"
+```
+
 ### Run it as CLI
 
 Modify `configuration.toml`:
@@ -46,6 +53,8 @@ Modify `configuration.toml`:
 ```toml
 git_provider="bitbucket_server"
 ```
+
+
 
 and pass the Pull request URL:
 
