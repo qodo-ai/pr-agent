@@ -877,14 +877,18 @@ def try_fix_yaml(response_text: str,
             response_text_lines_copy[i] = ' ' + line[1:]
             modified = True
 
+    # normalize lines starting with '-'. Distinguish real YAML list items from diff deletions.
     for i, line in enumerate(response_text_lines_copy):
         if not line.startswith('-'):
             continue
+
         remainder = line[1:]
         if line.startswith('- '):
             second_char = remainder[1] if len(remainder) > 1 else ''
             if second_char and second_char not in (' ', '\t', '+', '-'):
-                continue
+                continue # real list item → keep as-is
+
+        # treat it as a diff "removed" marker inside block content
         cleaned = remainder
         while cleaned and cleaned[0] in ('+', '-'):
             cleaned = cleaned[1:]
