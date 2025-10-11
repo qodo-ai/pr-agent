@@ -17,9 +17,9 @@
 
 ## Open-Source AI-Powered Code Review Tool
 
-**PR-Agent** is a free, open-source tool that provides AI-powered code review and PR assistance. Run it locally, on your CI/CD, or self-host it.
+**PR-Agent** is an open-source, AI-powered code review agent. It is the legacy project from which Qodo Merge 💎, a separate commercial product, originated. PR-Agent is maintained by the community as a gift to the community. We are looking for external maintainers to help shape its future; please contact us if you are interested.
 
-**[Qodo Merge](https://qodo-merge-docs.qodo.ai/overview/pr_agent_pro/) 💎** is the hosted, enterprise version with additional features, zero-setup, and priority support.
+**[Qodo Merge](https://qodo-merge-docs.qodo.ai/overview/pr_agent_pro/) 💎** is a separate, enterprise-grade product with its own distinct features, zero-setup, and priority support.
 
 ---
 
@@ -56,12 +56,14 @@
 
 ## PR-Agent vs Qodo Merge
 
+PR-Agent and Qodo Merge are now two completely different products that share a common history. PR-Agent is the original, legacy open-source project. Qodo Merge was initially built upon PR-Agent but has since evolved into a distinct product with a different feature set.
+
 ### PR-Agent (This Repository) - Open Source
 
 ✅ **What you get:**
 - Complete source code access and customization
 - Self-hosted deployment options
-- All core AI review tools (`/describe`, `/review`, `/improve`, `/ask`)
+- Core AI review tools (`/describe`, `/review`, `/improve`, `/ask`)
 - Support for GitHub, GitLab, BitBucket, Azure DevOps
 - CLI usage for local development
 - Free forever
@@ -72,12 +74,12 @@
 - Updates and maintenance
 - Configuration management
 
-### Qodo Merge - Hosted Solution
+### Qodo Merge - A Separate Product
 
 ✅ **What you get (everything above plus):**
 - Zero-setup installation (2-minute GitHub app install)
 - Managed infrastructure and automatic updates
-- Advanced features: CI feedback, code suggestions tracking, custom prompts
+- Advanced features: CI feedback, code suggestions tracking, compliance (rules), custom prompts
 - Priority support and feature requests
 - Enhanced privacy with zero data retention
 - Free tier: 75 PR reviews/month per organization
@@ -346,7 +348,7 @@ It does not have 'edit' access to your repo, for example, so it cannot update th
 
 ## Qodo Merge 💎
 
-[Qodo Merge](https://www.qodo.ai/pricing/) is the hosted version of PR-Agent with additional enterprise features.
+[Qodo Merge](https://www.qodo.ai/pricing/) is a separate, enterprise-grade product that originated from the open-source PR-Agent.
 
 ### Key Differences from Open Source PR-Agent:
 
