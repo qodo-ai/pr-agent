@@ -32,7 +32,9 @@ class LiteLLMAIHandler(BaseAiHandler):
         self.azure = False
         self.api_base = None
         self.repetition_penalty = None
-        
+
+        if get_settings().get("LITELLM.DISABLE_AIOHTTP", False):
+            litellm.disable_aiohttp_transport = True
         if get_settings().get("OPENAI.KEY", None):
             openai.api_key = get_settings().openai.key
             litellm.openai_key = get_settings().openai.key

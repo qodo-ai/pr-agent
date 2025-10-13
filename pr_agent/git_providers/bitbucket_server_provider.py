@@ -18,7 +18,7 @@ from ..algo.utils import (find_line_number_of_relevant_line_in_file,
                           load_large_diff)
 from ..config_loader import get_settings
 from ..log import get_logger
-from .git_provider import GitProvider
+from .git_provider import GitProvider, get_git_ssl_env
 
 
 class BitbucketServerProvider(GitProvider):
@@ -561,5 +561,7 @@ class BitbucketServerProvider(GitProvider):
         cli_args = shlex.split(f"git clone -c http.extraHeader='Authorization: Bearer {bearer_token}' "
                                f"--filter=blob:none --depth 1 {repo_url} {dest_folder}")
 
-        subprocess.run(cli_args, check=True,  # check=True will raise an exception if the command fails
+        ssl_env = get_git_ssl_env()
+
+        subprocess.run(cli_args, env=ssl_env, check=True,  # check=True will raise an exception if the command fails
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=operation_timeout_in_seconds)
