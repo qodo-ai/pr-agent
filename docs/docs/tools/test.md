@@ -20,7 +20,7 @@ The tool will generate tests for the selected component (if no component is stat
 (Example taken from [here](https://github.com/Codium-ai/pr-agent/pull/598#issuecomment-1913679429)):
 
 !!! note "Notes"
-    - The following languages are currently supported: `Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala`
+    - The following languages are currently supported: `Python, Java, C++, JavaScript, TypeScript, C#, Go, Kotlin`
     - This tool can also be triggered interactively by using the [`analyze`](./analyze.md) tool.
 
 ## Configuration options

@@ -8,7 +8,7 @@ By combining static code analysis with LLM capabilities, Qodo Merge can provide 
 It scans the PR code changes, finds all the code components (methods, functions, classes) that changed, and enables to interactively generate tests, docs, code suggestions and similar code search for each component.
 
 !!! note "Language that are currently supported:"
-    Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala
+    Python, Java, C++, JavaScript, TypeScript, C#, Go, Kotlin
 
 ## Capabilities
 
