@@ -116,7 +116,15 @@ class GitProvider(ABC):
         # #Repo.clone_from(repo_url, dest_folder)
         # , but with throwing an exception upon timeout.
         # Note: This can only be used in context that supports using pipes.
-        ssl_env = get_git_ssl_env()
+        try:
+            ssl_env = get_git_ssl_env()
+        except Exception as e:
+            get_logger().exception(
+                "Failed to prepare SSL environment for git operations, falling back to default env",
+                artifact={"error": e}
+            )
+            ssl_env = os.environ.copy()
+
         subprocess.run([
             "git", "clone",
             "--filter=blob:none",
