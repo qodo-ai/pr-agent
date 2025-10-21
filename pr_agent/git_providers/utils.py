@@ -35,8 +35,22 @@ def apply_repo_settings(pr_url):
                 try:
                     fd, repo_settings_file = tempfile.mkstemp(suffix='.toml')
                     os.write(fd, repo_settings)
-                    new_settings = Dynaconf(settings_files=[repo_settings_file])
+
+                    try:
+                        new_settings = Dynaconf(settings_files=[repo_settings_file],
+                                                # Disable all dynamic loading features
+                                                load_dotenv=False,  # Don't load .env files
+                                                merge_enabled=False,  # Don't allow merging from other sources
+                                                )
+                    except TypeError:
+                        # Fallback for older Dynaconf versions that don't support these parameters
+                        new_settings = Dynaconf(settings_files=[repo_settings_file])
+
                     for section, contents in new_settings.as_dict().items():
+                        if not contents:
+                            # Skip excluded items, such as forbidden to load env.
+                            get_logger().debug(f"Skipping a section: {section} which is not allowed")
+                            continue
                         section_dict = copy.deepcopy(get_settings().as_dict().get(section, {}))
                         for key, value in contents.items():
                             section_dict[key] = value
