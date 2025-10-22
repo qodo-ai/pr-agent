@@ -43,11 +43,13 @@ def apply_repo_settings(pr_url):
                                                 merge_enabled=False,  # Don't allow merging from other sources
                                                 )
                     except TypeError:
+                        import traceback
                         # Fallback for older Dynaconf versions that don't support these parameters
                         get_logger().warning(
                             "Your Dynaconf version does not support disabled 'load_dotenv'/'merge_enabled' parameters. "
                             "Loading repo settings without these security features. "
-                            "Please upgrade Dynaconf for better security.")
+                            "Please upgrade Dynaconf for better security.",
+                            artifact={"error": e, "traceback": traceback.format_exc()})
                         new_settings = Dynaconf(settings_files=[repo_settings_file])
 
                     for section, contents in new_settings.as_dict().items():
