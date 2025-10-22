@@ -636,7 +636,7 @@ This configuration is recommended for:
       </tr>
       <tr>
         <td><b>enable_chat_text</b></td>
-        <td>If set to true, the tool will display a reference to the PR chat in the comment. Default is true.</td>
+        <td>If set to true, the tool will display a reference to the PR chat in the comment. Default is false.</td>
       </tr>
       <tr>
         <td><b>publish_output_no_suggestions</b></td>
