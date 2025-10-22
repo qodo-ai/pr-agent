@@ -16,5 +16,5 @@ An example result:
 
 ![Analyze 1](https://codium.ai/images/pr_agent/analyze_1.png){width=750}
 
-!!! note "Language that are currently supported:"
-    Python, Java, C++, JavaScript, TypeScript, C#, Go, Ruby, PHP, Rust, Kotlin, Scala
+!!! note "Languages that are currently supported:"
+    Python, Java, C++, JavaScript, TypeScript, C#, Go, Kotlin
