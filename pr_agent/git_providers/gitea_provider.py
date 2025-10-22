@@ -1,4 +1,3 @@
-import hashlib
 import json
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
@@ -31,15 +30,15 @@ class GiteaProvider(GitProvider):
         self.pr_url = ""
         self.issue_url = ""
 
-        gitea_access_token = get_settings().get("GITEA.PERSONAL_ACCESS_TOKEN", None)
-        if not gitea_access_token:
+        self.gitea_access_token = get_settings().get("GITEA.PERSONAL_ACCESS_TOKEN", None)
+        if not self.gitea_access_token:
             self.logger.error("Gitea access token not found in settings.")
             raise ValueError("Gitea access token not found in settings.")
 
         self.repo_settings = get_settings().get("GITEA.REPO_SETTING", None)
         configuration = giteapy.Configuration()
         configuration.host = "{}/api/v1".format(self.base_url)
-        configuration.api_key['Authorization'] = f'token {gitea_access_token}'
+        configuration.api_key['Authorization'] = f'token {self.gitea_access_token}'
 
         if get_settings().get("GITEA.SKIP_SSL_VERIFICATION", False):
             configuration.verify_ssl = False
@@ -223,6 +222,19 @@ class GiteaProvider(GitProvider):
     def get_issue_url(self) -> str:
         return self.issue_url
 
+    def get_latest_commit_url(self) -> str:
+        return self.last_commit.html_url
+
+    def get_comment_url(self, comment) -> str:
+        return comment.html_url
+
+    def publish_persistent_comment(self, pr_comment: str,
+                                   initial_header: str,
+                                   update_header: bool = True,
+                                   name='review',
+                                   final_update_message=True):
+        self.publish_persistent_comment_full(pr_comment, initial_header, update_header, name, final_update_message)
+
     def publish_comment(self, comment: str,is_temporary: bool = False) -> None:
         """Publish a comment to the pull request"""
         if is_temporary and not get_settings().config.publish_output_progress:
@@ -308,7 +320,7 @@ class GiteaProvider(GitProvider):
 
         if not response:
             self.logger.error("Failed to publish inline comment")
-            return None
+            return
 
         self.logger.info("Inline comment published")
 
@@ -515,6 +527,13 @@ class GiteaProvider(GitProvider):
         self.logger.info(f"Generated link: {link}")
         return link
 
+    def get_pr_id(self):
+        try:
+            pr_id = f"{self.repo}/{self.pr_number}"
+            return pr_id
+        except:
+            return ""
+
     def get_files(self) -> List[Dict[str, Any]]:
         """Get all files in the PR"""
         return [file.get("filename","") for file in self.git_files]
@@ -551,7 +570,7 @@ class GiteaProvider(GitProvider):
         if not self.pr:
             self.logger.error("Failed to get PR branch")
             return ""
-        
+
         if not self.pr.head:
             self.logger.error("PR head not found")
             return ""
@@ -610,6 +629,9 @@ class GiteaProvider(GitProvider):
     def is_supported(self, capability) -> bool:
         """Check if the provider is supported"""
         return True
+
+    def get_git_repo_url(self, issues_or_pr_url: str) -> str:
+        return f"{self.base_url}/{self.owner}/{self.repo}.git" #base_url / <OWNER>/<REPO>.git
 
     def publish_description(self, pr_title: str, pr_body: str) -> None:
         """Publish PR description"""
@@ -685,6 +707,35 @@ class GiteaProvider(GitProvider):
                 continue
             self.logger.info(f"Removed initial comment: {comment.get('comment_id')}")
 
+    #Clone related
+    def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        #For example, to clone:
+        #https://github.com/Codium-ai/pr-agent-pro.git
+        #Need to embed inside the github token:
+        #https://<token>@github.com/Codium-ai/pr-agent-pro.git
+
+        gitea_token = self.gitea_access_token
+        gitea_base_url = self.base_url
+        scheme = gitea_base_url.split("://")[0]
+        scheme += "://"
+        if not all([gitea_token, gitea_base_url]):
+            get_logger().error("Either missing auth token or missing base url")
+            return None
+        base_url = gitea_base_url.split(scheme)[1]
+        if not base_url:
+            get_logger().error(f"Base url: {gitea_base_url} has an empty base url")
+            return None
+        if base_url not in repo_url_to_clone:
+            get_logger().error(f"url to clone: {repo_url_to_clone} does not contain {base_url}")
+            return None
+        repo_full_name = repo_url_to_clone.split(base_url)[-1]
+        if not repo_full_name:
+            get_logger().error(f"url to clone: {repo_url_to_clone} is malformed")
+            return None
+
+        clone_url = scheme
+        clone_url += f"{gitea_token}@{base_url}{repo_full_name}"
+        return clone_url
 
 class RepoApi(giteapy.RepositoryApi):
     def __init__(self, client: giteapy.ApiClient):
@@ -693,7 +744,7 @@ class RepoApi(giteapy.RepositoryApi):
         self.logger = get_logger()
         super().__init__(client)
 
-    def create_inline_comment(self, owner: str, repo: str, pr_number: int, body : str ,commit_id : str, comments: List[Dict[str, Any]]) -> None:
+    def create_inline_comment(self, owner: str, repo: str, pr_number: int, body : str ,commit_id : str, comments: List[Dict[str, Any]]):
         body = {
             "body": body,
             "comments": comments,
