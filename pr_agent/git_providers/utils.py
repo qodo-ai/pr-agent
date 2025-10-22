@@ -42,7 +42,7 @@ def apply_repo_settings(pr_url):
                                                 load_dotenv=False,  # Don't load .env files
                                                 merge_enabled=False,  # Don't allow merging from other sources
                                                 )
-                    except TypeError:
+                    except TypeError as e:
                         import traceback
                         # Fallback for older Dynaconf versions that don't support these parameters
                         get_logger().warning(
