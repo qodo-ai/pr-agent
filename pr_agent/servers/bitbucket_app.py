@@ -83,16 +83,79 @@ def _get_username(data):
     return ""
 
 
+async def _validate_time_from_last_commit_to_pr_update(data: dict) -> bool:
+    is_valid_push = False
+    try:
+        data_inner = data.get('data', {})
+        if not data_inner:
+            get_logger().error("No data found in the webhook payload")
+            return True
+        pull_request = data_inner.get('pullrequest', {})
+        commits_api = pull_request.get('links', {}).get('commits', {}).get('href')
+        if not commits_api:
+            return False
+        if not pull_request.get('updated_on'):
+            return False
+        bearer_token = context.get('bitbucket_bearer_token')
+        headers = {
+            'Authorization': f'Bearer {bearer_token}',
+            'Accept': 'application/json'
+        }
+        response = requests.get(commits_api, headers=headers)
+        if response.status_code != 200:
+            get_logger().warning(f"Bitbucket commits API returned {response.status_code} for {commits_api}")
+            return False
+
+        username =_get_username(data)
+        commits_data = response.json() or {}
+        values = commits_data.get('values') or []
+        if (not values or not isinstance(values, list) or not values[0].get('author') or not values[0]['author'].get('user')
+                or not values[0]['author']['user'].get('display_name')):
+            get_logger().warning("No commits returned for pull request or one of the required fields missing; skipping push validation",
+                                 artifact={'values': values})
+            return False
+        commit_username = commits_data['values'][0]['author']['user']['display_name']
+        if username != commit_username:
+            get_logger().warning(f"Mismatch in username {username} vs. commit_username {commit_username}")
+            return False
+
+        time_pr_updated = pull_request['updated_on']
+        time_last_commit = commits_data['values'][0]['date']
+        from datetime import datetime
+        ts1 = datetime.fromisoformat(time_pr_updated)
+        ts2 = datetime.fromisoformat(time_last_commit)
+        diff = (ts1 - ts2).total_seconds()
+        max_delta_seconds = 15
+        if diff > 0 and diff < max_delta_seconds:
+            is_valid_push = True
+        else:
+            get_logger().debug(f"Too much time passed since last commit",
+                               artifact={'updated': time_pr_updated, 'last_commit': time_last_commit})
+    except Exception as e:
+        get_logger().exception(f"Failed to validate time difference between last commit and PR update",
+                               artifact={'error': e, 'data': data})
+    return is_valid_push
+
 async def _perform_commands_bitbucket(commands_conf: str, agent: PRAgent, api_url: str, log_context: dict, data: dict):
     apply_repo_settings(api_url)
     if commands_conf == "pr_commands" and get_settings().config.disable_auto_feedback:  # auto commands for PR, and auto feedback is disabled
         get_logger().info(f"Auto feedback is disabled, skipping auto commands for PR {api_url=}")
         return
+    if commands_conf == "push_commands":
+        if not get_settings().get("bitbucket_app.handle_push_trigger"):
+            get_logger().info(
+                "Bitbucket push trigger handling disabled via 'bitbucket_app.handle_push_trigger'; skipping push commands")
+            return
     if data.get("event", "") == "pullrequest:created":
         if not should_process_pr_logic(data):
             return
     commands = get_settings().get(f"bitbucket_app.{commands_conf}", {})
     get_settings().set("config.is_auto_command", True)
+    if commands_conf == "push_commands":
+        is_valid_push = await _validate_time_from_last_commit_to_pr_update(data)
+        if not is_valid_push:
+            get_logger().info(f"Bitbucket skipping 'pullrequest:updated' for push commands")
+            return
     for command in commands:
         try:
             split_command = command.split(" ")
@@ -219,7 +282,19 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
                         if get_identity_provider().verify_eligibility("bitbucket",
                                                         sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
                             if get_settings().get("bitbucket_app.pr_commands"):
-                                await _perform_commands_bitbucket("pr_commands", PRAgent(), pr_url, log_context, data)
+                                await _perform_commands_bitbucket("pr_commands", agent, pr_url, log_context, data)
+            elif event == "pullrequest:updated": # PR updated, might be from a push (we will validate this later)
+                pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
+                log_context["api_url"] = pr_url
+                log_context["event"] = "pull_request"
+                if pr_url:
+                    with get_logger().contextualize(**log_context):
+                        apply_repo_settings(pr_url)
+                        if get_identity_provider().verify_eligibility("bitbucket",
+                                                        sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
+
+                            if get_settings().get("bitbucket_app.push_commands"):
+                                await _perform_commands_bitbucket("push_commands", agent, pr_url, log_context, data)
             elif event == "pullrequest:comment_created":
                 pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
                 log_context["api_url"] = pr_url
