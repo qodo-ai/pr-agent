@@ -38,10 +38,17 @@ def apply_repo_settings(pr_url):
                     os.write(fd, repo_settings)
 
                     try:
+                        dynconf_kwargs = {'core_loaders': [],  # DISABLE default loaders, otherwise will load toml files more than once.
+                             'loaders': ['pr_agent.custom_merge_loader'],
+                             # Use a custom loader to merge sections, but overwrite their overlapping values. Don't involve ENV variables.
+                             'merge_enabled': True  # Merge multiple files; ensures [XYZ] sections only overwrite overlapping keys, not whole sections.
+                         }
+
                         new_settings = Dynaconf(settings_files=[repo_settings_file],
                                                 # Disable all dynamic loading features
                                                 load_dotenv=False,  # Don't load .env files
-                                                merge_enabled=False,  # Don't allow merging from other sources
+                                                envvar_prefix=False,  # Drop DYNACONF for env. variables
+                                                **dynconf_kwargs
                                                 )
                     except TypeError as e:
                         # Fallback for older Dynaconf versions that don't support these parameters
