@@ -144,7 +144,7 @@ async def _perform_commands_bitbucket(commands_conf: str, agent: PRAgent, api_ur
     if commands_conf == "push_commands":
         if not get_settings().get("bitbucket_app.handle_push_trigger"):
             get_logger().info(
-                "Bitbucket push trigger handling disabled via 'bitbucket_app.handle_push_trigger'; skipping push commands")
+                "Bitbucket push trigger handling disabled via config; skipping push commands")
             return
     if data.get("event", "") == "pullrequest:created":
         if not should_process_pr_logic(data):
@@ -278,7 +278,6 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
                 log_context["event"] = "pull_request"
                 if pr_url:
                     with get_logger().contextualize(**log_context):
-                        apply_repo_settings(pr_url)
                         if get_identity_provider().verify_eligibility("bitbucket",
                                                         sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
                             if get_settings().get("bitbucket_app.pr_commands"):
@@ -289,7 +288,6 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
                 log_context["event"] = "pull_request"
                 if pr_url:
                     with get_logger().contextualize(**log_context):
-                        apply_repo_settings(pr_url)
                         if get_identity_provider().verify_eligibility("bitbucket",
                                                         sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
 
