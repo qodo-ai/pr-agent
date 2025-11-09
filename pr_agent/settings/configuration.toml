@@ -290,13 +290,17 @@ push_commands = [
 # Configure SSL validation for GitLab. Can be either set to the path of a custom CA or disabled entirely.
 # ssl_verify = true
 
-[gitea_app]
+[gitea]
 url = "https://gitea.com"
 handle_push_trigger = false
 pr_commands = [
     "/describe",
     "/review",
     "/improve",
+]
+push_commands = [
+    "/describe",
+    "/review",
 ]
 
 [bitbucket_app]
