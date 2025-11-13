@@ -14,7 +14,7 @@ setup_logger(log_level)
 def set_parser():
     parser = argparse.ArgumentParser(description='AI based pull request analyzer', usage=
     """\
-    Usage: cli.py --pr-url=<URL on supported git hosting service> <command> [<args>].
+    Usage: cli.py --pr_url=<URL on supported git hosting service> <command> [<args>].
     For example:
     - cli.py --pr_url=... review
     - cli.py --pr_url=... describe
