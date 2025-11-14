@@ -12,6 +12,7 @@ def load(obj, env=None, silent=True, key=None, filename=None):
     - Replaces list and dict fields instead of appending/updating (non-default Dynaconf behavior).
     - Enforces several security checks (e.g., disallows includes/preloads and enforces .toml files).
     - Supports optional single-key loading.
+    - Supports Dynaconf's fresh_vars feature for dynamic reloading.
     Args:
         obj: The Dynaconf settings instance to update.
         env: The current environment name (upper case). Defaults to 'DEVELOPMENT'. Note: currently unused.
@@ -93,7 +94,8 @@ def load(obj, env=None, silent=True, key=None, filename=None):
 
     # Update the settings object
     for k, v in accumulated_data.items():
-        if key is None or key == k:
+        # For fresh_vars support: key parameter is uppercase, but accumulated_data keys are lowercase
+        if key is None or key.upper() == k.upper():
             obj.set(k, v)
 
 def validate_file_security(file_data, filename):
