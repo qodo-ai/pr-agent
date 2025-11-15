@@ -23,7 +23,7 @@ from pr_agent.config_loader import get_settings  # noqa: F401
 
 
 # Module-level helper function
-def create_dynaconf_with_custom_loader(temp_dir, secrets_file, fresh_vars=None):
+def create_dynaconf_with_custom_loader(temp_dir, secrets_file):
     """
     Create a Dynaconf instance matching the production configuration.
 
@@ -32,28 +32,25 @@ def create_dynaconf_with_custom_loader(temp_dir, secrets_file, fresh_vars=None):
     - custom_merge_loader and env_loader enabled
     - merge_enabled = True
 
+    Note: fresh_vars should be configured via FRESH_VARS_FOR_DYNACONF environment variable,
+    which is the only way to configure it in pr-agent.
+
     Args:
         temp_dir: Temporary directory path
         secrets_file: Path to secrets file
-        fresh_vars: List of section names to mark as fresh (e.g., ["GITLAB"])
 
     Returns:
         Dynaconf instance configured like production
     """
-    kwargs = {
-        "core_loaders": [],
-        "loaders": ["pr_agent.custom_merge_loader", "dynaconf.loaders.env_loader"],
-        "root_path": temp_dir,
-        "merge_enabled": True,
-        "envvar_prefix": False,
-        "load_dotenv": False,
-        "settings_files": [str(secrets_file)],
-    }
-
-    if fresh_vars:
-        kwargs["fresh_vars"] = fresh_vars
-
-    return Dynaconf(**kwargs)
+    return Dynaconf(
+        core_loaders=[],
+        loaders=["pr_agent.custom_merge_loader", "dynaconf.loaders.env_loader"],
+        root_path=temp_dir,
+        merge_enabled=True,
+        envvar_prefix=False,
+        load_dotenv=False,
+        settings_files=[str(secrets_file)],
+    )
 
 
 class TestFreshVarsGitLabScenario:
@@ -104,11 +101,13 @@ shared_secret = "{shared_secret}"
         # Create initial secrets file
         self.create_secrets_toml(personal_access_token="token_v1", shared_secret="secret_v1")
 
-        # Create Dynaconf with GITLAB marked as fresh
-        settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file, fresh_vars=["GITLAB"])
+        # Set FRESH_VARS_FOR_DYNACONF environment variable (the only way to configure fresh_vars in pr-agent)
+        with patch.dict(os.environ, {"FRESH_VARS_FOR_DYNACONF": '["GITLAB"]'}):
+            # Create Dynaconf with GITLAB marked as fresh via env var
+            settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file)
 
-        # First access - should return initial value
-        first_token = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            # First access - should return initial value
+            first_token = settings.GITLAB.PERSONAL_ACCESS_TOKEN
         assert first_token == "token_v1", "Initial personal_access_token should be 'token_v1'"
 
         # Modify the secrets file
@@ -123,35 +122,6 @@ shared_secret = "{shared_secret}"
         # Verify the values are different (fresh_vars working)
         assert first_token != second_token, "fresh_vars should cause values to be reloaded, not cached"
 
-    def test_gitlab_shared_secret_reload(self):
-        """
-        Test that gitlab.shared_secret is reloaded when GITLAB is marked as fresh.
-
-        Verifies that fresh_vars applies to all fields in the GITLAB section,
-        not just personal_access_token.
-        """
-        # Create initial secrets file
-        self.create_secrets_toml(personal_access_token="token_v1", shared_secret="secret_v1")
-
-        # Create Dynaconf with GITLAB marked as fresh
-        settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file, fresh_vars=["GITLAB"])
-
-        # First access
-        first_secret = settings.GITLAB.SHARED_SECRET
-        assert first_secret == "secret_v1", "Initial shared_secret should be 'secret_v1'"
-
-        # Modify the secrets file
-        self.create_secrets_toml(personal_access_token="token_v1", shared_secret="secret_v2_updated")
-
-        # Second access - should return NEW value
-        second_secret = settings.GITLAB.SHARED_SECRET
-        assert second_secret == "secret_v2_updated", (
-            "After file modification, shared_secret should be reloaded to 'secret_v2_updated'"
-        )
-
-        # Verify fresh_vars is working
-        assert first_secret != second_secret, "fresh_vars should cause shared_secret to be reloaded"
-
     def test_gitlab_multiple_fields_reload(self):
         """
         Test that both gitlab fields reload together when GITLAB is marked as fresh.
@@ -162,28 +132,32 @@ shared_secret = "{shared_secret}"
         # Create initial secrets file
         self.create_secrets_toml(personal_access_token="token_v1", shared_secret="secret_v1")
 
-        # Create Dynaconf with GITLAB marked as fresh
-        settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file, fresh_vars=["GITLAB"])
+        # Set FRESH_VARS_FOR_DYNACONF environment variable
+        with patch.dict(os.environ, {"FRESH_VARS_FOR_DYNACONF": '["GITLAB"]'}):
+            # Create Dynaconf with GITLAB marked as fresh via env var
+            settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file)
 
-        # First access - both fields
-        first_token = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-        first_secret = settings.GITLAB.SHARED_SECRET
-        assert first_token == "token_v1"
-        assert first_secret == "secret_v1"
+            # First access - both fields
+            first_token = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            first_secret = settings.GITLAB.SHARED_SECRET
+            assert first_token == "token_v1"
+            assert first_secret == "secret_v1"
 
-        # Modify both fields in the secrets file
-        self.create_secrets_toml(personal_access_token="token_v2_both_updated", shared_secret="secret_v2_both_updated")
+            # Modify both fields in the secrets file
+            self.create_secrets_toml(
+                personal_access_token="token_v2_both_updated", shared_secret="secret_v2_both_updated"
+            )
 
-        # Second access - both fields should be updated
-        second_token = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-        second_secret = settings.GITLAB.SHARED_SECRET
+            # Second access - both fields should be updated
+            second_token = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            second_secret = settings.GITLAB.SHARED_SECRET
 
-        assert second_token == "token_v2_both_updated", "personal_access_token should be reloaded"
-        assert second_secret == "secret_v2_both_updated", "shared_secret should be reloaded"
+            assert second_token == "token_v2_both_updated", "personal_access_token should be reloaded"
+            assert second_secret == "secret_v2_both_updated", "shared_secret should be reloaded"
 
-        # Verify both fields were reloaded
-        assert first_token != second_token, "personal_access_token should not be cached"
-        assert first_secret != second_secret, "shared_secret should not be cached"
+            # Verify both fields were reloaded
+            assert first_token != second_token, "personal_access_token should not be cached"
+            assert first_secret != second_secret, "shared_secret should not be cached"
 
 
 class TestFreshVarsCustomLoaderIntegration:
@@ -229,11 +203,13 @@ shared_secret = "{shared_secret}"
         # Create initial secrets file
         self.create_secrets_toml(personal_access_token="token_before_bug_test")
 
-        # Create Dynaconf WITHOUT core loaders but WITH fresh_vars
-        settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file, fresh_vars=["GITLAB"])
+        # Set FRESH_VARS_FOR_DYNACONF environment variable
+        with patch.dict(os.environ, {"FRESH_VARS_FOR_DYNACONF": '["GITLAB"]'}):
+            # Create Dynaconf WITHOUT core loaders but WITH fresh_vars via env var
+            settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file)
 
-        # First access
-        first_value = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            # First access
+            first_value = settings.GITLAB.PERSONAL_ACCESS_TOKEN
         assert first_value == "token_before_bug_test", "Initial value should be loaded correctly"
 
         # Modify the file
@@ -265,33 +241,35 @@ user_token = "github_token_v1"
 """
         self.secrets_file.write_text(content)
 
-        # Create Dynaconf with only GITLAB marked as fresh
-        settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file, fresh_vars=["GITLAB"])
+        # Set FRESH_VARS_FOR_DYNACONF environment variable (only GITLAB)
+        with patch.dict(os.environ, {"FRESH_VARS_FOR_DYNACONF": '["GITLAB"]'}):
+            # Create Dynaconf with only GITLAB marked as fresh via env var
+            settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file)
 
-        # Access both sections
-        gitlab_token_1 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-        github_token_1 = settings.GITHUB.USER_TOKEN
+            # Access both sections
+            gitlab_token_1 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            github_token_1 = settings.GITHUB.USER_TOKEN
 
-        # Modify both sections
-        content = """[gitlab]
+            # Modify both sections
+            content = """[gitlab]
 personal_access_token = "gitlab_token_v2"
 
 [github]
 user_token = "github_token_v2"
 """
-        self.secrets_file.write_text(content)
+            self.secrets_file.write_text(content)
 
-        # Access again
-        gitlab_token_2 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-        github_token_2 = settings.GITHUB.USER_TOKEN
+            # Access again
+            gitlab_token_2 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            github_token_2 = settings.GITHUB.USER_TOKEN
 
-        # GITLAB should be reloaded (marked as fresh)
-        assert gitlab_token_2 == "gitlab_token_v2", "GITLAB section should be reloaded (marked as fresh)"
-        assert gitlab_token_1 != gitlab_token_2, "GITLAB values should not be cached"
+            # GITLAB should be reloaded (marked as fresh)
+            assert gitlab_token_2 == "gitlab_token_v2", "GITLAB section should be reloaded (marked as fresh)"
+            assert gitlab_token_1 != gitlab_token_2, "GITLAB values should not be cached"
 
-        # GITHUB should be cached (not marked as fresh)
-        assert github_token_2 == "github_token_v1", "GITHUB section should be cached (not marked as fresh)"
-        assert github_token_1 == github_token_2, "GITHUB values should be cached"
+            # GITHUB should be cached (not marked as fresh)
+            assert github_token_2 == "github_token_v1", "GITHUB section should be cached (not marked as fresh)"
+            assert github_token_1 == github_token_2, "GITHUB values should be cached"
 
 
 class TestFreshVarsBasicFunctionality:
@@ -321,34 +299,6 @@ personal_access_token = "{personal_access_token}"
 """
         self.secrets_file.write_text(content)
 
-    def test_fresh_vars_from_environment_variable(self):
-        """
-        Test that fresh_vars can be set via FRESH_VARS_FOR_DYNACONF environment variable.
-
-        This tests the common use case where fresh_vars is configured through
-        an environment variable rather than in code.
-        """
-        # Create initial secrets file
-        self.create_secrets_toml(personal_access_token="env_token_v1")
-
-        # Set FRESH_VARS_FOR_DYNACONF environment variable
-        with patch.dict(os.environ, {"FRESH_VARS_FOR_DYNACONF": '["GITLAB"]'}):
-            # Create Dynaconf (should pick up fresh_vars from env)
-            settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file)
-
-            # First access
-            first_value = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-            assert first_value == "env_token_v1"
-
-            # Modify file
-            self.create_secrets_toml(personal_access_token="env_token_v2")
-
-            # Second access - should be reloaded
-            second_value = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-            assert second_value == "env_token_v2", "fresh_vars from environment variable should cause reload"
-
-            assert first_value != second_value, "Values should be different when fresh_vars is set via env var"
-
     def test_gitlab_credentials_not_cached_when_fresh(self):
         """
         Test that GitLab credentials are not cached when marked as fresh.
@@ -360,13 +310,15 @@ personal_access_token = "{personal_access_token}"
         # Create initial secrets file
         self.create_secrets_toml(personal_access_token="no_cache_v1")
 
-        # Create Dynaconf with GITLAB marked as fresh
-        settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file, fresh_vars=["GITLAB"])
+        # Set FRESH_VARS_FOR_DYNACONF environment variable
+        with patch.dict(os.environ, {"FRESH_VARS_FOR_DYNACONF": '["GITLAB"]'}):
+            # Create Dynaconf with GITLAB marked as fresh via env var
+            settings = create_dynaconf_with_custom_loader(self.temp_dir, self.secrets_file)
 
-        # Access the token multiple times before modification
-        access_1 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-        access_2 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
-        access_3 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            # Access the token multiple times before modification
+            access_1 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            access_2 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
+            access_3 = settings.GITLAB.PERSONAL_ACCESS_TOKEN
 
         # All should return the same value (file hasn't changed)
         assert access_1 == access_2 == access_3 == "no_cache_v1", (
