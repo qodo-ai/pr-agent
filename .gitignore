@@ -13,3 +13,5 @@ build/
 docs/.cache/
 .qodo
 poetry.lock
+.pr_agent.toml
+.claude/skills/SETUP_COMPLETE.md

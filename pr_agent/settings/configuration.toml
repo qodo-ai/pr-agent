@@ -343,9 +343,9 @@ service_callback = []
 
 [pr_similar_issue]
 skip_comments = false
-force_update_dataset = false
 max_issues_to_scan = 500
-vectordb = "pinecone" # options: "pinecone", "lancedb", "qdrant"
+number_of_similar_issues = 5  # Number of similar issues to return
+min_similarity_score = 60  # Minimum fuzzy match score (0-100) to consider an issue similar
 
 [pr_find_similar_component]
 class_name = ""
@@ -355,18 +355,8 @@ allow_fallback_less_words = true
 number_of_keywords = 5
 number_of_results = 5
 
-[pinecone]
-# fill and place in .secrets.toml
-#api_key = ...
-# environment = "gcp-starter"
-
-[lancedb]
-uri = "./lancedb"
-
-[qdrant]
-# fill and place credentials in .secrets.toml
-# url = "https://YOUR-QDRANT-URL"
-# api_key = "..."
+# Vector database configuration removed - now using rapidfuzz fuzzy matching
+# See [pr_similar_issue] section for fuzzy matching configuration
 
 [best_practices]
 content = ""

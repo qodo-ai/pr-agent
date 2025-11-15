@@ -1,29 +1,12 @@
 from starlette_context import context
 
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers.azuredevops_provider import AzureDevopsProvider
-from pr_agent.git_providers.bitbucket_provider import BitbucketProvider
-from pr_agent.git_providers.bitbucket_server_provider import \
-    BitbucketServerProvider
-from pr_agent.git_providers.codecommit_provider import CodeCommitProvider
-from pr_agent.git_providers.gerrit_provider import GerritProvider
 from pr_agent.git_providers.git_provider import GitProvider
-from pr_agent.git_providers.gitea_provider import GiteaProvider
 from pr_agent.git_providers.github_provider import GithubProvider
-from pr_agent.git_providers.gitlab_provider import GitLabProvider
-from pr_agent.git_providers.local_git_provider import LocalGitProvider
-from pr_agent.git_providers.gitea_provider import GiteaProvider
 
+# Only GitHub provider - other providers removed
 _GIT_PROVIDERS = {
     'github': GithubProvider,
-    'gitlab': GitLabProvider,
-    'bitbucket': BitbucketProvider,
-    'bitbucket_server': BitbucketServerProvider,
-    'azure': AzureDevopsProvider,
-    'codecommit': CodeCommitProvider,
-    'local': LocalGitProvider,
-    'gerrit': GerritProvider,
-    'gitea': GiteaProvider
 }
 
 
