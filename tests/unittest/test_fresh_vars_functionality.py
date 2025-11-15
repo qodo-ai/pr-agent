@@ -11,7 +11,6 @@ such as those introduced in https://github.com/qodo-ai/pr-agent/pull/2087.
 
 import os
 import tempfile
-import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,26 +21,8 @@ from dynaconf import Dynaconf
 # This ensures pr_agent.config_loader is fully loaded before custom_merge_loader is used in tests
 from pr_agent.config_loader import get_settings  # noqa: F401
 
-# Module-level helper functions
 
-
-def ensure_file_timestamp_changes(file_path):
-    """
-    Force file timestamp to change by using os.utime with explicit time.
-
-    This is much faster than sleeping and works on all filesystems.
-
-    Args:
-        file_path: Path to the file to update
-    """
-    # Get current time and add a small increment to ensure it's different
-    current_time = time.time()
-    new_time = current_time + 0.001  # Add 1ms
-
-    # Set both access time and modification time
-    os.utime(file_path, (new_time, new_time))
-
-
+# Module-level helper function
 def create_dynaconf_with_custom_loader(temp_dir, secrets_file, fresh_vars=None):
     """
     Create a Dynaconf instance matching the production configuration.
@@ -131,7 +112,6 @@ shared_secret = "{shared_secret}"
         assert first_token == "token_v1", "Initial personal_access_token should be 'token_v1'"
 
         # Modify the secrets file
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="token_v2_updated", shared_secret="secret_v1")
 
         # Second access - should return NEW value (not cached)
@@ -161,7 +141,6 @@ shared_secret = "{shared_secret}"
         assert first_secret == "secret_v1", "Initial shared_secret should be 'secret_v1'"
 
         # Modify the secrets file
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="token_v1", shared_secret="secret_v2_updated")
 
         # Second access - should return NEW value
@@ -193,7 +172,6 @@ shared_secret = "{shared_secret}"
         assert first_secret == "secret_v1"
 
         # Modify both fields in the secrets file
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="token_v2_both_updated", shared_secret="secret_v2_both_updated")
 
         # Second access - both fields should be updated
@@ -259,7 +237,6 @@ shared_secret = "{shared_secret}"
         assert first_value == "token_before_bug_test", "Initial value should be loaded correctly"
 
         # Modify the file
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="token_after_bug_test")
 
         # Second access - THIS IS THE CRITICAL CHECK
@@ -296,7 +273,6 @@ user_token = "github_token_v1"
         github_token_1 = settings.GITHUB.USER_TOKEN
 
         # Modify both sections
-        ensure_file_timestamp_changes(self.secrets_file)
         content = """[gitlab]
 personal_access_token = "gitlab_token_v2"
 
@@ -365,7 +341,6 @@ personal_access_token = "{personal_access_token}"
             assert first_value == "env_token_v1"
 
             # Modify file
-            ensure_file_timestamp_changes(self.secrets_file)
             self.create_secrets_toml(personal_access_token="env_token_v2")
 
             # Second access - should be reloaded
@@ -399,7 +374,6 @@ personal_access_token = "{personal_access_token}"
         )
 
         # Modify the file
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="no_cache_v2")
 
         # Access again - should get new value immediately
@@ -410,7 +384,6 @@ personal_access_token = "{personal_access_token}"
         assert access_1 != access_4, "Value should change after file modification (no caching)"
 
         # Modify again
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="no_cache_v3")
 
         # Access again - should get newest value
@@ -447,7 +420,6 @@ personal_access_token = "{personal_access_token}"
         assert first_value == "default_v1"
 
         # Modify file
-        ensure_file_timestamp_changes(self.secrets_file)
         self.create_secrets_toml(personal_access_token="default_v2")
 
         # Second access - should be reloaded with default loaders
