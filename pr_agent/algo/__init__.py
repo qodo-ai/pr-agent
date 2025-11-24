@@ -195,6 +195,9 @@ NO_SUPPORT_TEMPERATURE_MODELS = [
     "o3-2025-04-16",
     "o4-mini",
     "o4-mini-2025-04-16",
+    "gpt-5.1-codex",
+    "gpt-5.1-codex-mini",
+    "gpt-5-mini"
 ]
 
 SUPPORT_REASONING_EFFORT_MODELS = [
