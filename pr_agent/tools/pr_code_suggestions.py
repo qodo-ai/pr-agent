@@ -539,7 +539,10 @@ class PRCodeSuggestions:
     async def push_inline_code_suggestions(self, data):
         code_suggestions = []
 
-        if not data['code_suggestions']:
+        score_threshold = max(1, int(get_settings().pr_code_suggestions.suggestions_score_threshold))
+        filtered_suggestions = [d for d in data['code_suggestions'] if int(d.get('score', 0)) >= score_threshold]
+
+        if not filtered_suggestions:
             get_logger().info('No suggestions found to improve this PR.')
             if self.progress_response:
                 return self.git_provider.edit_comment(self.progress_response,
@@ -547,7 +550,7 @@ class PRCodeSuggestions:
             else:
                 return self.git_provider.publish_comment('No suggestions found to improve this PR.')
 
-        for d in data['code_suggestions']:
+        for d in filtered_suggestions:
             try:
                 if get_settings().config.verbosity_level >= 2:
                     get_logger().info(f"suggestion: {d}")
