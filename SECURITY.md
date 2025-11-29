@@ -1,4 +1,4 @@
-# Security Policy
+## Security Policy
 
 PR-Agent is an open-source tool to help efficiently review and handle pull requests. Qodo Merge is a paid version of PR-Agent, designed for companies and teams that require additional features and capabilities.
 
