@@ -2,7 +2,7 @@
 # Do not copy this entire file to your repository configuration.
 # Your repository configuration should only include options you wish to override from the defaults.
 #
-# Use this page: 'https://qodo-merge-docs.qodo.ai/ai_search/' to ask questions about the configuration options.
+# Use this page: 'https://Blackbox-merge-docs.Blackbox.ai/ai_search/' to ask questions about the configuration options.
 
 [config]
 # models
@@ -50,8 +50,8 @@ duplicate_prompt_examples = false
 seed=-1 # set positive value to fix the seed (and ensure temperature=0)
 temperature=0.2
 # bring repo metadata 💎
-add_repo_metadata=false # if true, will try to add metadata from files like 'AGENTS.MD', 'CLAUDE.MD', 'QODO.MD'
-add_repo_metadata_file_list =["AGENTS.MD", "CLAUDE.MD", "QODO.MD"]
+add_repo_metadata=false # if true, will try to add metadata from files like 'AGENTS.MD', 'CLAUDE.MD', 'Blackbox.MD'
+add_repo_metadata_file_list =["AGENTS.MD", "CLAUDE.MD", "Blackbox.MD"]
 # ignore logic
 ignore_pr_title = ["^\\[Auto\\]", "^Auto"] # a list of regular expressions to match against the PR title to ignore the PR agent
 ignore_pr_target_branches = [] # a list of regular expressions of target branches to ignore from PR agent when an PR is created
