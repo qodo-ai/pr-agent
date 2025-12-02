@@ -173,7 +173,7 @@ MAX_TOKENS = {
     "mistral/codestral-mamba-latest": 256000,
     "codestral/codestral-latest": 8191,
     "codestral/codestral-2405": 8191,
-    "blackboxai/openai/gpt-4.1": 120000,
+    "openai/blackboxai/openai/gpt-4.1": 120000,
 }
 
 USER_MESSAGE_ONLY_MODELS = [

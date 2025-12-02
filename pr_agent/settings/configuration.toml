@@ -6,7 +6,10 @@
 
 [config]
 # models
-model="gpt-5-2025-08-07"
+# Default model: Blackbox AI with OpenAI-compatible API
+# Provider prefix 'openai/' tells LiteLLM which handler to use;
+# the rest 'blackboxai/openai/gpt-4.1' is passed to the Blackbox API endpoint
+model="openai/blackboxai/openai/gpt-4.1"
 fallback_models=[]
 #model_reasoning="o4-mini" # dedicated reasoning model for self-reflection
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
