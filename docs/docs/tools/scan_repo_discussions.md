@@ -3,10 +3,10 @@
 ## Overview
 
 The `scan_repo_discussions` tool analyzes code discussions (meaning review comments over code lines) from merged pull requests over the past 12 months.
-It processes these discussions alongside other PR metadata to identify recurring patterns related to best practices in team feedback and code reviews, generating a comprehensive [`best_practices.md`](https://github.com/qodo-ai/pr-agent/blob/qodo-merge-best-practices_2025-04-16_1018/best_practices.md) document that distills key insights and recommendations.
+It processes these discussions alongside other PR metadata to identify recurring patterns related to best practices in team feedback and code reviews, generating a comprehensive [`best_practices.md`](https://github.com/Blackbox-ai/pr-agent/blob/Blackbox-merge-best-practices_2025-04-16_1018/best_practices.md) document that distills key insights and recommendations.
 
 This file captures repository-specific patterns derived from your team's actual workflow and discussions, rather than more generic best practices.
-It will be utilized by Qodo Merge to provide tailored suggestions for improving code quality in future pull requests.
+It will be utilized by Blackbox Merge to provide tailored suggestions for improving code quality in future pull requests.
 
 !!! note "Active repositories are needed"
     The tool is designed to work with real-life repositories, as it relies on actual discussions to generate meaningful insights.
@@ -14,7 +14,7 @@ It will be utilized by Qodo Merge to provide tailored suggestions for improving 
 
 !!! note "Additional customization"
     Teams are encouraged to further customize and refine these insights to better align with their specific development priorities and contexts.
-    This can be done by editing the `best_practices.md` file directly when the PR is created, or iteratively over time to enhance the 'best practices' suggestions provided by Qodo Merge.
+    This can be done by editing the `best_practices.md` file directly when the PR is created, or iteratively over time to enhance the 'best practices' suggestions provided by Blackbox Merge.
 
 The tool can be invoked manually by commenting on any PR:
 

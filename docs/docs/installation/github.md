@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: PR Agent action step
         id: pragent
-        uses: qodo-ai/pr-agent@main
+        uses: Blackbox-ai/pr-agent@main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,7 +41,7 @@ The GITHUB_TOKEN secret is automatically created by GitHub.
 3) Merge this change to your main branch.
 When you open your next PR, you should see a comment from `github-actions` bot with a review of your PR, and instructions on how to use the rest of the tools.
 
-4) You may configure Qodo Merge by adding environment variables under the env section corresponding to any configurable property in the [configuration](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml) file. Some examples:
+4) You may configure Blackbox Merge by adding environment variables under the env section corresponding to any configurable property in the [configuration](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml) file. Some examples:
 
 ```yaml
       env:
@@ -51,7 +51,7 @@ When you open your next PR, you should see a comment from `github-actions` bot w
         PR_CODE_SUGGESTIONS.NUM_CODE_SUGGESTIONS: 6 # Increase number of code suggestions
 ```
 
-See detailed usage instructions in the [USAGE GUIDE](https://qodo-merge-docs.qodo.ai/usage-guide/automations_and_usage/#github-action)
+See detailed usage instructions in the [USAGE GUIDE](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/automations_and_usage/#github-action)
 
 ### Configuration Examples
 
@@ -79,7 +79,7 @@ jobs:
       contents: write
     steps:
       - name: PR Agent action step
-        uses: qodo-ai/pr-agent@main
+        uses: Blackbox-ai/pr-agent@main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -105,7 +105,7 @@ jobs:
       contents: write
     steps:
       - name: PR Agent action step
-        uses: qodo-ai/pr-agent@main
+        uses: Blackbox-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           config.model: "gemini/gemini-1.5-flash"
@@ -136,7 +136,7 @@ jobs:
       contents: write
     steps:
       - name: PR Agent action step
-        uses: qodo-ai/pr-agent@main
+        uses: Blackbox-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           config.model: "anthropic/claude-3-opus-20240229"
@@ -168,7 +168,7 @@ jobs:
     steps:
       - name: PR Agent action step
         id: pragent
-        uses: qodo-ai/pr-agent@main
+        uses: Blackbox-ai/pr-agent@main
         env:
           OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -370,7 +370,7 @@ jobs:
     steps:
       - name: PR Agent action step
         id: pragent
-        uses: qodo-ai/pr-agent@main
+        uses: Blackbox-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_AI_STUDIO.GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -606,7 +606,7 @@ cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
 
 9. Install the app by navigating to the "Install App" tab and selecting your desired repositories.
 
-> **Note:** When running Qodo Merge from GitHub app, the default configuration file (configuration.toml) will be loaded.
+> **Note:** When running Blackbox Merge from GitHub app, the default configuration file (configuration.toml) will be loaded.
 > However, you can override the default tool parameters by uploading a local configuration file `.pr_agent.toml`
 > For more information please check out the [USAGE GUIDE](../usage-guide/automations_and_usage.md#github-app)
 ---
@@ -666,7 +666,7 @@ CONFIG__SECRET_PROVIDER=aws_secrets_manager
 
 ### AWS CodeCommit Setup
 
-Not all features have been added to CodeCommit yet.  As of right now, CodeCommit has been implemented to run the Qodo Merge CLI on the command line, using AWS credentials stored in environment variables.  (More features will be added in the future.)  The following is a set of instructions to have Qodo Merge do a review of your CodeCommit pull request from the command line:
+Not all features have been added to CodeCommit yet.  As of right now, CodeCommit has been implemented to run the Blackbox Merge CLI on the command line, using AWS credentials stored in environment variables.  (More features will be added in the future.)  The following is a set of instructions to have Blackbox Merge do a review of your CodeCommit pull request from the command line:
 
 1. Create an IAM user that you will use to read CodeCommit pull requests and post comments
     - Note: That user should have CLI access only, not Console access

@@ -12,7 +12,7 @@ The `compliance` tool performs comprehensive compliance checks on PR code change
 
 ___
 
-[//]: # (???+ note "The following features are available only for Qodo Merge 💎 users:")
+[//]: # (???+ note "The following features are available only for Blackbox Merge 💎 users:")
 
 [//]: # (    - Custom compliance checklists and hierarchical compliance checklists)
 
@@ -43,9 +43,9 @@ For example, you can enable ticket compliance labels by running:
 ### Automatic Triggering
 
 
-The tool can be triggered automatically every time a new PR is [opened](https://qodo-merge-docs.qodo.ai/usage-guide/automations_and_usage/#github-app-automatic-tools-when-a-new-pr-is-opened), or in a [push](https://qodo-merge-docs.qodo.ai/usage-guide/automations_and_usage/?h=push#github-app-automatic-tools-for-push-actions-commits-to-an-open-pr) event to an existing PR.
+The tool can be triggered automatically every time a new PR is [opened](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/automations_and_usage/#github-app-automatic-tools-when-a-new-pr-is-opened), or in a [push](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/automations_and_usage/?h=push#github-app-automatic-tools-for-push-actions-commits-to-an-open-pr) event to an existing PR.
 
-To run the `compliance` tool automatically when a PR is opened, define the following in the [configuration file](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/):
+To run the `compliance` tool automatically when a PR is opened, define the following in the [configuration file](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/configuration_options/):
 
 ```toml
 [github_app]  # for example
@@ -81,10 +81,10 @@ Examples of security issues:
 ### 2. Ticket Compliance
 
 ???+ tip "How to set up ticket compliance"
-    Follow the guide on how to set up [ticket compliance](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/) with Qodo Merge.
+    Follow the guide on how to set up [ticket compliance](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/) with Blackbox Merge.
 
 ???+ tip "Auto-create ticket"
-    Follow this [guide](https://qodo-merge-docs.qodo.ai/tools/pr_to_ticket/) to learn how to enable triggering `create tickets` based on PR content.
+    Follow this [guide](https://Blackbox-merge-docs.Blackbox.ai/tools/pr_to_ticket/) to learn how to enable triggering `create tickets` based on PR content.
     
     ![ticket creation via compliance tool](https://codium.ai/images/pr_agent/ticket_creation_from_compliance1.png){width=256}
  
@@ -150,7 +150,7 @@ Each compliance is defined in a YAML file as follows:
     - Focus on meaningful compliance requirements, not style preferences
 
 ???+ tip "Ready-to-use compliance templates"
-    For production-ready compliance checklist templates organized by programming languages and technology stacks, check out the [PR Compliance Templates repository](https://github.com/qodo-ai/pr-compliance-templates).
+    For production-ready compliance checklist templates organized by programming languages and technology stacks, check out the [PR Compliance Templates repository](https://github.com/Blackbox-ai/pr-compliance-templates).
 
 ### Local Compliance Checklists
 
@@ -160,7 +160,7 @@ The AI model will use this `pr_compliance_checklist.yaml` file as a reference, a
 
 ### Global Hierarchical Compliance
 
-Qodo Merge supports hierarchical compliance checklists using a dedicated global configuration repository.
+Blackbox Merge supports hierarchical compliance checklists using a dedicated global configuration repository.
 
 #### Setting up global hierarchical compliance
 

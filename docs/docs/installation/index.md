@@ -11,9 +11,9 @@ There are several ways to use self-hosted PR-Agent:
 - [Azure DevOps integration](./azure.md)
 - [Gitea integration](./gitea.md)
 
-## Qodo Merge 💎
+## Blackbox Merge 💎
 
-Qodo Merge, an app hosted by QodoAI for GitHub\GitLab\BitBucket, is also available.
+Blackbox Merge, an app hosted by BlackboxAI for GitHub\GitLab\BitBucket, is also available.
 <br>
-With Qodo Merge, installation is as simple as adding the Qodo Merge app to your relevant repositories.
-See [here](https://qodo-merge-docs.qodo.ai/installation/qodo_merge/) for more details.
+With Blackbox Merge, installation is as simple as adding the Blackbox Merge app to your relevant repositories.
+See [here](https://Blackbox-merge-docs.Blackbox.ai/installation/Blackbox_merge/) for more details.

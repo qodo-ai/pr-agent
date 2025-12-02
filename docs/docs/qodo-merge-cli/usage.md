@@ -1,4 +1,4 @@
-# Usage Guide for Qodo Merge CLI
+# Usage Guide for Blackbox Merge CLI
 
 
 ## Understanding the Interface
@@ -13,7 +13,7 @@ Users can efficiently prioritize, explore, and implement suggestions through an 
 The interface guides you from high-level overviews to detailed implementation context.
 This consistent user-friendly structure streamlines the review process, reducing time from feedback to implementation.
 
-![Fix All Mode](https://www.qodo.ai/images/pr_agent/qm_cli_main_table_fix_all.png){width=768}
+![Fix All Mode](https://www.Blackbox.ai/images/pr_agent/qm_cli_main_table_fix_all.png){width=768}
 
 
 
@@ -41,7 +41,7 @@ You can view the proposed code changes in a diff format, jump to the relevant co
 [//]: # (    === "Details Panel")
 
 [//]: # ()
-[//]: # (        ![Detail Panel]&#40;https://www.qodo.ai/images/pr_agent/qm_cli_tabl_detail_view.png&#41;{width=768})
+[//]: # (        ![Detail Panel]&#40;https://www.Blackbox.ai/images/pr_agent/qm_cli_tabl_detail_view.png&#41;{width=768})
 
 [//]: # (        )
 [//]: # (        **Enhanced Layout &#40;≥120 columns&#41;**)
@@ -58,7 +58,7 @@ You can view the proposed code changes in a diff format, jump to the relevant co
     === "Diff View (`D/S`)"
         === "Unified Diff View (`D`)"
 
-            ![Unified Diff](https://www.qodo.ai/images/pr_agent/qm_cli_unified_diffview.png){width=768}
+            ![Unified Diff](https://www.Blackbox.ai/images/pr_agent/qm_cli_unified_diffview.png){width=768}
             
             - Press `D` to view proposed code changes
             - Standard unified diff format with line numbers
@@ -67,7 +67,7 @@ You can view the proposed code changes in a diff format, jump to the relevant co
 
         === "Side-by-Side View (`S`)"
 
-            ![Side-by-Side Diff](https://www.qodo.ai/images/pr_agent/qm_cli_side_by_side_diffview.png){width=768}
+            ![Side-by-Side Diff](https://www.Blackbox.ai/images/pr_agent/qm_cli_side_by_side_diffview.png){width=768}
             
             - Press `S` for side-by-side diff view
             - Enhanced layout for complex changes
@@ -87,7 +87,7 @@ You can view the proposed code changes in a diff format, jump to the relevant co
 
         **Suggestion-Specific Discussion**
         
-        ![Chat Interface](https://www.qodo.ai/images/pr_agent/qm_cli_suggestion_chat_pre_impl.png){width=768}
+        ![Chat Interface](https://www.Blackbox.ai/images/pr_agent/qm_cli_suggestion_chat_pre_impl.png){width=768}
         
         - Press `C` to discuss the current suggestion
         - Context automatically included (files, lines, description)
@@ -102,7 +102,7 @@ You can implement a single suggestion, multiple selected suggestions, or all sug
 !!! note "Multiple implementation modes available"
 
     === "1. Single Suggestion"
-        ![Main Table](https://www.qodo.ai/images/pr_agent/qm_cli_tabl_detail_view.png){width=768}
+        ![Main Table](https://www.Blackbox.ai/images/pr_agent/qm_cli_tabl_detail_view.png){width=768}
         
         **Direct individual implementation**
     
@@ -110,7 +110,7 @@ You can implement a single suggestion, multiple selected suggestions, or all sug
         2. Press `Enter` to implement just that suggestion
 
     === "2. Multi-Select"
-        ![Multi-Selection](https://www.qodo.ai/images/pr_agent/qm_cli_multi_select.png){width=768}
+        ![Multi-Selection](https://www.Blackbox.ai/images/pr_agent/qm_cli_multi_select.png){width=768}
         
         **Select multiple related suggestions**
         
@@ -120,7 +120,7 @@ You can implement a single suggestion, multiple selected suggestions, or all sug
         4. AI implements selected suggestions together
     
     === "3. Address All"
-        ![Fix All Mode](https://www.qodo.ai/images/pr_agent/qm_cli_main_table_fix_all.png){width=768}
+        ![Fix All Mode](https://www.Blackbox.ai/images/pr_agent/qm_cli_main_table_fix_all.png){width=768}
         
         **Reflect and address all suggestions (Always available as first row)**
         
@@ -131,7 +131,7 @@ You can implement a single suggestion, multiple selected suggestions, or all sug
     
     === "4. Chat then Implement"
     
-        ![Chat Interface](https://www.qodo.ai/images/pr_agent/qm_cli_suggestion_chat_pre_impl.png){width=768}
+        ![Chat Interface](https://www.Blackbox.ai/images/pr_agent/qm_cli_suggestion_chat_pre_impl.png){width=768}
     
         **Discuss then implement**
     
@@ -151,7 +151,7 @@ After the AI completes the implementation, you receive a **structured output** s
 - **Reasoning**: Explanation of the implementation approach
 - **Changes**: Summary of code modifications made
 
-![Next Actions](https://www.qodo.ai/images/pr_agent/qm_cli_impl_success_next_actions.png){width=768}
+![Next Actions](https://www.Blackbox.ai/images/pr_agent/qm_cli_impl_success_next_actions.png){width=768}
 
 Each suggestion gets its own implementation summary, providing full transparency into what was done and why.
 
@@ -162,7 +162,7 @@ After implementing the suggestions, you have several options to proceed:
 !!! note "Post Implementation Actions"
     === "Return to Table (`ESC`)"
     
-        ![Status Updates](https://www.qodo.ai/images/pr_agent/qm_cli_suggestion_status_update_add_v_sign.png){width=768}
+        ![Status Updates](https://www.Blackbox.ai/images/pr_agent/qm_cli_suggestion_status_update_add_v_sign.png){width=768}
         
         The first option returns you to the main table where you can see:
         
@@ -172,7 +172,7 @@ After implementing the suggestions, you have several options to proceed:
     
     === "Continue Chatting (`C`)"
     
-        ![Continue Chat](https://www.qodo.ai/images/pr_agent/qm_cli_continue_chat.png){width=768}
+        ![Continue Chat](https://www.Blackbox.ai/images/pr_agent/qm_cli_continue_chat.png){width=768}
         
         Discuss the implementation details:
         
@@ -183,7 +183,7 @@ After implementing the suggestions, you have several options to proceed:
     
     === "Commit Changes (`M`)"
     
-        ![Commit Message](https://www.qodo.ai/images/pr_agent/qm_cli_commit_message.png){width=512}
+        ![Commit Message](https://www.Blackbox.ai/images/pr_agent/qm_cli_commit_message.png){width=512}
         
         Auto-generate commit messages:
         

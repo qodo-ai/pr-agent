@@ -173,6 +173,7 @@ MAX_TOKENS = {
     "mistral/codestral-mamba-latest": 256000,
     "codestral/codestral-latest": 8191,
     "codestral/codestral-2405": 8191,
+    "blackboxai/openai/gpt-4.1": 120000,
 }
 
 USER_MESSAGE_ONLY_MODELS = [
@@ -215,3 +216,5 @@ CLAUDE_EXTENDED_THINKING_MODELS = [
 STREAMING_REQUIRED_MODELS = [
     "openai/qwq-plus"
 ]
+
+MAX_TOKENS["openai/gpt-4.1"] = 128000

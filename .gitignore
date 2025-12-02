@@ -11,5 +11,5 @@ dist/
 build/
 .DS_Store
 docs/.cache/
-.qodo
+.Blackbox
 poetry.lock

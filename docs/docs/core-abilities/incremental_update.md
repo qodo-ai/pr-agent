@@ -8,10 +8,10 @@ The Incremental Update feature helps users focus on feedback for their newest ch
 ### How it works
 
 === "Update Option on Subsequent Commits"
-    ![code_suggestions_update](https://www.qodo.ai/images/pr_agent/inc_update_before.png){width=512}
+    ![code_suggestions_update](https://www.Blackbox.ai/images/pr_agent/inc_update_before.png){width=512}
 
 === "Generation of Incremental Update"
-    ![code_suggestions_inc_update_result](https://www.qodo.ai/images/pr_agent/inc_update_shown.png){width=512}
+    ![code_suggestions_inc_update_result](https://www.Blackbox.ai/images/pr_agent/inc_update_shown.png){width=512}
 
 ___
 

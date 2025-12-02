@@ -1,16 +1,16 @@
-site_name: Qodo Merge (and open-source PR-Agent)
-repo_url: https://github.com/qodo-ai/pr-agent
-repo_name: Qodo-ai/pr-agent
+site_name: Blackbox Merge (and open-source PR-Agent)
+repo_url: https://github.com/Blackbox-ai/pr-agent
+repo_name: Blackbox-ai/pr-agent
 
 nav:
   - Overview:
     - 'index.md'
-    - 💎 Qodo Merge: 'overview/pr_agent_pro.md'
+    - 💎 Blackbox Merge: 'overview/pr_agent_pro.md'
     - Data Privacy: 'overview/data_privacy.md'
   - Installation:
     - 'installation/index.md'
     - PR-Agent: 'installation/pr_agent.md'
-    - 💎 Qodo Merge: 'installation/qodo_merge.md'
+    - 💎 Blackbox Merge: 'installation/Blackbox_merge.md'
   - Usage Guide:
     - 'usage-guide/index.md'
     - Introduction: 'usage-guide/introduction.md'
@@ -21,7 +21,7 @@ nav:
     - Changing a Model: 'usage-guide/changing_a_model.md'
     - Additional Configurations: 'usage-guide/additional_configurations.md'
     - Frequently Asked Questions: 'faq/index.md'
-    - Qodo Merge Models: 'usage-guide/qodo_merge_models.md'
+    - Blackbox Merge Models: 'usage-guide/Blackbox_merge_models.md'
   - Tools:
      - 'tools/index.md'
      - Describe: 'tools/describe.md'
@@ -62,16 +62,16 @@ nav:
       - Self-reflection: 'core-abilities/self_reflection.md'
       - Static code analysis: 'core-abilities/static_code_analysis.md'
 #  - Chrome Extension:
-#      - Qodo Merge Chrome Extension: 'chrome-extension/index.md'
+#      - Blackbox Merge Chrome Extension: 'chrome-extension/index.md'
 #      - Features: 'chrome-extension/features.md'
 #      - Data Privacy: 'chrome-extension/data_privacy.md'
 #      - Options: 'chrome-extension/options.md'
-  - Qodo Merge CLI:
-      - Overview: 'qodo-merge-cli/index.md'
-      - Installation: 'qodo-merge-cli/installation.md'
-      - Usage: 'qodo-merge-cli/usage.md'
-      #- Features & Usage: 'qodo-merge-cli/features.md'
-  #      - Troubleshooting: 'qodo-merge-cli/troubleshooting.md'
+  - Blackbox Merge CLI:
+      - Overview: 'Blackbox-merge-cli/index.md'
+      - Installation: 'Blackbox-merge-cli/installation.md'
+      - Usage: 'Blackbox-merge-cli/usage.md'
+      #- Features & Usage: 'Blackbox-merge-cli/features.md'
+  #      - Troubleshooting: 'Blackbox-merge-cli/troubleshooting.md'
   - PR Benchmark:
       - PR Benchmark: 'pr_benchmark/index.md'
   - Recent Updates:
@@ -174,4 +174,4 @@ markdown_extensions:
 
 
 copyright: |
-  &copy; 2025 <a href="https://www.codium.ai/"  target="_blank" rel="noopener">QodoAI</a>
+  &copy; 2025 <a href="https://www.codium.ai/"  target="_blank" rel="noopener">BlackboxAI</a>

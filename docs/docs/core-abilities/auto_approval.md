@@ -2,7 +2,7 @@
 
 `Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
-Under specific conditions, Qodo Merge can auto-approve a PR when a manual comment is invoked, or when the PR meets certain criteria.
+Under specific conditions, Blackbox Merge can auto-approve a PR when a manual comment is invoked, or when the PR meets certain criteria.
 
 **To ensure safety, the auto-approval feature is disabled by default.**
 To enable auto-approval features, you need to actively set one or both of the following options in a pre-defined _configuration file_:
@@ -32,7 +32,7 @@ After enabling, by commenting on a PR:
 /review auto_approve
 ```
 
-Qodo Merge will approve the PR and add a comment with the reason for the approval.
+Blackbox Merge will approve the PR and add a comment with the reason for the approval.
 
 ## **Auto-approval when the PR meets certain criteria**
 
@@ -55,7 +55,7 @@ There are two possible paths leading to this auto-approval - one via the `review
     auto_approve_for_low_review_effort = X # X is a number between 1 and 5
     ```
     
-    When the [review effort score](https://www.qodo.ai/images/pr_agent/review3.png) is lower than or equal to X, the PR will be auto-approved (unless ticket compliance is enabled and fails, see below).
+    When the [review effort score](https://www.Blackbox.ai/images/pr_agent/review3.png) is lower than or equal to X, the PR will be auto-approved (unless ticket compliance is enabled and fails, see below).
 
 - **Ticket compliance criteria**
     
@@ -67,7 +67,7 @@ There are two possible paths leading to this auto-approval - one via the `review
     
     If `ensure_ticket_compliance` is set to `true`, auto-approval for the `review` toll path will be disabled if no ticket is linked to the PR, or if the PR is not fully compliant with a linked ticket. This ensures that PRs are only auto-approved if their associated tickets are properly resolved.
     
-    You can also prevent auto-approval if the PR exceeds the ticket's scope (see [here](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#configuration-options)).
+    You can also prevent auto-approval if the PR exceeds the ticket's scope (see [here](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/#configuration-options)).
 
 
 ### Auto-approval via the `improve` tool

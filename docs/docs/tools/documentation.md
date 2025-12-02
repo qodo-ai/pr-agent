@@ -32,7 +32,7 @@ Comment `/add_docs` on a PR to invoke it manually.
 
 ## Automatic triggering
 
-To automatically run the `add_docs` tool when a pull request is opened, define in a [configuration file](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/):
+To automatically run the `add_docs` tool when a pull request is opened, define in a [configuration file](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/configuration_options/):
 
 
 ```toml
@@ -44,7 +44,7 @@ pr_commands = [
 ```
 
 The `pr_commands` list defines commands that run automatically when a PR is opened.
-Since this is under the [github_app] section, it only applies when using the Qodo Merge GitHub App in GitHub environments.
+Since this is under the [github_app] section, it only applies when using the Blackbox Merge GitHub App in GitHub environments.
 
 ## Configuration options
 

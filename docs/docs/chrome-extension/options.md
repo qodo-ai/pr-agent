@@ -2,7 +2,7 @@
 
 ### Accessing the Options Page
 
-To access the options page for the Qodo Merge Chrome extension:
+To access the options page for the Blackbox Merge Chrome extension:
 
 1. Find the extension icon in your Chrome toolbar (usually in the top-right corner of your browser)
 2. Right-click on the extension icon
@@ -20,20 +20,20 @@ Alternatively, you can access the options page directly using this URL:
 
 #### API Base Host
 
-For single-tenant customers, you can configure the extension to communicate directly with your company's Qodo Merge server instance.
+For single-tenant customers, you can configure the extension to communicate directly with your company's Blackbox Merge server instance.
 
 To set this up:
 
-- Enter your organization's Qodo Merge API endpoint in the "API Base Host" field
-- This endpoint should be provided by your Qodo DevOps Team
+- Enter your organization's Blackbox Merge API endpoint in the "API Base Host" field
+- This endpoint should be provided by your Blackbox DevOps Team
 
-*Note: The extension does not send your code to the server, but only triggers your previously installed Qodo Merge application.*
+*Note: The extension does not send your code to the server, but only triggers your previously installed Blackbox Merge application.*
 
 #### Interface Options
 
 You can customize the extension's interface by:
 
-- Toggling the "Show Qodo Merge Toolbar" option
+- Toggling the "Show Blackbox Merge Toolbar" option
 - When disabled, the toolbar will not appear in your Github comment bar
 
 Remember to click "Save Settings" after making any changes.

@@ -36,7 +36,7 @@ To enable custom labels, you need to apply the [configuration changes](#configur
 
 #### 3. Handle custom labels from the Repo's labels page 💎
 
-> This feature is available only in Qodo Merge
+> This feature is available only in Blackbox Merge
 
 * GitHub : `https://github.com/{owner}/{repo}/labels`, or click on the "Labels" tab in the issues or PRs page.
 * GitLab : `https://gitlab.com/{owner}/{repo}/-/labels`, or click on "Manage" -> "Labels" on the left menu.

@@ -103,7 +103,7 @@ class TestConvertToMarkdown:
             ]
         }}
         mock_git_provider = Mock()
-        reference_link = 'https://github.com/qodo/pr-agent/pull/1/files#diff-hashvalue-R174'
+        reference_link = 'https://github.com/Blackbox/pr-agent/pull/1/files#diff-hashvalue-R174'
         mock_git_provider.get_line_link.return_value = reference_link
 
         expected_output = textwrap.dedent(f"""\

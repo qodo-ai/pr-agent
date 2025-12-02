@@ -4,7 +4,7 @@
 
 ## Overview
 
-Qodo Merge transforms static code reviews into interactive experiences by enabling direct actions from pull request (PR) comments.
+Blackbox Merge transforms static code reviews into interactive experiences by enabling direct actions from pull request (PR) comments.
 Developers can immediately trigger actions and apply changes with simple checkbox clicks.
 
 This focused workflow maintains context while dramatically reducing the time between PR creation and final merge.
@@ -14,7 +14,7 @@ The approach eliminates manual steps, provides clear visual indicators, and crea
 
 ### 1\. Interactive `/improve` Tool
 
-The [`/improve`](https://qodo-merge-docs.qodo.ai/tools/improve/) command delivers a comprehensive interactive experience:
+The [`/improve`](https://Blackbox-merge-docs.Blackbox.ai/tools/improve/) command delivers a comprehensive interactive experience:
 
 - _**Apply this suggestion**_: Clicking this checkbox instantly converts a suggestion into a committable code change. When committed to the PR, changes made to code that was flagged for improvement will be marked with a check mark, allowing developers to easily track and review implemented recommendations.
 
@@ -26,7 +26,7 @@ The [`/improve`](https://qodo-merge-docs.qodo.ai/tools/improve/) command deliver
 
 ### 2\. Interactive `/analyze` Tool
 
-The [`/analyze`](https://qodo-merge-docs.qodo.ai/tools/analyze/) command provides component-level analysis with interactive options for each identified code component:
+The [`/analyze`](https://Blackbox-merge-docs.Blackbox.ai/tools/analyze/) command provides component-level analysis with interactive options for each identified code component:
 
 - Interactive checkboxes to generate tests, documentation, and code suggestions for specific components
 
@@ -36,6 +36,6 @@ The [`/analyze`](https://qodo-merge-docs.qodo.ai/tools/analyze/) command provide
 
 ### 3\. Interactive `/help` Tool
 
-The [`/help`](https://qodo-merge-docs.qodo.ai/tools/help/) command not only lists available tools and their descriptions but also enables immediate tool invocation through interactive checkboxes.
-When a user checks a tool's checkbox, Qodo Merge instantly triggers that tool without requiring additional commands.
-This transforms the standard help menu into an interactive launch pad for all Qodo Merge capabilities, eliminating context switching by keeping developers within their PR workflow.
+The [`/help`](https://Blackbox-merge-docs.Blackbox.ai/tools/help/) command not only lists available tools and their descriptions but also enables immediate tool invocation through interactive checkboxes.
+When a user checks a tool's checkbox, Blackbox Merge instantly triggers that tool without requiring additional commands.
+This transforms the standard help menu into an interactive launch pad for all Blackbox Merge capabilities, eliminating context switching by keeping developers within their PR workflow.

@@ -4,7 +4,7 @@
 
 ## Overview
 
-Qodo Merge implements an orchestrator agent that enables interactive code discussions, listening and responding to comments without requiring explicit tool calls.
+Blackbox Merge implements an orchestrator agent that enables interactive code discussions, listening and responding to comments without requiring explicit tool calls.
 The orchestrator intelligently analyzes your responses to determine if you want to implement a suggestion, ask a question, or request help, then delegates to the appropriate specialized tool.
 
 To minimize unnecessary notifications and maintain focused discussions, the orchestrator agent will only respond to comments made directly within the inline code suggestion discussions it has created (`/improve`) or within discussions initiated by the `/implement` command.
@@ -28,7 +28,7 @@ enable_chat_in_code_suggestions = true
 To obtain dynamic responses, the following steps are required:
 
 1. Run the `/improve` command (mostly automatic)
-2. Check the `/improve` recommendation checkboxes (_Apply this suggestion_) to have Qodo Merge generate a new inline code suggestion discussion
+2. Check the `/improve` recommendation checkboxes (_Apply this suggestion_) to have Blackbox Merge generate a new inline code suggestion discussion
 3. The orchestrator agent will then automatically listen to and reply to comments within the discussion without requiring additional commands
 
 #### `/implement`
@@ -36,7 +36,7 @@ To obtain dynamic responses, the following steps are required:
 To obtain dynamic responses, the following steps are required:
 
 1. Select code lines in the PR diff and run the `/implement` command
-2. Wait for Qodo Merge to generate a new inline code suggestion
+2. Wait for Blackbox Merge to generate a new inline code suggestion
 3. The orchestrator agent will then automatically listen to and reply to comments within the discussion without requiring additional commands
 
 

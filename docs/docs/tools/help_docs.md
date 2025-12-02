@@ -44,7 +44,7 @@ This can be useful, for example, for providing immediate feedback to users who o
 
 Here's how:
 
-1) Follow the steps depicted under [Run as a Github Action](https://qodo-merge-docs.qodo.ai/installation/github/#run-as-a-github-action) to create a new workflow, such as:`.github/workflows/help_docs.yml`:
+1) Follow the steps depicted under [Run as a Github Action](https://Blackbox-merge-docs.Blackbox.ai/installation/github/#run-as-a-github-action) to create a new workflow, such as:`.github/workflows/help_docs.yml`:
 
 2) Edit your yaml file to the following:
 
