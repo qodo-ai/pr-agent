@@ -1,7 +1,7 @@
 # Usage guide
 
-This section provides a detailed guide on how to use Qodo Merge.
-It includes information on how to adjust Qodo Merge configurations, define which tools will run automatically, and other advanced configurations.
+This section provides a detailed guide on how to use Blackbox Merge.
+It includes information on how to adjust Blackbox Merge configurations, define which tools will run automatically, and other advanced configurations.
 
 - [Introduction](./introduction.md)
 - [Enabling a Wiki](./enabling_a_wiki)
@@ -21,6 +21,6 @@ It includes information on how to adjust Qodo Merge configurations, define which
     - [Ignoring files from analysis](./additional_configurations.md#ignoring-files-from-analysis)
     - [Extra instructions](./additional_configurations.md#extra-instructions)
     - [Working with large PRs](./additional_configurations.md#working-with-large-prs)
-    - [Changing a model](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/)
-- [FAQ](https://qodo-merge-docs.qodo.ai/faq/)
-- [Qodo Merge Models](./qodo_merge_models)
+    - [Changing a model](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/changing_a_model/)
+- [FAQ](https://Blackbox-merge-docs.Blackbox.ai/faq/)
+- [Blackbox Merge Models](./Blackbox_merge_models)

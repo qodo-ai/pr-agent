@@ -34,5 +34,5 @@ Thank you for your interest in contributing to the PR-Agent project!
 ## Questions or Need Help?
 
 - Join our [Discord community](https://discord.com/channels/1057273017547378788/1126104260430528613) for questions and discussions
-- Check the [documentation](https://qodo-merge-docs.qodo.ai/) for detailed information
-- Report bugs or request features through [GitHub Issues](https://github.com/qodo-ai/pr-agent/issues)
+- Check the [documentation](https://Blackbox-merge-docs.Blackbox.ai/) for detailed information
+- Report bugs or request features through [GitHub Issues](https://github.com/Blackbox-ai/pr-agent/issues)

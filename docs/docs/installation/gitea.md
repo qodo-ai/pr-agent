@@ -13,7 +13,7 @@ WEBHOOK_SECRET=$(python -c "import secrets; print(secrets.token_hex(10))")
 4. Clone this repository:
 
 ```bash
-git clone https://github.com/qodo-ai/pr-agent.git
+git clone https://github.com/Blackbox-ai/pr-agent.git
 ```
 
 5. Prepare variables and secrets. Skip this step if you plan on setting these as environment variables when running the agent:

@@ -1,14 +1,14 @@
-The different tools and sub-tools used by Qodo Merge are adjustable via a Git configuration file.
+The different tools and sub-tools used by Blackbox Merge are adjustable via a Git configuration file.
 There are three main ways to set persistent configurations:
 
-1. [Wiki](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/#wiki-configuration-file) configuration page 💎
-2. [Local](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/#local-configuration-file) configuration file
-3. [Global](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/#global-configuration-file) configuration file 💎
+1. [Wiki](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/configuration_options/#wiki-configuration-file) configuration page 💎
+2. [Local](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/configuration_options/#local-configuration-file) configuration file
+3. [Global](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/configuration_options/#global-configuration-file) configuration file 💎
 
 In terms of precedence, wiki configurations will override local configurations, and local configurations will override global configurations.
 
 
-For a list of all possible configurations, see the [configuration options](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml/) page.
+For a list of all possible configurations, see the [configuration options](https://github.com/Blackbox-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml/) page.
 In addition to general configuration options, each tool has its own configurations. For example, the `review` tool will use parameters from the [pr_reviewer](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L16) section in the configuration file.
 
 !!! tip "Tip1: Edit only what you need"
@@ -22,7 +22,7 @@ In addition to general configuration options, each tool has its own configuratio
 
 `Platforms supported: GitHub, GitLab, Bitbucket`
 
-With Qodo Merge, you can set configurations by creating a page called `.pr_agent.toml` in the [wiki](https://github.com/Codium-ai/pr-agent/wiki/pr_agent.toml) of the repo.
+With Blackbox Merge, you can set configurations by creating a page called `.pr_agent.toml` in the [wiki](https://github.com/Codium-ai/pr-agent/wiki/pr_agent.toml) of the repo.
 The advantage of this method is that it allows to set configurations without needing to commit new content to the repo - just edit the wiki page and **save**.
 
 ![wiki_configuration](https://codium.ai/images/pr_agent/wiki_configuration.png){width=512}
@@ -35,7 +35,7 @@ An example content:
 generate_ai_title=true
 ```
 
-Qodo Merge will know to remove the surrounding quotes when reading the configuration content.
+Blackbox Merge will know to remove the surrounding quotes when reading the configuration content.
 
 ## Local configuration file
 
@@ -91,7 +91,7 @@ Create a dedicated project to hold a global configuration file that affects all 
 1. Create a new project with both the name and key: PR_AGENT_SETTINGS.
 2. Inside the PR_AGENT_SETTINGS project, create a repository named pr-agent-settings.
 3. In this repository, add a `.pr_agent.toml` configuration file—structured similarly to the global configuration file described above.
-4. Optionally, you can add organizational-level [global best practices](https://qodo-merge-docs.qodo.ai/tools/improve/#global-hierarchical-best-practices).
+4. Optionally, you can add organizational-level [global best practices](https://Blackbox-merge-docs.Blackbox.ai/tools/improve/#global-hierarchical-best-practices).
 
 Repositories across your entire Bitbucket organization will inherit the configuration from this file.
 

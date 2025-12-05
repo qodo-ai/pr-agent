@@ -3,7 +3,7 @@
 ` Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
 
-By combining static code analysis with LLM capabilities, Qodo Merge can provide a comprehensive analysis of the PR code changes on a component level.
+By combining static code analysis with LLM capabilities, Blackbox Merge can provide a comprehensive analysis of the PR code changes on a component level.
 
 It scans the PR code changes, finds all the code components (methods, functions, classes) that changed, and enables to interactively generate tests, docs, code suggestions and similar code search for each component.
 
@@ -14,7 +14,7 @@ It scans the PR code changes, finds all the code components (methods, functions,
 
 ### Analyze PR
 
-The [`analyze`](https://qodo-merge-docs.qodo.ai/tools/analyze/) tool enables to interactively generate tests, docs, code suggestions and similar code search for each component that changed in the PR.
+The [`analyze`](https://Blackbox-merge-docs.Blackbox.ai/tools/analyze/) tool enables to interactively generate tests, docs, code suggestions and similar code search for each component that changed in the PR.
 It can be invoked manually by commenting on any PR:
 
 ```
@@ -29,7 +29,7 @@ Clicking on each checkbox will trigger the relevant tool for the selected compon
 
 ### Generate Tests
 
-The [`test`](https://qodo-merge-docs.qodo.ai/tools/test/) tool  generate tests for a selected component, based on the PR code changes.
+The [`test`](https://Blackbox-merge-docs.Blackbox.ai/tools/test/) tool  generate tests for a selected component, based on the PR code changes.
 It can be invoked manually by commenting on any PR:
 
 ```
@@ -42,7 +42,7 @@ where 'component_name' is the name of a specific component in the PR,  Or be tri
 
 ### Generate Docs for a Component
 
-The [`add_docs`](https://qodo-merge-docs.qodo.ai/tools/documentation/) tool scans the PR code changes, and automatically generate docstrings for any code components that changed in the PR.
+The [`add_docs`](https://Blackbox-merge-docs.Blackbox.ai/tools/documentation/) tool scans the PR code changes, and automatically generate docstrings for any code components that changed in the PR.
 It can be invoked manually by commenting on any PR:
 
 ```
@@ -55,7 +55,7 @@ Or be triggered interactively by using the `analyze` tool.
 
 ### Generate Code Suggestions for a Component
 
-The [`improve_component`](https://qodo-merge-docs.qodo.ai/tools/improve_component/) tool generates code suggestions for a specific code component that changed in the PR.
+The [`improve_component`](https://Blackbox-merge-docs.Blackbox.ai/tools/improve_component/) tool generates code suggestions for a specific code component that changed in the PR.
 It can be invoked manually by commenting on any PR:
 
 ```
@@ -68,7 +68,7 @@ Or be triggered interactively by using the `analyze` tool.
 
 ### Find Similar Code
 
-The [`similar code`](https://qodo-merge-docs.qodo.ai/tools/similar_code/) tool retrieves the most similar code components from inside the organization's codebase or from open-source code, including details about the license associated with each repository.
+The [`similar code`](https://Blackbox-merge-docs.Blackbox.ai/tools/similar_code/) tool retrieves the most similar code components from inside the organization's codebase or from open-source code, including details about the license associated with each repository.
 
 For example:
 

@@ -1,6 +1,6 @@
 # Tools
 
-Here is a list of Qodo Merge tools, each with a dedicated page that explains how to use it:
+Here is a list of Blackbox Merge tools, each with a dedicated page that explains how to use it:
 
 | Tool                                                                                     | Description                                                                                                                                 |
 |------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
@@ -24,4 +24,4 @@ Here is a list of Qodo Merge tools, each with a dedicated page that explains how
 | **💎 [Scan Repo Discussions (`/scan_repo_discussions`](./scan_repo_discussions.md))**    | Generates `best_practices.md` file based on previous discussions in the repository                                                          |
 | **💎 [Similar Code (`/similar_code`](./similar_code.md))**                               | Retrieves the most similar code components from inside the organization's codebase, or from open-source code.                               |
 
-Note that the tools marked with 💎 are available only for Qodo Merge users.
+Note that the tools marked with 💎 are available only for Blackbox Merge users.

@@ -289,7 +289,7 @@ window.addEventListener('load', function() {
             };
 
             //const API_ENDPOINT = 'http://0.0.0.0:3000/api/v1/docs_help';
-            const API_ENDPOINT = 'https://help.merge.qodo.ai/api/v1/docs_help';
+            const API_ENDPOINT = 'https://help.merge.Blackbox.ai/api/v1/docs_help';
 
             const response = await fetch(API_ENDPOINT, options);
             const responseText = await response.text();

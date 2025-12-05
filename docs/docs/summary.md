@@ -1,14 +1,14 @@
 # Table of contents
 
 * [Overview](index.md)
-  * [💎 Qodo Merge](overview/pr_agent_pro.md)
+  * [💎 Blackbox Merge](overview/pr_agent_pro.md)
   * [Data Privacy](overview/data_privacy.md)
 
 ## Installation
 
 * [Installation](installation/index.md)
 * [PR-Agent](installation/pr_agent.md)
-* [💎 Qodo Merge](installation/qodo_merge.md)
+* [💎 Blackbox Merge](installation/Blackbox_merge.md)
 
 ## Usage Guide
 
@@ -21,7 +21,7 @@
 * [Changing a Model](usage-guide/changing_a_model.md)
 * [Additional Configurations](usage-guide/additional_configurations.md)
 * [Frequently Asked Questions](faq/index.md)
-* [Qodo Merge Models](usage-guide/qodo_merge_models.md)
+* [Blackbox Merge Models](usage-guide/Blackbox_merge_models.md)
 
 ## Tools
 
@@ -65,11 +65,11 @@
 * [Self-reflection](core-abilities/self_reflection.md)
 * [Static code analysis](core-abilities/static_code_analysis.md)
 
-## Qodo Merge CLI
+## Blackbox Merge CLI
 
-* [Overview](qodo-merge-cli/index.md)
-* [Installation](qodo-merge-cli/installation.md)
-* [Usage](qodo-merge-cli/usage.md)
+* [Overview](Blackbox-merge-cli/index.md)
+* [Installation](Blackbox-merge-cli/installation.md)
+* [Usage](Blackbox-merge-cli/usage.md)
 
 ## PR Benchmark
 

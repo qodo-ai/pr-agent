@@ -968,8 +968,8 @@ class GitLabProvider(GitProvider):
         # https://docs.gitlab.com/user/profile/personal_access_tokens/#clone-repository-using-personal-access-token
         # requires a username, which may not be applicable.
         # The following solution is taken from: https://stackoverflow.com/questions/25409700/using-gitlab-token-to-clone-without-authentication/35003812#35003812
-        # For example: For repo url: https://gitlab.codium-inc.com/qodo/autoscraper.git
-        # Then to clone one will issue: 'git clone https://oauth2:<access token>@gitlab.codium-inc.com/qodo/autoscraper.git'
+        # For example: For repo url: https://gitlab.codium-inc.com/Blackbox/autoscraper.git
+        # Then to clone one will issue: 'git clone https://oauth2:<access token>@gitlab.codium-inc.com/Blackbox/autoscraper.git'
 
         clone_url = f"{scheme}oauth2:{access_token}@gitlab.{base_url}"
         return clone_url

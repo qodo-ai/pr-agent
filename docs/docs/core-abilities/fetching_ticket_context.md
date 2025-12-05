@@ -4,15 +4,15 @@
 
 ## Overview
 
-Qodo Merge streamlines code review workflows by seamlessly connecting with multiple ticket management systems.
+Blackbox Merge streamlines code review workflows by seamlessly connecting with multiple ticket management systems.
 This integration enriches the review process by automatically surfacing relevant ticket information and context alongside code changes.
 
 **Ticket systems supported**:
 
-- [GitHub/Gitlab Issues](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#githubgitlab-issues-integration)
-- [Jira (💎)](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#jira-integration)
-- [Linear (💎)](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#linear-integration)
-- [Monday (💎)](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#monday-integration)
+- [GitHub/Gitlab Issues](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/#githubgitlab-issues-integration)
+- [Jira (💎)](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/#jira-integration)
+- [Linear (💎)](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/#linear-integration)
+- [Monday (💎)](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/#monday-integration)
 
 **Ticket data fetched:**
 
@@ -28,11 +28,11 @@ This integration enriches the review process by automatically surfacing relevant
 Ticket Recognition Requirements:
 
 - The PR description should contain a link to the ticket or if the branch name starts with the ticket id / number.
-- For Jira tickets, you should follow the instructions in [Jira Integration](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/#jira-integration) in order to authenticate with Jira.
+- For Jira tickets, you should follow the instructions in [Jira Integration](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/#jira-integration) in order to authenticate with Jira.
 
 ### Describe tool
 
-Qodo Merge will recognize the ticket and use the ticket content (title, description, labels) to provide additional context for the code changes.
+Blackbox Merge will recognize the ticket and use the ticket content (title, description, labels) to provide additional context for the code changes.
 By understanding the reasoning and intent behind modifications, the LLM can offer more insightful and relevant code analysis.
 
 ### Review tool
@@ -47,7 +47,7 @@ Each ticket will be assigned a label (Compliance/Alignment level), Indicates the
 - Not Compliant
 - PR Code Verified
 
-![Ticket Compliance](https://www.qodo.ai/images/pr_agent/ticket_compliance_review.png){width=768}
+![Ticket Compliance](https://www.Blackbox.ai/images/pr_agent/ticket_compliance_review.png){width=768}
 
 A `PR Code Verified` label indicates the PR code meets ticket requirements, but requires additional manual testing beyond the code scope. For example - validating UI display across different environments (Mac, Windows, mobile, etc.).
 
@@ -77,7 +77,7 @@ A `PR Code Verified` label indicates the PR code meets ticket requirements, but 
 
 ## GitHub/Gitlab Issues Integration
 
-Qodo Merge will automatically recognize GitHub/Gitlab issues mentioned in the PR description and fetch the issue content.
+Blackbox Merge will automatically recognize GitHub/Gitlab issues mentioned in the PR description and fetch the issue content.
 Examples of valid GitHub/Gitlab issue references:
 
 - `https://github.com/<ORG_NAME>/<REPO_NAME>/issues/<ISSUE_NUMBER>` or `https://gitlab.com/<ORG_NAME>/<REPO_NAME>/-/issues/<ISSUE_NUMBER>`
@@ -87,7 +87,7 @@ Examples of valid GitHub/Gitlab issue references:
 Branch names can also be used to link issues, for example:
 - `123-fix-bug` (where `123` is the issue number)
 
-Since Qodo Merge is integrated with GitHub, it doesn't require any additional configuration to fetch GitHub issues.
+Since Blackbox Merge is integrated with GitHub, it doesn't require any additional configuration to fetch GitHub issues.
 
 ## Jira Integration 💎
 
@@ -99,21 +99,21 @@ There are two ways to authenticate with Jira Cloud:
 
 **1) Jira App Authentication**
 
-The recommended way to authenticate with Jira Cloud is to install the Qodo Merge app in your Jira Cloud instance. This will allow Qodo Merge to access Jira data on your behalf.
+The recommended way to authenticate with Jira Cloud is to install the Blackbox Merge app in your Jira Cloud instance. This will allow Blackbox Merge to access Jira data on your behalf.
 
 Installation steps:
 
-1. Go to the [Qodo Merge integrations page](https://app.qodo.ai/qodo-merge/integrations)
+1. Go to the [Blackbox Merge integrations page](https://app.Blackbox.ai/Blackbox-merge/integrations)
 
 2. Click on the Connect **Jira Cloud** button to connect the Jira Cloud app
 
 3. Click the `accept` button.<br>
-![Jira Cloud App Installation](https://www.qodo.ai/images/pr_agent/jira_app_installation2.png){width=384}
+![Jira Cloud App Installation](https://www.Blackbox.ai/images/pr_agent/jira_app_installation2.png){width=384}
 
-4. After installing the app, you will be redirected to the Qodo Merge registration page. and you will see a success message.<br>
-![Jira Cloud App success message](https://www.qodo.ai/images/pr_agent/jira_app_success.png){width=384}
+4. After installing the app, you will be redirected to the Blackbox Merge registration page. and you will see a success message.<br>
+![Jira Cloud App success message](https://www.Blackbox.ai/images/pr_agent/jira_app_success.png){width=384}
 
-5. Now Qodo Merge will be able to fetch Jira ticket context for your PRs.
+5. Now Blackbox Merge will be able to fetch Jira ticket context for your PRs.
 
 **2) Email/Token Authentication**
 
@@ -129,7 +129,7 @@ You can create an API token from your Atlassian account:
 
 ![Jira Cloud API Token](https://images.ctfassets.net/zsv3d0ugroxu/1RYvh9lqgeZjjNe5S3Hbfb/155e846a1cb38f30bf17512b6dfd2229/screenshot_NewAPIToken){width=384}
 
-5. In your [configuration file](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/) add the following lines:
+5. In your [configuration file](https://Blackbox-merge-docs.Blackbox.ai/usage-guide/configuration_options/) add the following lines:
 
 ```toml
 [jira]
@@ -140,7 +140,7 @@ jira_api_email = "YOUR_EMAIL"
 ### Jira Data Center/Server
 
 [//]: # ()
-[//]: # (##### Local App Authentication &#40;For Qodo Merge On-Premise Customers&#41;)
+[//]: # (##### Local App Authentication &#40;For Blackbox Merge On-Premise Customers&#41;)
 
 [//]: # ()
 [//]: # (##### 1. Step 1: Set up an application link in Jira Data Center/Server)
@@ -148,30 +148,30 @@ jira_api_email = "YOUR_EMAIL"
 [//]: # (* Go to Jira Administration > Applications > Application Links > Click on `Create link`)
 
 [//]: # ()
-[//]: # (![application links]&#40;https://www.qodo.ai/images/pr_agent/jira_app_links.png&#41;{width=384})
+[//]: # (![application links]&#40;https://www.Blackbox.ai/images/pr_agent/jira_app_links.png&#41;{width=384})
 
 [//]: # (* Choose `External application` and set the direction to `Incoming` and then click `Continue`)
 
 [//]: # ()
-[//]: # (![external application]&#40;https://www.qodo.ai/images/pr_agent/jira_create_link.png&#41;{width=256})
+[//]: # (![external application]&#40;https://www.Blackbox.ai/images/pr_agent/jira_create_link.png&#41;{width=256})
 
 [//]: # (* In the following screen, enter the following details:)
 
-[//]: # (    * Name: `Qodo Merge`)
+[//]: # (    * Name: `Blackbox Merge`)
 
-[//]: # (    * Redirect URL: Enter your Qodo Merge URL followed  `https://{QODO_MERGE_ENDPOINT}/register_ticket_provider`)
+[//]: # (    * Redirect URL: Enter your Blackbox Merge URL followed  `https://{Blackbox_MERGE_ENDPOINT}/register_ticket_provider`)
 
 [//]: # (    * Permission: Select `Read`)
 
 [//]: # (    * Click `Save`)
 
 [//]: # ()
-[//]: # (![external application details]&#40;https://www.qodo.ai/images/pr_agent/jira_fill_app_link.png&#41;{width=384})
+[//]: # (![external application details]&#40;https://www.Blackbox.ai/images/pr_agent/jira_fill_app_link.png&#41;{width=384})
 
 [//]: # (* Copy the `Client ID` and `Client secret` and set them in your `.secrets` file:)
 
 [//]: # ()
-[//]: # (![client id and secret]&#40;https://www.qodo.ai/images/pr_agent/jira_app_credentionals.png&#41;{width=256})
+[//]: # (![client id and secret]&#40;https://www.Blackbox.ai/images/pr_agent/jira_app_credentionals.png&#41;{width=256})
 
 [//]: # (```toml)
 
@@ -186,17 +186,17 @@ jira_api_email = "YOUR_EMAIL"
 [//]: # ()
 [//]: # (##### 2. Step 2: Authenticate with Jira Data Center/Server)
 
-[//]: # (* Open this URL in your browser: `https://{QODO_MERGE_ENDPOINT}/jira_auth`)
+[//]: # (* Open this URL in your browser: `https://{Blackbox_MERGE_ENDPOINT}/jira_auth`)
 
 [//]: # (* Click on link)
 
 [//]: # ()
-[//]: # (![jira auth success]&#40;https://www.qodo.ai/images/pr_agent/jira_auth_page.png&#41;{width=384})
+[//]: # (![jira auth success]&#40;https://www.Blackbox.ai/images/pr_agent/jira_auth_page.png&#41;{width=384})
 
 [//]: # ()
 [//]: # (* You will be redirected to Jira Data Center/Server, click `Allow`)
 
-[//]: # (* You will be redirected back to Qodo Merge and you will see a success message.)
+[//]: # (* You will be redirected back to Blackbox Merge and you will see a success message.)
 
 [//]: # (Personal Access Token &#40;PAT&#41; Authentication)
 
@@ -215,7 +215,7 @@ jira_api_token = "your_password"
 
 ##### Validating Basic authentication via Python script
 
-If you are facing issues retrieving tickets in Qodo Merge with Basic auth, you can validate the flow using a Python script.
+If you are facing issues retrieving tickets in Blackbox Merge with Basic auth, you can validate the flow using a Python script.
 This following steps will help you check if the basic auth is working correctly, and if you can access the Jira ticket details:
 
 1. run `pip install jira==3.8.0`
@@ -271,7 +271,7 @@ jira_api_token = "YOUR_API_TOKEN"
 
 ##### Validating PAT token via Python script
 
-If you are facing issues retrieving tickets in Qodo Merge with PAT token, you can validate the flow using a Python script.
+If you are facing issues retrieving tickets in Blackbox Merge with PAT token, you can validate the flow using a Python script.
 This following steps will help you check if the token is working correctly, and if you can access the Jira ticket details:
 
 1. run `pip install jira==3.8.0`
@@ -316,7 +316,7 @@ This following steps will help you check if the token is working correctly, and 
 
 ### Multi-JIRA Server Configuration 💎
 
-Qodo Merge supports connecting to multiple JIRA servers using different authentication methods.
+Blackbox Merge supports connecting to multiple JIRA servers using different authentication methods.
 
 === "Email/Token (Basic Auth)"
 
@@ -377,7 +377,7 @@ Qodo Merge supports connecting to multiple JIRA servers using different authenti
 
     For Jira Cloud instances using App Authentication:
 
-    1. Install the Qodo Merge app on each JIRA Cloud instance you want to connect to
+    1. Install the Blackbox Merge app on each JIRA Cloud instance you want to connect to
     2. Set the default server for ticket ID resolution:
 
     ```toml
@@ -415,23 +415,23 @@ Name your branch with the ticket ID as a prefix (e.g., `ISSUE-123-feature-descri
 
 ### Linear App Authentication
 
-The recommended way to authenticate with Linear is to connect the Linear app through the Qodo Merge portal.
+The recommended way to authenticate with Linear is to connect the Linear app through the Blackbox Merge portal.
 
 Installation steps:
 
-1. Go to the [Qodo Merge integrations page](https://app.qodo.ai/qodo-merge/integrations)
+1. Go to the [Blackbox Merge integrations page](https://app.Blackbox.ai/Blackbox-merge/integrations)
 
 2. Navigate to the **Integrations** tab
 
 3. Click on the **Linear** button to connect the Linear app
 
-4. Follow the authentication flow to authorize Qodo Merge to access your Linear workspace
+4. Follow the authentication flow to authorize Blackbox Merge to access your Linear workspace
 
-5. Once connected, Qodo Merge will be able to fetch Linear ticket context for your PRs
+5. Once connected, Blackbox Merge will be able to fetch Linear ticket context for your PRs
 
 ### How to link a PR to a Linear ticket
 
-Qodo Merge will automatically detect Linear tickets using either of these methods:
+Blackbox Merge will automatically detect Linear tickets using either of these methods:
 
 **Method 1: Description Reference:**
 
@@ -456,20 +456,20 @@ Name your branch with the ticket ID as a prefix (e.g., `ABC-123-feature-descript
 ## Monday Integration 💎
 
 ### Monday App Authentication
-The recommended way to authenticate with Monday is to connect the Monday app through the Qodo Merge portal.
+The recommended way to authenticate with Monday is to connect the Monday app through the Blackbox Merge portal.
 
 Installation steps:
 
-1. Go to the [Qodo Merge integrations page](https://app.qodo.ai/qodo-merge/integrations)
+1. Go to the [Blackbox Merge integrations page](https://app.Blackbox.ai/Blackbox-merge/integrations)
 2. Navigate to the **Integrations** tab
 3. Click on the **Monday** button to connect the Monday app
-4. Follow the authentication flow to authorize Qodo Merge to access your Monday workspace
-5. Once connected, Qodo Merge will be able to fetch Monday ticket context for your PRs
+4. Follow the authentication flow to authorize Blackbox Merge to access your Monday workspace
+5. Once connected, Blackbox Merge will be able to fetch Monday ticket context for your PRs
 
 ### Monday Ticket Context
 `Ticket Context and Ticket Compliance are supported for Monday items, but not yet available in the "PR to Ticket" feature.`
 
-When Qodo Merge processes your PRs, it extracts the following information from Monday items:
+When Blackbox Merge processes your PRs, it extracts the following information from Monday items:
 
 * **Item ID and Name:** The unique identifier and title of the Monday item
 * **Item URL:** Direct link to the Monday item in your workspace
@@ -478,7 +478,7 @@ When Qodo Merge processes your PRs, it extracts the following information from M
 * **Sub-items:** Names, IDs, and descriptions of all related sub-items with hierarchical structure
 
 ### How Monday Items are Detected
-Qodo Merge automatically detects Monday items from:
+Blackbox Merge automatically detects Monday items from:
 
 * PR Descriptions: Full Monday URLs like https://workspace.monday.com/boards/123/pulses/456
 * Branch Names: Item IDs in branch names (6-12 digit patterns) - requires `monday_base_url` configuration

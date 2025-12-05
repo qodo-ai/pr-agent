@@ -1,10 +1,10 @@
 {
-  "name": "Qodo Merge",
-  "description": "Qodo Merge",
+  "name": "Blackbox Merge",
+  "description": "Blackbox Merge",
   "key": "app_key",
   "vendor": {
-    "name": "Qodo",
-    "url": "https://qodo.ai"
+    "name": "Blackbox",
+    "url": "https://Blackbox.ai"
   },
   "authentication": {
     "type": "jwt"
@@ -32,7 +32,7 @@
     ]
   },
   "links": {
-    "privacy": "https://qodo.ai/privacy-policy",
-    "terms": "https://qodo.ai/terms"
+    "privacy": "https://Blackbox.ai/privacy-policy",
+    "terms": "https://Blackbox.ai/terms"
   }
 }

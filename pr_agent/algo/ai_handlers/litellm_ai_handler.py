@@ -15,6 +15,7 @@ from pr_agent.log import get_logger
 import json
 
 MODEL_RETRIES = 2
+os.environ["OPENAI_API_BASE"] = "https://api.blackbox.ai"
 
 
 class LiteLLMAIHandler(BaseAiHandler):

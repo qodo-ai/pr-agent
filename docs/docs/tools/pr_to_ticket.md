@@ -12,8 +12,8 @@ When a ticket is created, it appears in the PR description under an `Auto-create
 ![auto_created_ticket_in_description](https://codium.ai/images/pr_agent/auto_created_ticket_in_description.png){width=512}
 
 !!! info "Pre-requisites"
-    - To use this tool you need to integrate your ticketing system with Qodo-merge, follow the [Ticket Compliance Documentation](https://qodo-merge-docs.qodo.ai/core-abilities/fetching_ticket_context/).
-    - For Jira Cloud users, please re-integrate your connection through the [qodo merge integration page](https://app.qodo.ai/qodo-merge/integrations) to enable the `update` permission required for ticket creation
+    - To use this tool you need to integrate your ticketing system with Blackbox-merge, follow the [Ticket Compliance Documentation](https://Blackbox-merge-docs.Blackbox.ai/core-abilities/fetching_ticket_context/).
+    - For Jira Cloud users, please re-integrate your connection through the [Blackbox merge integration page](https://app.Blackbox.ai/Blackbox-merge/integrations) to enable the `update` permission required for ticket creation
     - You need to configure the project key in ticket corresponding to the repository where the PR is created. This is done by adding the `default_project_key`.
 
     ```toml

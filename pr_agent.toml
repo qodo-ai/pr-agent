@@ -1,0 +1,11 @@
+[general]
+log_level = "info"
+
+[llm]
+provider = "openai"
+model = "gpt-4o"
+# Add your API key here or via environment variable
+api_key = ""
+
+[review]
+enable_auto_review = true
