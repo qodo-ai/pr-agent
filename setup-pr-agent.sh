@@ -42,9 +42,11 @@ cat <<EOF > pr_agent.toml
 [general]
 log_level = "info"
 
+# Keep provider as OpenAI-compatible but default to Blackbox model identifier
+# Use Blackbox model with OpenAI provider routing
 [llm]
 provider = "openai"
-model = "gpt-4o"
+model = "openai/blackboxai/openai/gpt-4.1"
 # Add your API key here or via environment variable
 api_key = ""
 
