@@ -2,7 +2,7 @@
 # Do not copy this entire file to your repository configuration.
 # Your repository configuration should only include options you wish to override from the defaults.
 #
-# Use this page: 'https://qodo-merge-docs.qodo.ai/ai_search/' to ask questions about the configuration options.
+# Use page: 'https://qodo-merge-docs.qodo.ai/ai_search/' to ask questions about the configuration options.
 
 [config]
 # models
