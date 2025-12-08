@@ -1,0 +1,4 @@
+Flask>=2.0
+GitPython>=3.1
+requests>=2.0
+toml>=0.10

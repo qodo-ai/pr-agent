@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PR-Agent — Repo UI</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; }
+      #container { display:flex; height:100vh; }
+      #left { width:280px; border-right:1px solid #eee; padding:16px; box-sizing:border-box; overflow:auto }
+      #right { flex:1; padding:16px; overflow:auto }
+      .repo-item { padding:8px; cursor:pointer; border-radius:6px }
+      .repo-item:hover { background:#f6f8fa }
+      .selected { background:#e6f0ff }
+      pre { background:#f6f8fa; padding:12px; border-radius:6px; overflow:auto }
+      .automated-badge { background:#28a745; color:white; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:6px; }
+      .automation-btn { background:#0366d6; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; margin-bottom:12px; }
+      .automation-btn:hover { background:#0256b8; }
+      .automation-btn:disabled { background:#ccc; cursor:not-allowed; }
+      .automation-status { margin-bottom:12px; padding:8px; border-radius:6px; }
+      .status-success { background:#d4edda; color:#155724; border:1px solid #c3e6cb; }
+      .status-error { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="left">
+        <h3>Repositories</h3>
+        <div id="repos"></div>
+      </div>
+      <div id="right">
+        <h3 id="title">Select a repo</h3>
+        <div id="automation-section" style="display:none; margin-bottom:16px;">
+          <button id="btn_toggle_automation" class="automation-btn">Enable Automated PR Review</button>
+          <div id="automation-status" class="automation-status" style="display:none;"></div>
+          <p style="font-size:13px; color:#666; margin-top:8px;">
+            When enabled, all new PRs will automatically get review, description, and improvement suggestions.
+          </p>
+        </div>
+        <div id="controls" style="margin-bottom:12px; display:none">
+          <input id="pr_url" type="text" placeholder="https://github.com/org/repo/pull/123" style="width:70%" />
+          <button id="btn_review">Review</button>
+          <button id="btn_describe">Describe</button>
+          <button id="btn_improve">Improve</button>
+        </div>
+        <div id="content">Click a repository on the left to view details.</div>
+        <pre id="stream_output" style="white-space:pre-wrap; max-height:40vh; overflow:auto; display:none"></pre>
+      </div>
+    </div>
+
+    <script>
+      // LocalStorage helpers for automated repos
+      function getAutomatedRepos() {
+        const stored = localStorage.getItem('pr_agent_automated_repos')
+        return stored ? JSON.parse(stored) : []
+      }
+      
+      function isRepoAutomated(fullName) {
+        const automated = getAutomatedRepos()
+        return automated.includes(fullName)
+      }
+      
+      function addAutomatedRepo(fullName) {
+        const automated = getAutomatedRepos()
+        if (!automated.includes(fullName)) {
+          automated.push(fullName)
+          localStorage.setItem('pr_agent_automated_repos', JSON.stringify(automated))
+        }
+      }
+      
+      function removeAutomatedRepo(fullName) {
+        const automated = getAutomatedRepos()
+        const filtered = automated.filter(r => r !== fullName)
+        localStorage.setItem('pr_agent_automated_repos', JSON.stringify(filtered))
+      }
+
+      async function fetchRepos(){
+        const res = await fetch('/api/github/repos')
+        const data = await res.json()
+        const container = document.getElementById('repos')
+        container.innerHTML = ''
+        if(data.error){ container.innerHTML = '<div style="color:red">'+data.error+'</div>'; return }
+        data.repos.forEach(r => {
+          const el = document.createElement('div')
+          el.className = 'repo-item'
+          el.textContent = r.full_name
+          
+          // Add automated badge if this repo is automated
+          if (isRepoAutomated(r.full_name)) {
+            const badge = document.createElement('span')
+            badge.className = 'automated-badge'
+            badge.textContent = 'AUTO'
+            el.appendChild(badge)
+          }
+          
+          el.onclick = () => showGithubRepo(r.owner, r.name)
+          container.appendChild(el)
+        })
+      }
+
+      async function showGithubRepo(owner, name){
+        const fullname = owner + '/' + name
+        // clear selected
+        document.querySelectorAll('.repo-item').forEach(e=>e.classList.remove('selected'))
+        document.querySelectorAll('.repo-item').forEach(e=>{ 
+          const text = e.childNodes[0].textContent || e.textContent
+          if(text === fullname) e.classList.add('selected') 
+        })
+        const title = document.getElementById('title')
+        const content = document.getElementById('content')
+        title.textContent = fullname
+        content.innerHTML = `
+          <p><strong>Repository:</strong> ${fullname}</p>
+          <div id="pr-section">
+            <p><strong>Open PRs:</strong></p>
+            <div id="pr-list">Loading PRs...</div>
+          </div>
+        `
+        // show automation section
+        const automationSection = document.getElementById('automation-section')
+        automationSection.style.display = 'block'
+        const automationBtn = document.getElementById('btn_toggle_automation')
+        const automationStatus = document.getElementById('automation-status')
+        automationStatus.style.display = 'none'
+        
+        const isAutomated = isRepoAutomated(fullname)
+        automationBtn.textContent = isAutomated ? 'Disable Automated PR Review' : 'Enable Automated PR Review'
+        automationBtn.disabled = false
+        automationBtn.onclick = () => toggleAutomation(owner, name)
+        
+        // show controls
+        document.getElementById('controls').style.display = 'block'
+        document.getElementById('stream_output').style.display = 'none'
+        // attach button handlers (these will post to run endpoint with repoName)
+        document.getElementById('btn_review').onclick = ()=>runAction(fullname,'review')
+        document.getElementById('btn_describe').onclick = ()=>runAction(fullname,'describe')
+        document.getElementById('btn_improve').onclick = ()=>runAction(fullname,'improve')
+
+        fetch(`/api/github/repos/${owner}/${name}/prs`).then(r=>r.json()).then(j=>{
+          const list = document.getElementById('pr-list')
+          if(j.error){ list.innerHTML = 'Error: '+j.error; return }
+          if(!j.prs || j.prs.length==0){ list.innerHTML = 'No open PRs' ; return }
+          list.innerHTML = ''
+          j.prs.forEach(pr=>{
+            const item = document.createElement('div')
+            item.style.padding='8px'
+            item.style.borderBottom='1px solid #eee'
+            item.innerHTML = `<strong>#${pr.number}</strong> ${pr.title} <small>by ${pr.user}</small>`
+            const btns = document.createElement('span')
+            btns.style.float='right'
+            const reviewBtn = document.createElement('button')
+            reviewBtn.textContent = 'Review'
+            reviewBtn.onclick = ()=> runAction(fullname,'review', pr.html_url)
+            const descBtn = document.createElement('button')
+            descBtn.textContent = 'Describe'
+            descBtn.style.marginLeft='6px'
+            descBtn.onclick = ()=> runAction(fullname,'describe', pr.html_url)
+            const impBtn = document.createElement('button')
+            impBtn.textContent = 'Improve'
+            impBtn.style.marginLeft='6px'
+            impBtn.onclick = ()=> runAction(fullname,'improve', pr.html_url)
+            btns.appendChild(reviewBtn)
+            btns.appendChild(descBtn)
+            btns.appendChild(impBtn)
+            item.appendChild(btns)
+            list.appendChild(item)
+          })
+        })
+      }
+
+      async function runAction(repoName, action){
+        // prUrl may be provided when action is triggered from a PR row
+        let prUrl = document.getElementById('pr_url').value.trim()
+        if(arguments.length>=3 && arguments[2]) prUrl = arguments[2]
+        if(!prUrl){ alert('Enter PR URL'); return }
+        const out = document.getElementById('stream_output')
+        out.style.display = 'block'
+        out.textContent = ''
+
+        const res = await fetch(`/api/run`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({repo: repoName, action: action, pr_url: prUrl})
+        })
+
+        if(!res.ok){
+          const err = await res.json()
+          out.textContent = 'Error: '+JSON.stringify(err)
+          return
+        }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        while(true){
+          const {done, value} = await reader.read()
+          if(done) break
+          const chunk = decoder.decode(value)
+          out.textContent += chunk
+          out.scrollTop = out.scrollHeight
+        }
+      }
+      
+      async function toggleAutomation(owner, name) {
+        const fullname = owner + '/' + name
+        const isAutomated = isRepoAutomated(fullname)
+        const automationBtn = document.getElementById('btn_toggle_automation')
+        const automationStatus = document.getElementById('automation-status')
+        
+        automationBtn.disabled = true
+        automationStatus.style.display = 'block'
+        automationStatus.className = 'automation-status'
+        automationStatus.textContent = isAutomated ? 'Disabling automation...' : 'Setting up GitHub Actions...'
+        
+        if (isAutomated) {
+          // Just remove from localStorage (workflow remains in repo but can be manually deleted)
+          removeAutomatedRepo(fullname)
+          automationBtn.textContent = 'Enable Automated PR Review'
+          automationStatus.className = 'automation-status status-success'
+          automationStatus.textContent = 'Automation disabled. The workflow file remains in the repository.'
+          automationBtn.disabled = false
+          fetchRepos() // Refresh to remove badge
+        } else {
+          // Setup GitHub Actions
+          try {
+            const res = await fetch(`/api/github/repos/${owner}/${name}/setup-automation`, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'}
+            })
+            const data = await res.json()
+            
+            if (data.success) {
+              addAutomatedRepo(fullname)
+              automationBtn.textContent = 'Disable Automated PR Review'
+              automationStatus.className = 'automation-status status-success'
+              automationStatus.textContent = `✓ ${data.message}. All new PRs will be automatically reviewed!`
+              fetchRepos() // Refresh to show badge
+            } else {
+              automationStatus.className = 'automation-status status-error'
+              automationStatus.textContent = `✗ Error: ${data.error}`
+            }
+            automationBtn.disabled = false
+          } catch (e) {
+            automationStatus.className = 'automation-status status-error'
+            automationStatus.textContent = `✗ Error: ${e.message}`
+            automationBtn.disabled = false
+          }
+        }
+      }
+
+      fetchRepos()
+    </script>
+  </body>
+</html>
