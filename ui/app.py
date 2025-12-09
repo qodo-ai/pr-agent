@@ -102,7 +102,7 @@ def get_open_prs(path: Path):
     if not owner or not repo:
         return {'error': 'unable to parse remote url', 'prs': []}
 
-    # Get token via helper (env or pr_agent/settings/.secrets.toml in repo root)
+    # Get token via helper (env or pr_agent/settings/.secrets.toml in repo)
     gh_token = _get_github_token()
     headers = {'Accept': 'application/vnd.github+json'}
     if gh_token:
