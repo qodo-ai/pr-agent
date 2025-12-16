@@ -1,5 +1,4 @@
-# 🧠 PR Agent LEGACY STATUS (open source)
-Originally created and open-sourced by Qodo - the team behind next-generation AI Code Review.
+# Open Source Project This project is no longer actively maintained by Qodo and may transition to community stewardship. For Qodo's enterprise AI code review platform, visit qodo.ai.
 
 ## 🚀 About
 PR Agent was the first AI assistant for pull requests, built by Qodo, and contributed to the open-source community.  
