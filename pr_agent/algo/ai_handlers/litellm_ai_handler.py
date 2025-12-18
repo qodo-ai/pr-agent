@@ -292,16 +292,33 @@ class LiteLLMAIHandler(BaseAiHandler):
 
             thinking_kwargs_gpt5 = None
             if model.startswith('gpt-5'):
-                if model.endswith('_thinking'):
-                    thinking_kwargs_gpt5 = {
-                        "reasoning_effort": 'low',
-                        "allowed_openai_params": ["reasoning_effort"],
-                    }
+                # Respect user's reasoning_effort config setting
+                # Supported values: 'none', 'low', 'medium', 'high'
+                # Note: gpt-5.1 supports 'none', but gpt-5.1-codex does not
+                config_effort = get_settings().config.reasoning_effort
+                supported_efforts = ['none', 'low', 'medium', 'high']
+                is_config_valid = config_effort in supported_efforts
+                source = "config"
+
+                if is_config_valid:
+                    effort = config_effort
                 else:
-                    thinking_kwargs_gpt5 = {
-                        "reasoning_effort": 'minimal',
-                        "allowed_openai_params": ["reasoning_effort"],
-                    }
+                    source = "default"
+                    if config_effort is not None:
+                        get_logger().warning(
+                            f"Invalid reasoning_effort '{config_effort}' in config. "
+                            f"Using default. Supported values: {supported_efforts}"
+                        )
+                    if model.endswith('_thinking'):
+                        effort = 'low'
+                    else:
+                        effort = 'none'
+
+                thinking_kwargs_gpt5 = {
+                    "reasoning_effort": effort,
+                    "allowed_openai_params": ["reasoning_effort"],
+                }
+                get_logger().info(f"Using reasoning_effort='{effort}' for GPT-5 model (from {source})")
                 model = 'openai/'+model.replace('_thinking', '')  # remove _thinking suffix
 
 
