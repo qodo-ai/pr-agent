@@ -438,7 +438,7 @@ class PRSimilarIssue:
                                                   level=IssueLevel.COMMENT)
                             )
                             corpus.append(comment_record)
-        df = pd.DataFrame(corpus.dict()["documents"])
+        df = pd.DataFrame(corpus.model_dump()["documents"])
         get_logger().info('Done')
 
         get_logger().info('Embedding...')
@@ -534,7 +534,7 @@ class PRSimilarIssue:
                                                     level=IssueLevel.COMMENT)
                             )
                             corpus.append(comment_record)
-        df = pd.DataFrame(corpus.dict()["documents"])
+        df = pd.DataFrame(corpus.model_dump()["documents"])
         get_logger().info('Done')
 
         get_logger().info('Embedding...')
@@ -633,7 +633,7 @@ class PRSimilarIssue:
                             )
                             corpus.append(comment_record)
 
-        df = pd.DataFrame(corpus.dict()["documents"])
+        df = pd.DataFrame(corpus.model_dump()["documents"])
         get_logger().info('Done')
 
         get_logger().info('Embedding...')
