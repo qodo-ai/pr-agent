@@ -91,6 +91,7 @@ class GiteaProvider(GitProvider):
                 repo=self.repo
             )
             self.last_commit = self.pr_commits[-1]
+            self.last_commit_id = self.last_commit
             self.base_sha = self.pr.base.sha if self.pr.base.sha else ""
             self.base_ref = self.pr.base.ref if self.pr.base.ref else ""
         elif "issues" in url:
