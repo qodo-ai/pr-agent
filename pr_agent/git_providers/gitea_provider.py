@@ -907,10 +907,10 @@ class RepoApi(giteapy.RepositoryApi):
             
         except ApiException as e:
             self.logger.error(f"Error getting {error_context}: {e}")
-            return all_items if all_items else []
+            return all_items
         except Exception as e:
             self.logger.error(f"Unexpected error: {e}")
-            return all_items if all_items else []
+            return all_items
 
     def get_change_file_pull_request(self, owner: str, repo: str, pr_number: int):
         """Get changed files in the pull request"""
