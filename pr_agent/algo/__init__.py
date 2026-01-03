@@ -133,6 +133,7 @@ MAX_TOKENS = {
     "bedrock/us.anthropic.claude-opus-4-20250514-v1:0": 200000,
     "bedrock/us.anthropic.claude-opus-4-1-20250805-v1:0": 200000,
     "bedrock/global.anthropic.claude-opus-4-5-20251101-v1:0": 200000,
+    "bedrock/us.anthropic.claude-opus-4-5-20251101-v1:0": 200000,
     "bedrock/us.anthropic.claude-3-5-sonnet-20241022-v2:0": 100000,
     "bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0": 200000,
     "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0": 200000,
