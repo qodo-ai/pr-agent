@@ -1,8 +1,8 @@
 # 🚀 AI Code Review with Qodo
 
-Qodo now offers a [free tier for AI code review](https://www.qodo.ai/get-started/) to easily integrate across CLI coding agents, IDE, GitHub and packed with feature rich capabilities for high-quality code review for context-aware codebases.
+Qodo now offers a [free tier for AI code review](https://www.qodo.ai/get-started/) to easily integrate with GitHub, GitLab, Bitbucket, and Azure DevOps, with feature-rich capabilities for high-quality context-aware code reviews.
 
-Note: this PR Agent repository was originally created by Qodo as a code review bot and now contributed to the open-source community. It is superseded by Qodo hosted solution with a free tier available to all developers which we highly recommend converting to for a better UX, feature rich and high quality code review experience.
+Note: this PR Agent repository was originally created by Qodo as a code review bot and now contributed to the open-source community. It is superseded by Qodo's hosted solution with a free tier available to all developers, which we highly recommend converting to for a better UX, feature-rich, and high-quality code review experience.
 
 ## ❤️ Community
 
