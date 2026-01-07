@@ -2705,6 +2705,7 @@ Reference: [Cursor Team Rules Documentation](https://cursor.com/docs/context/rul
 | # | Rule | What to Check | Review Comment |
 |---|------|---------------|----------------|
 | 1 | **Test Coverage** | New code should have corresponding tests | "New functionality added without tests. Please add unit tests for [function/class]." |
+| 2 | **Code Duplication** | Similar code blocks, repeated patterns | "Code duplication detected. Consider extracting to a reusable function/utility. Check if similar functionality already exists in the codebase." |
 | 2 | **No Inline Comments** | Detect `//` comments that aren't TODO/FIXME | "Inline comment detected. Code should be self-documenting. Consider renaming variables/functions instead." |
 | 3 | **Structured Logging** | Logger calls without context object | "Logger call missing context object. Use: `this.logger.log('message', { accountId, userId, ... })`" |
 | 4 | **No String Interpolation in Logs** | Template literals in logger | "Avoid string interpolation in logs. Use structured logging: `this.logger.log('message', { data })`" |
@@ -2757,7 +2758,6 @@ These rules from the Cursor Team Rules are **not applicable** for automated code
 | "Run npx tsc --noEmit" | Agent can't execute commands |
 | "Ask Ben for clarification" | Human process |
 | "Verify actual implementation" | This is for the developer writing code |
-| "Reuse existing code" | Agent can suggest but can't search entire codebase |
 | "Only modify test files" | Context-dependent, not code pattern |
 
 ---
@@ -7672,6 +7672,7 @@ Extra instructions:
 | Category | Rules | Review Action |
 |----------|-------|---------------|
 | **Test Coverage** | New code needs tests | Comment if `.ts` file added without `.spec.ts` |
+| **Code Duplication** | DRY principle, reuse existing code | Comment on duplicated code blocks, suggest extracting to utility |
 | **Logging** | Structured logging with context, no sensitive data | Comment on logger calls without context object |
 | **Functional Style** | const over let, no mutations, array methods | Comment on `let`, `.push()`, imperative loops |
 | **Code Quality** | Small functions, no deep nesting, no inline comments | Comment if function > 30 lines or nesting > 3 |
