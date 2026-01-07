@@ -18,18 +18,22 @@ pool = ConnectionPool(dsn, min_size=1, max_size=10)
 
 _vector_lock = threading.Lock()
 _vector_registered = False
-_vector_registration_failed = False
+_vector_warned = False
 
 
 def _register_vector_once(conn):
-    """Register pgvector extension on first connection (thread-safe)."""
-    global _vector_registered, _vector_registration_failed
+    """Register pgvector extension on first connection (thread-safe).
     
-    if _vector_registered or _vector_registration_failed:
+    Retries on each connection until successful, as the extension
+    may become available after initial failures.
+    """
+    global _vector_registered, _vector_warned
+    
+    if _vector_registered:
         return
     
     with _vector_lock:
-        if _vector_registered or _vector_registration_failed:
+        if _vector_registered:
             return
         
         try:
@@ -37,11 +41,12 @@ def _register_vector_once(conn):
             _vector_registered = True
             logger.debug("pgvector extension registered successfully")
         except Exception as e:
-            _vector_registration_failed = True
-            logger.warning(
-                "Failed to register pgvector extension - vector operations may not work",
-                extra={"context": {"error": str(e)}}
-            )
+            if not _vector_warned:
+                _vector_warned = True
+                logger.warning(
+                    "Failed to register pgvector extension - will retry on next connection",
+                    extra={"context": {"error": str(e)}}
+                )
 
 
 def get_conn():
