@@ -9,8 +9,12 @@ Secret naming convention: <environment>-<service-name>
 Examples: staging-pr-agent, prod-pr-agent
 """
 
+import asyncio
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "pr-agent"
 
@@ -83,6 +87,46 @@ def _get_secret_manager_config(
     return config
 
 
+def load_config_sync(
+    project_id: str,
+    service_name: str = SERVICE_NAME,
+    env_name_override: str | None = None,
+    service_root: Path | None = None
+) -> dict[str, str]:
+    """
+    Load configuration from .env file or Google Cloud Secret Manager (synchronous).
+    
+    This is the primary config loading function. Use this at application startup
+    before the async event loop is running.
+    
+    Args:
+        project_id: Google Cloud project ID
+        service_name: Name of the service (defaults to 'pr-agent')
+        env_name_override: Optional override for the environment name
+        service_root: Root directory of the service (defaults to project root)
+    
+    Returns:
+        Dictionary of configuration values
+    """
+    if service_root is None:
+        service_root = Path(__file__).parent.parent.parent
+
+    env_file_path = _get_env_file_path(service_root)
+
+    if env_file_path.exists():
+        logger.info("Loading config from file", extra={"context": {"path": str(env_file_path)}})
+        config = _get_dotenv_config(env_file_path)
+    else:
+        secret_name = f'{os.environ.get("NODE_ENV", "development")}-{service_name}'
+        logger.info("Loading config from Secret Manager", extra={"context": {"secret": secret_name}})
+        config = _get_secret_manager_config(project_id, service_name, env_name_override)
+
+    os.environ.update(config)
+    logger.debug("Config loaded", extra={"context": {"keys_count": len(config)}})
+
+    return config
+
+
 async def load_config(
     project_id: str,
     service_name: str = SERVICE_NAME,
@@ -90,7 +134,12 @@ async def load_config(
     service_root: Path | None = None
 ) -> dict[str, str]:
     """
-    Load configuration from .env file or Google Cloud Secret Manager.
+    Load configuration from .env file or Google Cloud Secret Manager (async).
+    
+    Runs the synchronous config loading in a thread pool to avoid blocking
+    the event loop. Use this when you need to reload config during runtime.
+    
+    For startup, prefer load_config_sync() before the event loop starts.
     
     Args:
         project_id: Google Cloud project ID
@@ -102,58 +151,15 @@ async def load_config(
         Dictionary of configuration values
     
     Usage:
-        await load_config('workiz-development')
+        config = await load_config('workiz-development')
     """
-    if service_root is None:
-        service_root = Path(__file__).parent.parent.parent
-
-    env_file_path = _get_env_file_path(service_root)
-
-    if env_file_path.exists():
-        print(f'Loading config from {env_file_path}')
-        config = _get_dotenv_config(env_file_path)
-    else:
-        print(f'Loading config from Google Secret Manager: {os.environ.get("NODE_ENV", "development")}-{service_name}')
-        config = _get_secret_manager_config(project_id, service_name, env_name_override)
-
-    os.environ.update(config)
-
-    return config
-
-
-def load_config_sync(
-    project_id: str,
-    service_name: str = SERVICE_NAME,
-    env_name_override: str | None = None,
-    service_root: Path | None = None
-) -> dict[str, str]:
-    """
-    Synchronous version of load_config.
-    
-    Args:
-        project_id: Google Cloud project ID
-        service_name: Name of the service (defaults to 'pr-agent')
-        env_name_override: Optional override for the environment name
-        service_root: Root directory of the service (defaults to project root)
-    
-    Returns:
-        Dictionary of configuration values
-    """
-    if service_root is None:
-        service_root = Path(__file__).parent.parent.parent
-
-    env_file_path = _get_env_file_path(service_root)
-
-    if env_file_path.exists():
-        print(f'Loading config from {env_file_path}')
-        config = _get_dotenv_config(env_file_path)
-    else:
-        print(f'Loading config from Google Secret Manager: {os.environ.get("NODE_ENV", "development")}-{service_name}')
-        config = _get_secret_manager_config(project_id, service_name, env_name_override)
-
-    os.environ.update(config)
-
-    return config
+    return await asyncio.to_thread(
+        load_config_sync,
+        project_id,
+        service_name,
+        env_name_override,
+        service_root
+    )
 
 
 def load_local_env() -> dict[str, str]:
@@ -165,11 +171,11 @@ def load_local_env() -> dict[str, str]:
     env_file = service_root / '.env'
     
     if env_file.exists():
-        print(f'Loading config from {env_file}')
+        logger.info("Loading config from local .env", extra={"context": {"path": str(env_file)}})
         config = _parse_env_content(env_file.read_text())
         os.environ.update(config)
         return config
     
-    print('No .env file found, using existing environment variables')
+    logger.info("No .env file found, using existing environment variables")
     return {}
 
