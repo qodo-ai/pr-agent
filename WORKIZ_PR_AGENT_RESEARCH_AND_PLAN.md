@@ -2411,74 +2411,549 @@ Create `prompts/repos.json` with all Workiz repositories:
 ```json
 {
   "repositories": [
+    // === CORE BACKEND ===
     {
-      "name": "auth",
-      "url": "https://github.com/Workiz/architecture",
-      "path": "services/auth",
-      "type": "backend",
-      "description": "Authentication and session management service"
+      "name": "backend",
+      "url": "https://github.com/Workiz/backend",
+      "type": "backend-php",
+      "language": "PHP",
+      "main_branch": "workiz.com",
+      "databases": ["mysql", "mongodb", "elasticsearch"],
+      "description": "Main PHP backend monolith"
     },
     {
-      "name": "crm-service",
-      "url": "https://github.com/Workiz/crm-service",
-      "type": "backend",
+      "name": "Core",
+      "url": "https://github.com/Workiz/Core",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "databases": ["mysql"],
+      "description": "Core business logic NestJS service"
+    },
+    {
+      "name": "crm",
+      "url": "https://github.com/Workiz/crm",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "databases": ["mysql"],
       "description": "CRM and customer management"
     },
+    
+    // === ARCHITECTURE MONOREPO (Multi-service) ===
     {
-      "name": "notifications-service",
-      "url": "https://github.com/Workiz/notifications-service",
-      "type": "backend",
-      "description": "Multi-channel notification delivery"
+      "name": "architecture",
+      "url": "https://github.com/Workiz/architecture",
+      "type": "monorepo",
+      "language": "TypeScript/JavaScript",
+      "main_branch": "workiz.com",
+      "services": [
+        {
+          "path": "services/auth",
+          "type": "backend-nestjs",
+          "databases": ["mysql", "redis"],
+          "description": "Authentication and session management"
+        },
+        {
+          "path": "services/signup",
+          "type": "backend-nestjs",
+          "description": "User signup and onboarding"
+        },
+        {
+          "path": "services/account",
+          "type": "backend-nodejs",
+          "description": "Account management service"
+        },
+        {
+          "path": "services/billing-service",
+          "type": "backend-nodejs",
+          "description": "Stripe billing and subscriptions"
+        }
+      ]
+    },
+    
+    // === COMMUNICATION MONOREPO ===
+    {
+      "name": "Communication",
+      "url": "https://github.com/Workiz/Communication",
+      "type": "monorepo",
+      "language": "TypeScript/Python",
+      "main_branch": "workiz.com",
+      "services": [
+        {
+          "path": "services/messaging",
+          "type": "backend-nestjs",
+          "databases": ["mysql"],
+          "description": "SMS/Email messaging service"
+        },
+        {
+          "path": "services/notifications",
+          "type": "backend-nestjs",
+          "databases": ["mysql"],
+          "description": "Multi-channel notification delivery"
+        },
+        {
+          "path": "services/spam-detect",
+          "type": "backend-python",
+          "databases": ["postgresql"],
+          "description": "ML-based spam detection (FastAPI)"
+        }
+      ]
+    },
+    
+    // === AUTOMATION SERVICES ===
+    {
+      "name": "automation-notifications",
+      "url": "https://github.com/Workiz/automation-notifications",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Automation workflow notifications"
     },
     {
-      "name": "core-service",
-      "url": "https://github.com/Workiz/core-service",
-      "type": "backend",
-      "description": "Core business logic"
+      "name": "automation-notifications-dispatcher",
+      "url": "https://github.com/Workiz/automation-notifications-dispatcher",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Automation notification dispatcher"
     },
+    {
+      "name": "automation-rules-engine",
+      "url": "https://github.com/Workiz/automation-rules-engine",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Business rules engine for automations"
+    },
+    
+    // === AI SERVICES ===
+    {
+      "name": "ai-completion-service",
+      "url": "https://github.com/Workiz/ai-completion-service",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "AI completion/copilot service"
+    },
+    {
+      "name": "ai-service",
+      "url": "https://github.com/Workiz/ai-service",
+      "type": "backend-python",
+      "language": "Python",
+      "main_branch": "workiz.com",
+      "description": "AI/ML service"
+    },
+    {
+      "name": "visionAI",
+      "url": "https://github.com/Workiz/visionAI",
+      "type": "backend-python",
+      "language": "Python",
+      "main_branch": "workiz.com",
+      "description": "Computer vision AI service"
+    },
+    {
+      "name": "twilio-gpt",
+      "url": "https://github.com/Workiz/twilio-gpt",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Twilio GPT integration"
+    },
+    
+    // === REPORTING & ANALYTICS ===
     {
       "name": "reporting-service",
       "url": "https://github.com/Workiz/reporting-service",
-      "type": "backend",
+      "type": "backend-nestjs",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "databases": ["mysql", "elasticsearch"],
       "description": "Reporting and analytics"
     },
     {
-      "name": "payments-service",
-      "url": "https://github.com/Workiz/payments-service",
+      "name": "workiz-dbt",
+      "url": "https://github.com/Workiz/workiz-dbt",
+      "type": "data",
+      "language": "SQL/Python",
+      "main_branch": "workiz.com",
+      "description": "DBT data transformations"
+    },
+    {
+      "name": "bq_exporter",
+      "url": "https://github.com/Workiz/bq_exporter",
+      "type": "data",
+      "language": "Python",
+      "main_branch": "workiz.com",
+      "description": "BigQuery data exporter"
+    },
+    
+    // === PUBSUB LISTENERS ===
+    {
+      "name": "pubsub-listeners",
+      "url": "https://github.com/Workiz/pubsub-listeners",
+      "type": "monorepo",
+      "language": "JavaScript",
+      "main_branch": "workiz.com",
+      "services": [
+        {
+          "path": "services/elasticsearch-listener",
+          "databases": ["elasticsearch", "redis"],
+          "description": "Elasticsearch indexing listener"
+        },
+        {
+          "path": "services/mongodb-listener",
+          "databases": ["mongodb"],
+          "description": "MongoDB sync listener"
+        }
+      ]
+    },
+    
+    // === PAYMENTS ===
+    {
+      "name": "Payment",
+      "url": "https://github.com/Workiz/Payment",
+      "type": "monorepo",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Payment processing services"
+    },
+    {
+      "name": "quickBooks",
+      "url": "https://github.com/Workiz/quickBooks",
       "type": "backend",
-      "description": "Payment processing"
+      "language": "JavaScript",
+      "main_branch": "workiz.com",
+      "description": "QuickBooks Online integration"
     },
     {
-      "name": "web-app",
-      "url": "https://github.com/Workiz/web-app",
-      "type": "frontend",
-      "description": "React frontend application"
+      "name": "quickbooks-desktop-integration",
+      "url": "https://github.com/Workiz/quickbooks-desktop-integration",
+      "type": "backend",
+      "language": "JavaScript",
+      "main_branch": "workiz.com",
+      "description": "QuickBooks Desktop integration"
+    },
+    
+    // === FRONTEND APPLICATIONS ===
+    {
+      "name": "frontend",
+      "url": "https://github.com/Workiz/frontend",
+      "type": "frontend-react",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Main React web application"
     },
     {
-      "name": "mobile-app",
-      "url": "https://github.com/Workiz/mobile-app",
+      "name": "admin",
+      "url": "https://github.com/Workiz/admin",
+      "type": "frontend-react",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Admin panel React application"
+    },
+    {
+      "name": "bookingV2",
+      "url": "https://github.com/Workiz/bookingV2",
+      "type": "frontend-react",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Online booking widget v2"
+    },
+    {
+      "name": "pay",
+      "url": "https://github.com/Workiz/pay",
+      "type": "frontend-react",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Payment pages"
+    },
+    {
+      "name": "ui",
+      "url": "https://github.com/Workiz/ui",
+      "type": "frontend-react",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Shared UI component library"
+    },
+    {
+      "name": "client-portal-backend",
+      "url": "https://github.com/Workiz/client-portal-backend",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Client portal backend service"
+    },
+    
+    // === MOBILE APPLICATIONS ===
+    {
+      "name": "android-app",
+      "url": "https://github.com/Workiz/android-app",
+      "type": "mobile-android",
+      "language": "Kotlin/Java",
+      "main_branch": "workiz.com",
+      "description": "Android mobile application"
+    },
+    {
+      "name": "ios-app",
+      "url": "https://github.com/Workiz/ios-app",
+      "type": "mobile-ios",
+      "language": "Swift",
+      "main_branch": "workiz.com",
+      "description": "iOS mobile application"
+    },
+    {
+      "name": "native.workiz",
+      "url": "https://github.com/Workiz/native.workiz",
       "type": "mobile",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
       "description": "React Native mobile app"
     },
+    
+    // === DESKTOP APPLICATIONS ===
     {
-      "name": "workiz-php",
-      "url": "https://github.com/Workiz/workiz-php",
+      "name": "dialer.electron",
+      "url": "https://github.com/Workiz/dialer.electron",
+      "type": "desktop",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Electron desktop dialer app"
+    },
+    
+    // === REAL-TIME & WEBSOCKETS ===
+    {
+      "name": "workiz-socket-io",
+      "url": "https://github.com/Workiz/workiz-socket-io",
+      "type": "backend-nodejs",
+      "language": "JavaScript",
+      "main_branch": "workiz.com",
+      "description": "Socket.IO real-time server"
+    },
+    
+    // === VOICE & TELEPHONY ===
+    {
+      "name": "workiz_voice_service",
+      "url": "https://github.com/Workiz/workiz_voice_service",
       "type": "backend",
-      "description": "Legacy PHP monolith"
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Voice/telephony service"
     },
     {
-      "name": "fastapi-service",
-      "url": "https://github.com/Workiz/fastapi-service",
+      "name": "workiz_dialers_hub",
+      "url": "https://github.com/Workiz/workiz_dialers_hub",
       "type": "backend",
-      "description": "Python FastAPI service with PostgreSQL"
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Dialers hub service"
+    },
+    {
+      "name": "calls-analyzer-graph",
+      "url": "https://github.com/Workiz/calls-analyzer-graph",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Call analytics with graph DB"
+    },
+    
+    // === INTEGRATIONS ===
+    {
+      "name": "integrations",
+      "url": "https://github.com/Workiz/integrations",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Third-party integrations service"
+    },
+    {
+      "name": "workiz-integrations",
+      "url": "https://github.com/Workiz/workiz-integrations",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Workiz integrations hub"
+    },
+    {
+      "name": "slack-bot",
+      "url": "https://github.com/Workiz/slack-bot",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Slack integration bot"
+    },
+    {
+      "name": "wordpress-ninja-forms-plugin",
+      "url": "https://github.com/Workiz/wordpress-ninja-forms-plugin",
+      "type": "plugin",
+      "language": "PHP",
+      "main_branch": "workiz.com",
+      "description": "WordPress Ninja Forms plugin"
+    },
+    
+    // === INFRASTRUCTURE ===
+    {
+      "name": "infra",
+      "url": "https://github.com/Workiz/infra",
+      "type": "infrastructure",
+      "language": "Terraform/Pulumi/YAML",
+      "main_branch": "workiz.com",
+      "description": "Infrastructure as code (K8s, Terraform, Pulumi)"
+    },
+    {
+      "name": "workiz-helm",
+      "url": "https://github.com/Workiz/workiz-helm",
+      "type": "infrastructure",
+      "language": "YAML",
+      "main_branch": "workiz.com",
+      "description": "Helm charts for K8s deployments"
+    },
+    {
+      "name": "cloud-functions",
+      "url": "https://github.com/Workiz/cloud-functions",
+      "type": "serverless",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "GCP Cloud Functions"
+    },
+    {
+      "name": "workiz-actions",
+      "url": "https://github.com/Workiz/workiz-actions",
+      "type": "ci-cd",
+      "language": "YAML",
+      "main_branch": "workiz.com",
+      "description": "Shared GitHub Actions"
+    },
+    
+    // === TESTING & QA ===
+    {
+      "name": "workiz-cypress-automation",
+      "url": "https://github.com/Workiz/workiz-cypress-automation",
+      "type": "testing",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Cypress E2E tests"
+    },
+    {
+      "name": "E2E-api-tests",
+      "url": "https://github.com/Workiz/E2E-api-tests",
+      "type": "testing",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "API E2E tests"
+    },
+    {
+      "name": "percy-visual-automation",
+      "url": "https://github.com/Workiz/percy-visual-automation",
+      "type": "testing",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Percy visual regression tests"
+    },
+    {
+      "name": "load-testing",
+      "url": "https://github.com/Workiz/load-testing",
+      "type": "testing",
+      "language": "JavaScript",
+      "main_branch": "workiz.com",
+      "description": "Load/performance testing"
+    },
+    {
+      "name": "full-native-automation",
+      "url": "https://github.com/Workiz/full-native-automation",
+      "type": "testing",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Native app E2E tests"
+    },
+    
+    // === DOCUMENTATION ===
+    {
+      "name": "apidocs",
+      "url": "https://github.com/Workiz/apidocs",
+      "type": "documentation",
+      "language": "YAML/Markdown",
+      "main_branch": "workiz.com",
+      "description": "API v1 documentation"
+    },
+    {
+      "name": "apiv2docs",
+      "url": "https://github.com/Workiz/apiv2docs",
+      "type": "documentation",
+      "language": "YAML/Markdown",
+      "main_branch": "workiz.com",
+      "description": "API v2 documentation"
+    },
+    
+    // === WORKFLOW SERVICES ===
+    {
+      "name": "workflows-distribution",
+      "url": "https://github.com/Workiz/workflows-distribution",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Workflow distribution service"
+    },
+    {
+      "name": "queue-transmitter",
+      "url": "https://github.com/Workiz/queue-transmitter",
+      "type": "backend",
+      "language": "TypeScript",
+      "main_branch": "workiz.com",
+      "description": "Message queue transmitter"
+    },
+    
+    // === TOOLS (PR Agent) ===
+    {
+      "name": "workiz-pr-agent",
+      "url": "https://github.com/Workiz/workiz-pr-agent",
+      "type": "tools",
+      "language": "Python",
+      "main_branch": "workiz.com",
+      "description": "Workiz PR Agent (this project)"
     }
   ],
+  
+  "total_repos": 115,
+  "main_branches": ["workiz.com", "main", "master"],
+  
+  "language_distribution": {
+    "TypeScript": "~45%",
+    "JavaScript": "~20%",
+    "PHP": "~15%",
+    "Python": "~10%",
+    "Swift/Kotlin": "~5%",
+    "Other (YAML, SQL, etc.)": "~5%"
+  },
+  
   "npm_packages": [
     "@workiz/pubsub-decorator-reflector",
     "@workiz/all-exceptions-filter",
     "@workiz/response-wrapper",
     "@workiz/swagger-decorator",
-    "@workiz/logger"
+    "@workiz/node-logger",
+    "@workiz/config-loader",
+    "@workiz/pubsub-publish-client",
+    "@workiz/redis-nestjs",
+    "@workiz/jwt-headers-generator",
+    "@workiz/socket-io-updater"
+  ],
+  
+  "repos_excluded_from_review": [
+    "workiz-cypress-automation",
+    "E2E-api-tests",
+    "percy-visual-automation",
+    "load-testing",
+    "full-native-automation",
+    "apidocs",
+    "apiv2docs",
+    "workiz-helm",
+    "workiz-actions",
+    "ios-apple-credentials",
+    "apple-credentials",
+    "WorkizBizOpsBackup",
+    "microservice-for-infra-tests",
+    "nestjs-for-tests"
   ]
 }
 ```
@@ -3139,13 +3614,13 @@ async def handle_push(request: Request, background_tasks: BackgroundTasks):
     """
     Handle GitHub push events to trigger RepoSwarm re-analysis.
     
-    When code is pushed to main/master, trigger RepoSwarm to
+    When code is pushed to workiz.com/main/master, trigger RepoSwarm to
     re-analyze the repository and update the .arch.md file.
     """
     payload = await request.json()
     
     ref = payload.get('ref', '')
-    if ref not in ['refs/heads/main', 'refs/heads/master']:
+    if ref not in ['refs/heads/workiz.com', 'refs/heads/main', 'refs/heads/master']:
         return {"status": "skipped", "reason": "not main branch"}
     
     repo_name = payload['repository']['name']
@@ -5261,7 +5736,7 @@ CREATE TABLE repositories (
     org_name VARCHAR(255) NOT NULL,
     repo_name VARCHAR(255) NOT NULL,
     github_url TEXT,
-    default_branch VARCHAR(100) DEFAULT 'main',
+    default_branch VARCHAR(100) DEFAULT 'workiz.com',
     last_indexed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(org_name, repo_name)
@@ -5912,6 +6387,8 @@ key = "sk-..."
 [github]
 user_token = "ghp_..."
 deployment_type = "user"  # or "app" for GitHub App
+organization = "Workiz"
+main_branches = ["workiz.com", "main", "master"]  # Branches to index and trigger on
 
 # For GitHub App deployment
 # private_key = """..."""
@@ -8595,7 +9072,7 @@ class IncrementalUpdateService:
         branch = payload['ref'].split('/')[-1]
         before_sha = payload['before']
         
-        # Only index main/master branches
+        # Only index workiz.com/main/master branches
         if branch not in ['main', 'master', 'develop']:
             return
         
@@ -9976,6 +10453,9 @@ key = "sk-your-openai-key"
 
 [github]
 user_token = "ghp_your-github-token"
+organization = "Workiz"
+main_branches = ["workiz.com", "main", "master"]  # Branches to index and trigger on
+
 # For GitHub App (optional for local dev)
 # private_key = """-----BEGIN RSA PRIVATE KEY-----
 # ...
@@ -10563,14 +11043,14 @@ Extra instructions:
 
 ### ✅ Languages and Frameworks Covered
 
-| Stack | Analyzer | Rules | Notes |
-|-------|----------|-------|-------|
-| **PHP** | `PHPAnalyzer` | php_avoid_raw_sql, php_no_dd, eloquent_n_plus_one, mass_assignment, env_in_code | Main backend, MySQL, MongoDB, Elasticsearch |
-| **NodeJS (JS)** | `JavaScriptAnalyzer` | js_no_console, callback_hell, no_var, mutation_in_reduce | Express routes, EventEmitter patterns |
-| **NodeJS (TS)** | `TypeScriptAnalyzer` | ts_no_any, ts_no_ignore, prefer_readonly | Extends JS analyzer, adds interfaces/types |
-| **NestJS (TS)** | `NestJSAnalyzer` | 20+ rules from Cursor Rules (structured logging, DI, PubSub, functional style, etc.) | Auth, CRM, Core, Reporting services |
-| **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps, react_class_component | Web app, Mobile web |
-| **Python** | `PythonAnalyzer` | py_no_print, pg_sql_injection, pg_n_plus_one, asyncio_blocking_call, fastapi_sync_endpoint | FastAPI + PostgreSQL |
+| Stack | Analyzer | Rules | Repositories |
+|-------|----------|-------|--------------|
+| **PHP** | `PHPAnalyzer` | php_avoid_raw_sql, php_no_dd, eloquent_n_plus_one, mass_assignment, env_in_code | `backend` |
+| **NodeJS (JS)** | `JavaScriptAnalyzer` | js_no_console, callback_hell, no_var, mutation_in_reduce | `architecture/account`, `architecture/billing-service`, `pubsub-listeners/*` |
+| **NestJS (TS)** | `NestJSAnalyzer` | 20+ rules from Cursor Rules (structured logging, DI, PubSub, functional style, etc.) | `architecture/auth`, `architecture/signup`, `crm`, `core`, `Communication/messaging`, `Communication/notifications`, `reporting-service`, `automation-*`, `ai-completion-service` |
+| **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps | `frontend`, `bookingV2`, `pay` |
+| **Python (FastAPI)** | `PythonAnalyzer` | py_no_print, pg_sql_injection, pg_n_plus_one, asyncio_blocking_call, fastapi_sync_endpoint | `Communication/spam-detect` |
+| **Infrastructure** | `InfraAnalyzer` | terraform_no_hardcoded_secrets, k8s_resource_limits, helm_values_validation | `infra` |
 
 ### ✅ Actionable Review Rules (From Cursor Team Rules)
 
@@ -10702,7 +11182,7 @@ PR with comments → /autofix → Fixes PR created → Review loop → All fixed
 
 | Method | Trigger | Action |
 |--------|---------|--------|
-| **GitHub Webhook** | Push to main/develop | Incremental repo indexing |
+| **GitHub Webhook** | Push to workiz.com/main/master | Incremental repo indexing |
 | **GitHub Webhook** | PR merged | Incremental repo indexing |
 | **Jira Webhook** | Issue created/updated | Single ticket sync |
 | **Cron Job** | Scheduled (hourly) | Incremental sync all repos + Jira |
