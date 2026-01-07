@@ -6,6 +6,7 @@ A customized fork of [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) tai
 
 | Document | Description |
 |----------|-------------|
+| [**Development Plan**](./DEVELOPMENT_PLAN.md) | 📋 **Start here!** Phased tasks, milestones, tracking |
 | [Architecture & Features](./ARCHITECTURE_AND_FEATURES.md) | System architecture, all features, code implementations |
 | [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) | Setup guides, deployment, checklists |
 

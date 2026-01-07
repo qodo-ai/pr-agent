@@ -8,6 +8,7 @@
 
 | Document | Description |
 |----------|-------------|
+| **[📋 Development Plan](./docs/DEVELOPMENT_PLAN.md)** | **START HERE!** Phased tasks, milestones, deployment checkpoints |
 | **[📖 Overview & Quick Start](./docs/README.md)** | High-level overview, feature summary, quick start guide |
 | **[🏗️ Architecture & Features](./docs/ARCHITECTURE_AND_FEATURES.md)** | System architecture, database schema, all features with code |
 | **[🚀 Deployment & Implementation](./docs/DEPLOYMENT_AND_IMPLEMENTATION.md)** | Local setup, production deployment, checklists |
@@ -16,7 +17,8 @@
 
 ## Quick Links
 
-### Getting Started
+### 🚀 Getting Started
+- **[Development Plan & Tracking](./docs/DEVELOPMENT_PLAN.md)** ← Start here for step-by-step tasks
 - [Prerequisites](./docs/DEPLOYMENT_AND_IMPLEMENTATION.md#prerequisites)
 - [Local Development Setup](./docs/DEPLOYMENT_AND_IMPLEMENTATION.md#1-local-development-setup)
 - [Production Deployment](./docs/DEPLOYMENT_AND_IMPLEMENTATION.md#2-production-deployment-gcloud)
@@ -53,15 +55,17 @@ This fork of [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) is customiz
 ### Advanced Features
 - ✅ **Auto-Fix Agent**: AI-powered automatic code fixes
 - ✅ **Figma Verification**: Design compliance for frontend PRs
-- ✅ **NPM Package Management**: Internal package version tracking
-- ✅ **Auto-Discovery**: Automatic repo/project detection
+- ✅ **NPM Package Management**: Internal package version tracking (GitHub Packages)
+- ✅ **Auto-Discovery**: Automatic repo/project detection via webhooks
 - ✅ **Admin UI**: Web dashboard for management
+- ✅ **Knowledge Assistant**: Ask questions about your entire codebase
 
 ### Tech Stack
-- **Backend**: Python 3.12+, FastAPI
+- **Backend**: Python 3.11+, FastAPI
 - **Database**: PostgreSQL with pgvector
 - **LLMs**: Claude Sonnet/Opus, GPT-4o, Gemini 2.5 (via LiteLLM)
-- **Infrastructure**: Google Cloud (Cloud Run, Cloud SQL, Secret Manager)
+- **Infrastructure**: Google Cloud (GKE, Cloud SQL, Secret Manager)
+- **Monitoring**: Datadog (stdout JSON logs)
 
 ---
 
