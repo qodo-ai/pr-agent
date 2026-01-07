@@ -10,12 +10,13 @@
 6. [Database Architecture](#database-architecture)
 7. [Multi-Agent Architecture](#multi-agent-architecture)
 8. [RepoSwarm Integration for Cross-Repo Context](#reposwarm-integration-for-cross-repo-context)
-9. [Figma Design Verification Agent](#figma-design-verification-agent)
-10. [Local Development Setup](#local-development-setup)
-11. [Configuration Guide](#configuration-guide)
-12. [Detailed Component Implementation](#detailed-component-implementation)
-13. [Deployment Strategy](#deployment-strategy)
-14. [Timeline and Milestones](#timeline-and-milestones)
+9. [Auto-Fix Agent (AI-Powered Comment Resolution)](#auto-fix-agent-ai-powered-comment-resolution)
+10. [Figma Design Verification Agent](#figma-design-verification-agent)
+11. [Local Development Setup](#local-development-setup)
+12. [Configuration Guide](#configuration-guide)
+13. [Detailed Component Implementation](#detailed-component-implementation)
+14. [Deployment Strategy](#deployment-strategy)
+15. [Timeline and Milestones](#timeline-and-milestones)
 
 ---
 
@@ -3354,6 +3355,887 @@ Authentication and session management service built with NestJS/TypeScript.
 | Update frequency | Manual | Automated on push |
 | Setup time | Weeks | Days |
 | Maintenance | High | Low (automated) |
+
+---
+
+## Auto-Fix Agent (AI-Powered Comment Resolution)
+
+### Overview
+
+The **Auto-Fix Agent** is an optional, on-demand agent that automatically resolves review comments by:
+1. Creating a new "fixes" branch from the original PR
+2. Using powerful code models (Claude Opus 4, Gemini 2.5 Pro, Claude Sonnet 4) to implement fixes
+3. Running review in a loop until all comments are resolved
+4. Creating a single PR with all fixes that references the original PR
+
+**Trigger**: GitHub UI button (Check Run action or PR comment command)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Auto-Fix Agent Flow                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   Original PR #123                                                           │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  feature/new-auth                                                    │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  Review Comments (5 issues found)                             │   │   │
+│   │  │  • Missing tests for AuthService                              │   │   │
+│   │  │  • Use const instead of let                                   │   │   │
+│   │  │  • Logger missing context object                              │   │   │
+│   │  │  • Function too long (45 lines)                               │   │   │
+│   │  │  • SQL injection risk                                         │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   │                                                                      │   │
+│   │  [🤖 Auto-Fix Comments] ← Developer clicks button                   │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                          │                                                   │
+│                          ▼                                                   │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                     Auto-Fix Agent                                   │   │
+│   │                                                                      │   │
+│   │  Step 1: Create fixes branch                                        │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  feature/new-auth-autofix ← from feature/new-auth            │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   │                                                                      │   │
+│   │  Step 2: Collect all review comments                                │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  5 comments → Prioritized by severity                        │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   │                                                                      │   │
+│   │  Step 3: Fix Loop (using Claude Opus 4 / Gemini 2.5)               │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  For each comment:                                            │   │   │
+│   │  │    → Read file context                                        │   │   │
+│   │  │    → Generate fix with AI                                     │   │   │
+│   │  │    → Apply fix to code                                        │   │   │
+│   │  │    → Commit change                                            │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   │                                                                      │   │
+│   │  Step 4: Create Fixes PR                                            │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  PR #124: "🤖 Auto-fixes for PR #123"                        │   │   │
+│   │  │  feature/new-auth-autofix → feature/new-auth                 │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   │                                                                      │   │
+│   │  Step 5: Review Loop                                                │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  Run /review on fixes PR                                      │   │   │
+│   │  │  If comments remain → Go back to Step 3                       │   │   │
+│   │  │  If all resolved → Mark as ready                              │   │   │
+│   │  │  Max iterations: 5                                            │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                          │                                                   │
+│                          ▼                                                   │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │  Fixes PR #124 (Ready for human review)                             │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │  All 5 comments addressed                                     │   │   │
+│   │  │  ✅ Added tests for AuthService                               │   │   │
+│   │  │  ✅ Changed let to const                                      │   │   │
+│   │  │  ✅ Added logger context                                      │   │   │
+│   │  │  ✅ Split function into smaller functions                     │   │   │
+│   │  │  ✅ Fixed SQL injection with parameterized query              │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
+│   │                                                                      │   │
+│   │  Developer reviews & merges → Changes flow to original PR           │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Trigger Mechanisms
+
+#### Option 1: GitHub Check Run Button
+
+Add a "Re-run" style button in the GitHub Checks UI:
+
+```python
+# pr_agent/servers/github_app.py
+
+@router.post("/api/v1/github_webhooks")
+async def handle_webhook(request: Request):
+    payload = await request.json()
+    action = payload.get('action')
+    
+    if payload.get('check_run') and action == 'requested_action':
+        identifier = payload['requested_action']['identifier']
+        
+        if identifier == 'autofix':
+            pr_url = extract_pr_url(payload)
+            await trigger_autofix_agent(pr_url)
+            return {"status": "autofix_started"}
+```
+
+Create the Check Run with action button:
+
+```python
+async def create_autofix_check_run(pr_url: str, git_provider):
+    """Create a Check Run with Auto-Fix button."""
+    await git_provider.create_check_run(
+        name="Workiz PR Agent",
+        status="completed",
+        conclusion="neutral",
+        output={
+            "title": "Review Complete - Auto-Fix Available",
+            "summary": "Click the button below to auto-fix review comments",
+        },
+        actions=[
+            {
+                "label": "🤖 Auto-Fix Comments",
+                "description": "Create a PR with AI-generated fixes",
+                "identifier": "autofix"
+            }
+        ]
+    )
+```
+
+#### Option 2: PR Comment Command
+
+```markdown
+/autofix
+```
+
+Handle in webhook:
+
+```python
+if is_comment_event(payload):
+    comment_body = payload['comment']['body'].strip()
+    
+    if comment_body == '/autofix':
+        pr_url = extract_pr_url(payload)
+        await trigger_autofix_agent(pr_url)
+        
+        await git_provider.add_reaction(
+            comment_id=payload['comment']['id'],
+            reaction='rocket'
+        )
+```
+
+### Implementation
+
+#### Core Auto-Fix Agent
+
+```python
+# pr_agent/tools/autofix_agent.py
+import asyncio
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from pr_agent.git_providers.github_provider import GithubProvider
+from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+from pr_agent.log import get_logger
+
+logger = get_logger()
+
+@dataclass
+class ReviewComment:
+    """A review comment to be fixed."""
+    id: int
+    path: str
+    line: int
+    body: str
+    severity: str
+    suggestion: Optional[str] = None
+
+@dataclass
+class FixResult:
+    """Result of attempting to fix a comment."""
+    comment_id: int
+    success: bool
+    file_path: str
+    original_code: str
+    fixed_code: str
+    commit_sha: Optional[str] = None
+    error: Optional[str] = None
+
+class AutoFixAgent:
+    """
+    Agent that automatically fixes review comments.
+    
+    Creates a fixes branch, applies AI-generated fixes,
+    and runs review in a loop until all comments are resolved.
+    """
+    
+    MAX_ITERATIONS = 5
+    MAX_FIX_ATTEMPTS_PER_COMMENT = 2
+    
+    MODELS = [
+        "claude-sonnet-4-20250514",
+        "gemini/gemini-2.5-pro",
+        "claude-opus-4-20250514",
+    ]
+    
+    def __init__(
+        self,
+        pr_url: str,
+        git_provider: Optional[GithubProvider] = None,
+        model: str = "claude-sonnet-4-20250514"
+    ):
+        self.original_pr_url = pr_url
+        self.git_provider = git_provider or GithubProvider(pr_url)
+        self.model = model
+        self.ai_handler = LiteLLMAIHandler()
+        
+        self.fixes_branch: Optional[str] = None
+        self.fixes_pr_url: Optional[str] = None
+        self.iteration = 0
+        self.fix_results: List[FixResult] = []
+    
+    async def run(self) -> Dict:
+        """
+        Main execution method.
+        
+        Returns:
+            Dict with status, fixes_pr_url, and summary
+        """
+        logger.info("Starting Auto-Fix Agent", {
+            'original_pr': self.original_pr_url,
+            'model': self.model
+        })
+        
+        try:
+            await self._create_fixes_branch()
+            
+            await self._create_fixes_pr()
+            
+            while self.iteration < self.MAX_ITERATIONS:
+                self.iteration += 1
+                logger.info(f"Auto-Fix iteration {self.iteration}", {
+                    'fixes_pr': self.fixes_pr_url
+                })
+                
+                comments = await self._collect_review_comments()
+                
+                if not comments:
+                    logger.info("All comments resolved!", {
+                        'iterations': self.iteration
+                    })
+                    break
+                
+                await self._fix_comments(comments)
+                
+                await self._run_review_on_fixes()
+            
+            return await self._generate_summary()
+            
+        except Exception as e:
+            logger.error("Auto-Fix Agent failed", {
+                'error': str(e),
+                'original_pr': self.original_pr_url
+            })
+            raise
+    
+    async def _create_fixes_branch(self) -> None:
+        """Create a new branch for fixes from the original PR branch."""
+        original_branch = await self.git_provider.get_pr_branch()
+        self.fixes_branch = f"{original_branch}-autofix"
+        
+        await self.git_provider.create_branch(
+            branch_name=self.fixes_branch,
+            from_branch=original_branch
+        )
+        
+        logger.info("Created fixes branch", {
+            'original_branch': original_branch,
+            'fixes_branch': self.fixes_branch
+        })
+    
+    async def _create_fixes_pr(self) -> None:
+        """Create a PR for the fixes branch targeting the original PR branch."""
+        original_pr = await self.git_provider.get_pr_details()
+        original_branch = original_pr['head']['ref']
+        original_pr_number = original_pr['number']
+        
+        title = f"🤖 Auto-fixes for PR #{original_pr_number}"
+        body = f"""## Auto-Generated Fixes
+
+This PR contains AI-generated fixes for review comments on #{original_pr_number}.
+
+**Original PR**: #{original_pr_number}
+**Model Used**: `{self.model}`
+
+### ⚠️ Important
+- Please review all changes carefully before merging
+- AI-generated code may need manual adjustments
+- Merge this PR into your feature branch to apply fixes
+
+---
+*Generated by Workiz PR Agent Auto-Fix*
+"""
+        
+        self.fixes_pr_url = await self.git_provider.create_pr(
+            title=title,
+            body=body,
+            head=self.fixes_branch,
+            base=original_branch,
+            draft=True
+        )
+        
+        logger.info("Created fixes PR", {
+            'fixes_pr_url': self.fixes_pr_url
+        })
+    
+    async def _collect_review_comments(self) -> List[ReviewComment]:
+        """Collect all unresolved review comments from the fixes PR."""
+        pr_comments = await self.git_provider.get_review_comments(
+            pr_url=self.fixes_pr_url
+        )
+        
+        comments = []
+        for comment in pr_comments:
+            if self._is_actionable_comment(comment):
+                comments.append(ReviewComment(
+                    id=comment['id'],
+                    path=comment['path'],
+                    line=comment.get('line') or comment.get('original_line'),
+                    body=comment['body'],
+                    severity=self._extract_severity(comment['body']),
+                    suggestion=self._extract_suggestion(comment['body'])
+                ))
+        
+        comments.sort(key=lambda c: (
+            {'error': 0, 'warning': 1, 'suggestion': 2}.get(c.severity, 3)
+        ))
+        
+        logger.info(f"Collected {len(comments)} comments to fix", {
+            'fixes_pr': self.fixes_pr_url
+        })
+        
+        return comments
+    
+    def _is_actionable_comment(self, comment: Dict) -> bool:
+        """Check if a comment requires code changes."""
+        body = comment.get('body', '').lower()
+        
+        non_actionable_keywords = [
+            'lgtm', 'looks good', 'approved', 'nice',
+            'great work', 'thanks', '👍', '✅'
+        ]
+        
+        if any(kw in body for kw in non_actionable_keywords):
+            return False
+        
+        if comment.get('resolved', False):
+            return False
+        
+        return True
+    
+    def _extract_severity(self, body: str) -> str:
+        """Extract severity from comment body."""
+        body_lower = body.lower()
+        
+        if any(kw in body_lower for kw in ['🔴', 'error', 'critical', 'must fix', 'security']):
+            return 'error'
+        elif any(kw in body_lower for kw in ['🟡', 'warning', 'should']):
+            return 'warning'
+        else:
+            return 'suggestion'
+    
+    def _extract_suggestion(self, body: str) -> Optional[str]:
+        """Extract code suggestion if present in the comment."""
+        import re
+        
+        suggestion_pattern = r'```suggestion\n(.*?)```'
+        match = re.search(suggestion_pattern, body, re.DOTALL)
+        
+        if match:
+            return match.group(1).strip()
+        
+        return None
+    
+    async def _fix_comments(self, comments: List[ReviewComment]) -> None:
+        """Apply fixes for all comments."""
+        for comment in comments:
+            try:
+                result = await self._fix_single_comment(comment)
+                self.fix_results.append(result)
+                
+                if result.success:
+                    await self._commit_fix(result, comment)
+                    
+            except Exception as e:
+                logger.error(f"Failed to fix comment {comment.id}", {
+                    'error': str(e),
+                    'path': comment.path
+                })
+                self.fix_results.append(FixResult(
+                    comment_id=comment.id,
+                    success=False,
+                    file_path=comment.path,
+                    original_code='',
+                    fixed_code='',
+                    error=str(e)
+                ))
+    
+    async def _fix_single_comment(self, comment: ReviewComment) -> FixResult:
+        """Generate and apply a fix for a single comment."""
+        file_content = await self.git_provider.get_file_content(
+            path=comment.path,
+            ref=self.fixes_branch
+        )
+        
+        context_start = max(0, comment.line - 20)
+        context_end = min(len(file_content.split('\n')), comment.line + 20)
+        lines = file_content.split('\n')
+        context_lines = lines[context_start:context_end]
+        context = '\n'.join(
+            f"{i+context_start+1}|{line}" 
+            for i, line in enumerate(context_lines)
+        )
+        
+        if comment.suggestion:
+            fixed_code = comment.suggestion
+        else:
+            fixed_code = await self._generate_fix_with_ai(
+                file_path=comment.path,
+                comment_body=comment.body,
+                code_context=context,
+                target_line=comment.line
+            )
+        
+        return FixResult(
+            comment_id=comment.id,
+            success=True,
+            file_path=comment.path,
+            original_code=context,
+            fixed_code=fixed_code
+        )
+    
+    async def _generate_fix_with_ai(
+        self,
+        file_path: str,
+        comment_body: str,
+        code_context: str,
+        target_line: int
+    ) -> str:
+        """Use AI to generate a fix for the review comment."""
+        
+        prompt = f"""You are an expert code fixer. Fix the code according to the review comment.
+
+## Review Comment
+{comment_body}
+
+## File: {file_path}
+## Target Line: {target_line}
+
+## Code Context (with line numbers)
+```
+{code_context}
+```
+
+## Instructions
+1. Understand what the review comment is asking to fix
+2. Generate the corrected code
+3. Return ONLY the fixed code snippet that should replace the problematic code
+4. Include enough context (a few lines before/after) so the fix can be applied correctly
+5. Do NOT include line numbers in your output
+6. Do NOT include explanations, only the code
+
+## Fixed Code
+```
+"""
+        
+        response = await self.ai_handler.chat_completion(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert code fixer. Output only the fixed code, no explanations."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2
+        )
+        
+        fixed_code = self._extract_code_from_response(response)
+        
+        return fixed_code
+    
+    def _extract_code_from_response(self, response: str) -> str:
+        """Extract code block from AI response."""
+        import re
+        
+        code_pattern = r'```(?:\w+)?\n(.*?)```'
+        match = re.search(code_pattern, response, re.DOTALL)
+        
+        if match:
+            return match.group(1).strip()
+        
+        return response.strip()
+    
+    async def _commit_fix(self, result: FixResult, comment: ReviewComment) -> None:
+        """Commit the fix to the fixes branch."""
+        commit_message = f"""fix: Address review comment on {result.file_path}
+
+Fixes comment: {comment.body[:100]}...
+
+Auto-generated by Workiz PR Agent
+"""
+        
+        sha = await self.git_provider.update_file(
+            path=result.file_path,
+            content=result.fixed_code,
+            message=commit_message,
+            branch=self.fixes_branch
+        )
+        
+        result.commit_sha = sha
+        
+        await self.git_provider.resolve_review_comment(comment.id)
+        
+        logger.info("Committed fix", {
+            'file': result.file_path,
+            'commit': sha
+        })
+    
+    async def _run_review_on_fixes(self) -> None:
+        """Run the PR review on the fixes PR."""
+        from pr_agent.tools.pr_reviewer import PRReviewer
+        
+        reviewer = PRReviewer(self.fixes_pr_url)
+        await reviewer.run()
+        
+        await asyncio.sleep(5)
+    
+    async def _generate_summary(self) -> Dict:
+        """Generate a summary of the auto-fix run."""
+        successful = [r for r in self.fix_results if r.success]
+        failed = [r for r in self.fix_results if not r.success]
+        
+        summary = {
+            'status': 'completed' if not failed else 'partial',
+            'original_pr': self.original_pr_url,
+            'fixes_pr': self.fixes_pr_url,
+            'iterations': self.iteration,
+            'total_comments': len(self.fix_results),
+            'fixed': len(successful),
+            'failed': len(failed),
+            'model': self.model
+        }
+        
+        summary_comment = f"""## 🤖 Auto-Fix Summary
+
+| Metric | Value |
+|--------|-------|
+| Iterations | {self.iteration} |
+| Comments Fixed | {len(successful)} |
+| Failed to Fix | {len(failed)} |
+| Model Used | `{self.model}` |
+
+### Fixes Applied
+{self._format_fix_list(successful)}
+
+{f"### Failed Fixes{chr(10)}{self._format_failed_list(failed)}" if failed else ""}
+
+---
+Please review the changes and merge if they look correct.
+"""
+        
+        await self.git_provider.add_pr_comment(
+            pr_url=self.fixes_pr_url,
+            body=summary_comment
+        )
+        
+        return summary
+    
+    def _format_fix_list(self, results: List[FixResult]) -> str:
+        """Format list of successful fixes."""
+        if not results:
+            return "_No fixes applied_"
+        
+        lines = []
+        for r in results:
+            lines.append(f"- ✅ `{r.file_path}` - {r.commit_sha[:7] if r.commit_sha else 'pending'}")
+        return '\n'.join(lines)
+    
+    def _format_failed_list(self, results: List[FixResult]) -> str:
+        """Format list of failed fixes."""
+        if not results:
+            return ""
+        
+        lines = []
+        for r in results:
+            lines.append(f"- ❌ `{r.file_path}` - {r.error}")
+        return '\n'.join(lines)
+```
+
+#### GitHub Provider Extensions
+
+Add methods to `GithubProvider`:
+
+```python
+# pr_agent/git_providers/github_provider.py - Add these methods
+
+async def create_branch(self, branch_name: str, from_branch: str) -> None:
+    """Create a new branch from an existing branch."""
+    ref = await self.github_client.get_ref(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        ref=f"heads/{from_branch}"
+    )
+    
+    await self.github_client.create_ref(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        ref=f"refs/heads/{branch_name}",
+        sha=ref['object']['sha']
+    )
+
+async def create_pr(
+    self, 
+    title: str, 
+    body: str, 
+    head: str, 
+    base: str,
+    draft: bool = False
+) -> str:
+    """Create a new pull request."""
+    response = await self.github_client.create_pull(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        title=title,
+        body=body,
+        head=head,
+        base=base,
+        draft=draft
+    )
+    return response['html_url']
+
+async def get_review_comments(self, pr_url: str) -> List[Dict]:
+    """Get all review comments on a PR."""
+    pr_number = self._extract_pr_number(pr_url)
+    return await self.github_client.list_review_comments(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        pull_number=pr_number
+    )
+
+async def update_file(
+    self,
+    path: str,
+    content: str,
+    message: str,
+    branch: str
+) -> str:
+    """Update a file and return the commit SHA."""
+    current = await self.github_client.get_contents(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        path=path,
+        ref=branch
+    )
+    
+    response = await self.github_client.update_file(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        path=path,
+        message=message,
+        content=base64.b64encode(content.encode()).decode(),
+        sha=current['sha'],
+        branch=branch
+    )
+    
+    return response['commit']['sha']
+
+async def resolve_review_comment(self, comment_id: int) -> None:
+    """Mark a review comment as resolved."""
+    await self.github_client.update_pull_request_review_comment(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        comment_id=comment_id,
+        body_additions={"resolved": True}
+    )
+
+async def create_check_run(
+    self,
+    name: str,
+    status: str,
+    conclusion: str,
+    output: Dict,
+    actions: List[Dict] = None
+) -> None:
+    """Create a Check Run with optional action buttons."""
+    await self.github_client.create_check_run(
+        owner=self.repo_owner,
+        repo=self.repo_name,
+        name=name,
+        head_sha=self.pr.head.sha,
+        status=status,
+        conclusion=conclusion,
+        output=output,
+        actions=actions or []
+    )
+```
+
+### Configuration
+
+Add to `configuration.toml`:
+
+```toml
+[autofix]
+enabled = true
+
+model = "claude-sonnet-4-20250514"
+
+fallback_models = [
+    "gemini/gemini-2.5-pro",
+    "claude-opus-4-20250514"
+]
+
+max_iterations = 5
+
+max_fix_attempts_per_comment = 2
+
+enable_tests_generation = true
+
+auto_merge_if_all_fixed = false
+
+excluded_paths = [
+    "package-lock.json",
+    "yarn.lock",
+    "*.min.js",
+    "*.generated.*"
+]
+
+[autofix.safety]
+require_human_review = true
+
+max_lines_changed_per_fix = 100
+
+forbidden_patterns = [
+    "process.env",
+    "secret",
+    "password",
+    "api_key"
+]
+```
+
+### GitHub App Permissions
+
+Ensure the GitHub App has these permissions:
+
+```yaml
+permissions:
+  checks: write
+  contents: write
+  pull_requests: write
+  issues: write
+```
+
+### UI Flow
+
+#### Button in Check Run UI
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Checks                                                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ⚠️ Workiz PR Agent                                              │
+│     Review Complete - 5 issues found                             │
+│                                                                  │
+│     [🤖 Auto-Fix Comments]  [View Details]                       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### PR Comment Command
+
+```markdown
+## Available Commands
+
+| Command | Description |
+|---------|-------------|
+| `/review` | Run code review |
+| `/improve` | Get improvement suggestions |
+| `/autofix` | 🆕 Create PR with auto-fixes for review comments |
+| `/autofix --model opus` | Use specific model for fixes |
+```
+
+### Safety Features
+
+| Feature | Description |
+|---------|-------------|
+| **Max Iterations** | Stop after 5 fix attempts to prevent infinite loops |
+| **Draft PR** | Fixes PR is created as draft for human review |
+| **Excluded Paths** | Skip lock files and generated code |
+| **Max Lines Changed** | Limit changes per fix to prevent large rewrites |
+| **Forbidden Patterns** | Don't modify code with secrets/credentials |
+| **Human Review Required** | Always require approval before merge |
+
+### Model Selection Strategy
+
+```python
+async def select_best_model(self, comment: ReviewComment) -> str:
+    """Select the best model based on comment complexity."""
+    
+    complex_keywords = [
+        'security', 'sql injection', 'refactor', 
+        'architecture', 'performance', 'algorithm'
+    ]
+    
+    if any(kw in comment.body.lower() for kw in complex_keywords):
+        return "claude-opus-4-20250514"
+    
+    if comment.severity == 'error':
+        return "gemini/gemini-2.5-pro"
+    
+    return "claude-sonnet-4-20250514"
+```
+
+### Example Output
+
+After running `/autofix`, the developer sees:
+
+```markdown
+## 🤖 Auto-Fix Summary
+
+| Metric | Value |
+|--------|-------|
+| Iterations | 2 |
+| Comments Fixed | 5 |
+| Failed to Fix | 0 |
+| Model Used | `claude-sonnet-4-20250514` |
+
+### Fixes Applied
+- ✅ `src/auth/auth.service.ts` - abc1234
+- ✅ `src/auth/auth.service.ts` - def5678
+- ✅ `src/auth/auth.controller.ts` - ghi9012
+- ✅ `src/auth/auth.service.spec.ts` - jkl3456 (new tests)
+- ✅ `src/auth/queries.ts` - mno7890
+
+---
+Please review the changes and merge if they look correct.
+```
+
+### Integration with Main Workflow
+
+```
+Original PR Created
+        ↓
+    /review runs automatically
+        ↓
+    Review comments posted
+        ↓
+Developer clicks [🤖 Auto-Fix Comments]
+        ↓
+Auto-Fix Agent creates fixes PR
+        ↓
+    Fix loop runs (max 5 iterations)
+        ↓
+    All comments resolved
+        ↓
+Developer reviews fixes PR
+        ↓
+    Merges into original branch
+        ↓
+Original PR now includes fixes
+        ↓
+    Ready for final review/merge
+```
 
 ---
 
@@ -9732,6 +10614,20 @@ Extra instructions:
 - Automatic cross-repo context in PR reviews
 - "This PR may break notifications-service because it changes the UserCreated event schema"
 - No custom indexing needed - RepoSwarm handles everything
+
+### ✅ Auto-Fix Agent (On-Demand)
+
+| Feature | Description |
+|---------|-------------|
+| **Trigger** | GitHub button `[🤖 Auto-Fix Comments]` or `/autofix` command |
+| **Models** | Claude Opus 4, Gemini 2.5 Pro, Claude Sonnet 4 |
+| **Flow** | Creates fixes branch → Applies AI fixes → Review loop → Draft PR |
+| **Safety** | Max 5 iterations, draft PR, human review required |
+
+**Workflow**:
+```
+PR with comments → /autofix → Fixes PR created → Review loop → All fixed → Developer merges
+```
 
 ### ✅ Databases Covered
 
