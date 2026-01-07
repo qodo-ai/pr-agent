@@ -17,68 +17,69 @@ dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5
 
 pool = ConnectionPool(dsn, min_size=1, max_size=10)
 
-_vector_lock = threading.Lock()
-_vector_registered = False
-_vector_retry_count = 0
-_vector_next_retry_time = 0.0
 
-VECTOR_MAX_RETRIES = int(os.environ.get("PGVECTOR_MAX_RETRIES", "5"))
-VECTOR_RETRY_BACKOFF_SECONDS = float(os.environ.get("PGVECTOR_RETRY_BACKOFF", "60"))
-
-
-def _register_vector_once(conn):
-    """Register pgvector extension on first connection (thread-safe).
-    
-    Retries with exponential backoff until max retries reached.
-    Backoff prevents performance degradation from repeated failures.
+class _VectorRegistration:
+    """Thread-safe pgvector registration with retry and backoff.
     
     Config via env vars:
         PGVECTOR_MAX_RETRIES: Max attempts before giving up (default: 5)
         PGVECTOR_RETRY_BACKOFF: Base backoff seconds (default: 60)
     """
-    global _vector_registered, _vector_retry_count, _vector_next_retry_time
     
-    if _vector_registered:
-        return
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._registered = False
+        self._permanently_failed = False
+        self._retry_count = 0
+        self._next_retry_time = 0.0
+        self._max_retries = int(os.environ.get("PGVECTOR_MAX_RETRIES", "5"))
+        self._backoff_base = float(os.environ.get("PGVECTOR_RETRY_BACKOFF", "60"))
     
-    if _vector_retry_count >= VECTOR_MAX_RETRIES:
-        return
-    
-    current_time = time.time()
-    if current_time < _vector_next_retry_time:
-        return
-    
-    with _vector_lock:
-        if _vector_registered or _vector_retry_count >= VECTOR_MAX_RETRIES:
+    def try_register(self, conn) -> None:
+        """Attempt to register pgvector on connection.
+        
+        All state checks and modifications happen inside the lock
+        to prevent race conditions.
+        """
+        if self._registered or self._permanently_failed:
             return
         
-        if current_time < _vector_next_retry_time:
-            return
-        
-        try:
-            register_vector(conn)
-            _vector_registered = True
-            logger.debug("pgvector extension registered successfully")
-        except Exception as e:
-            _vector_retry_count += 1
-            backoff = VECTOR_RETRY_BACKOFF_SECONDS * (2 ** (_vector_retry_count - 1))
-            _vector_next_retry_time = current_time + backoff
+        with self._lock:
+            if self._registered or self._permanently_failed:
+                return
             
-            if _vector_retry_count >= VECTOR_MAX_RETRIES:
-                logger.error(
-                    "Failed to register pgvector extension after max retries - vector operations disabled",
-                    extra={"context": {"error": str(e), "attempts": _vector_retry_count}}
-                )
-            else:
-                logger.warning(
-                    "Failed to register pgvector extension - will retry after backoff",
-                    extra={"context": {
-                        "error": str(e),
-                        "attempt": _vector_retry_count,
-                        "max_retries": VECTOR_MAX_RETRIES,
-                        "next_retry_in_seconds": backoff
-                    }}
-                )
+            current_time = time.time()
+            if current_time < self._next_retry_time:
+                return
+            
+            try:
+                register_vector(conn)
+                self._registered = True
+                logger.debug("pgvector extension registered successfully")
+            except Exception as e:
+                self._retry_count += 1
+                
+                if self._retry_count >= self._max_retries:
+                    self._permanently_failed = True
+                    logger.error(
+                        "Failed to register pgvector extension after max retries - vector operations disabled",
+                        extra={"context": {"error": str(e), "attempts": self._retry_count}}
+                    )
+                else:
+                    backoff = self._backoff_base * (2 ** (self._retry_count - 1))
+                    self._next_retry_time = current_time + backoff
+                    logger.warning(
+                        "Failed to register pgvector extension - will retry after backoff",
+                        extra={"context": {
+                            "error": str(e),
+                            "attempt": self._retry_count,
+                            "max_retries": self._max_retries,
+                            "next_retry_in_seconds": backoff
+                        }}
+                    )
+
+
+_vector_registration = _VectorRegistration()
 
 
 def get_conn():
@@ -89,7 +90,7 @@ def get_conn():
     Prefer using get_db_connection() context manager instead.
     """
     conn = pool.getconn()
-    _register_vector_once(conn)
+    _vector_registration.try_register(conn)
     return conn
 
 
@@ -112,7 +113,7 @@ def get_db_connection():
                 rows = cur.fetchall()
     """
     conn = pool.getconn()
-    _register_vector_once(conn)
+    _vector_registration.try_register(conn)
     try:
         yield conn
     finally:
