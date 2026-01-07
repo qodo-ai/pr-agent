@@ -3441,7 +3441,7 @@ Create `prompts/backend/nestjs/prompts.json`:
 
 Create `prompts/backend/nestjs/pubsub.md`:
 
-```markdown
+~~~markdown
 # PubSub Event Analysis
 
 Analyze the Google Cloud Pub/Sub event handlers and publishers in this NestJS service.
@@ -3482,7 +3482,7 @@ Analyze the Google Cloud Pub/Sub event handlers and publishers in this NestJS se
 ```
 [Source Service] --topic/event--> [This Service] --topic/event--> [Target Service]
 ```
-```
+~~~
 
 Create `prompts/backend/nestjs/api_contracts.md`:
 
@@ -4723,9 +4723,7 @@ This PR contains AI-generated fixes for review comments on #{original_pr_number}
 ## Target Line: {target_line}
 
 ## Code Context (with line numbers)
-```
 {code_context}
-```
 
 ## Instructions
 1. Understand what the review comment is asking to fix
@@ -4736,7 +4734,6 @@ This PR contains AI-generated fixes for review comments on #{original_pr_number}
 6. Do NOT include explanations, only the code
 
 ## Fixed Code
-```
 """
         
         response = await self.ai_handler.chat_completion(
@@ -4759,7 +4756,9 @@ This PR contains AI-generated fixes for review comments on #{original_pr_number}
         """Extract code block from AI response."""
         import re
         
-        code_pattern = r'```(?:\w+)?\n(.*?)```'
+        # Pattern to extract code from markdown code blocks
+        BACKTICKS = '`' * 3  # Triple backticks
+        code_pattern = rf'{BACKTICKS}(?:\w+)?\n(.*?){BACKTICKS}'
         match = re.search(code_pattern, response, re.DOTALL)
         
         if match:
