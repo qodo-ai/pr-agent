@@ -71,14 +71,15 @@ def load_configuration():
 
 def create_database_if_not_exists(database_url: str):
     """Create the target database if it doesn't exist"""
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlunparse
     
     from psycopg import sql
     
     parsed = urlparse(database_url)
     db_name = parsed.path.lstrip('/')
     
-    postgres_url = database_url.replace(f"/{db_name}", "/postgres")
+    postgres_parsed = parsed._replace(path='/postgres')
+    postgres_url = urlunparse(postgres_parsed)
     
     logger.info("Checking database exists", extra={"context": {"database": db_name}})
     try:
@@ -104,6 +105,8 @@ def create_database_if_not_exists(database_url: str):
 
 def run_migrations():
     """Run all SQL migration files in order"""
+    from urllib.parse import urlparse
+    
     migrations_dir = Path(__file__).parent.parent / "migrations"
     migration_files = sorted(migrations_dir.glob("*.sql"))
     
@@ -115,7 +118,8 @@ def run_migrations():
     
     create_database_if_not_exists(database_url)
     
-    db_host = database_url.split('@')[1] if '@' in database_url else 'localhost'
+    parsed = urlparse(database_url)
+    db_host = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
     logger.info("Connecting to database", extra={"context": {"host": db_host}})
     
     with psycopg.connect(database_url) as conn:
