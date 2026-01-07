@@ -45,33 +45,45 @@ class DatadogJSONFormatter(logging.Formatter):
         return json.dumps(log_record, default=str)
 
 
-def setup_logging(level: str = "INFO") -> None:
+def setup_logging(level: str = "INFO", configure_root: bool = False) -> None:
     """
     Configure logging for Datadog collection via stdout.
     
+    By default, only configures the 'pr_agent' logger to avoid interfering
+    with third-party library logging. Set configure_root=True to also
+    configure the root logger.
+    
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        configure_root: If True, also configures the root logger. Default False
+                       to avoid overriding other libraries' logging config.
     """
     log_level = getattr(logging, level.upper(), logging.INFO)
     
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(DatadogJSONFormatter())
     
-    logging.basicConfig(
-        level=log_level,
-        handlers=[handler],
-        force=True,
-    )
+    pr_agent_logger = logging.getLogger("pr_agent")
+    pr_agent_logger.setLevel(log_level)
+    pr_agent_logger.handlers.clear()
+    pr_agent_logger.addHandler(handler)
+    pr_agent_logger.propagate = False
     
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
-    logging.getLogger("anthropic").setLevel(logging.WARNING)
-    logging.getLogger("litellm").setLevel(logging.WARNING)
+    if configure_root:
+        root_logger = logging.getLogger()
+        root_logger.setLevel(log_level)
+        root_logger.handlers.clear()
+        root_logger.addHandler(handler)
     
-    logger = logging.getLogger("pr_agent")
-    logger.info("Logging configured", extra={"context": {"level": level, "env": os.environ.get("ENV", "development")}})
+    noisy_loggers = ["httpx", "urllib3", "httpcore", "openai", "anthropic", "litellm"]
+    for logger_name in noisy_loggers:
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
+    
+    pr_agent_logger.info("Logging configured", extra={"context": {
+        "level": level,
+        "env": os.environ.get("ENV", "development"),
+        "root_configured": configure_root
+    }})
 
 
 def get_logger(name: str) -> logging.Logger:
