@@ -1117,8 +1117,9 @@ workiz-pr-agent/
 │       └── prod.yaml                      # Helm values for production
 ├── migrations/
 │   ├── 001_init.sql                       # Initial schema with pgvector
-│   ├── 002_jira_tickets.sql               # Jira tables
-│   └── 003_review_history.sql             # Review tracking tables
+│   ├── 002_reposwarm.sql                  # RepoSwarm analysis cache
+│   ├── 003_jira_tickets.sql               # Jira tables
+│   └── 004_review_history.sql             # Review tracking tables
 ├── scripts/
 │   └── run_migrations.py                  # Migration runner script
 ├── pr_agent/
@@ -1139,7 +1140,6 @@ workiz-pr-agent/
 │   ├── servers/
 │   │   └── admin_api.py                   # Admin endpoints (add to existing)
 │   ├── tools/
-│   │   ├── global_context_provider.py     # RAG for cross-repo context
 │   │   ├── jira_context_provider.py       # RAG for Jira tickets
 │   │   ├── custom_rules_engine.py         # Custom review rules
 │   │   ├── custom_rules_loader.py         # Load rules from TOML/DB
@@ -1148,7 +1148,23 @@ workiz-pr-agent/
 │   │   ├── security_analyzer.py           # Deep security checks
 │   │   ├── npm_package_analyzer.py        # NPM package version management
 │   │   ├── autofix_agent.py               # Auto-fix agent
-│   │   ├── reposwarm_context_loader.py    # RepoSwarm integration
+│   │   ├── reposwarm/                     # Adapted from royosherove/repo-swarm
+│   │   │   ├── __init__.py
+│   │   │   ├── investigator.py            # Core analysis (no Temporal)
+│   │   │   ├── repo_type_detector.py      # Detect backend/frontend/etc
+│   │   │   ├── structure_analyzer.py      # Build file tree
+│   │   │   ├── context_loader.py          # Load for PR reviews
+│   │   │   └── prompts/                   # Analysis prompts
+│   │   │       ├── backend/
+│   │   │       │   ├── nestjs/
+│   │   │       │   ├── nodejs/
+│   │   │       │   ├── python/
+│   │   │       │   └── php/
+│   │   │       ├── frontend/
+│   │   │       │   └── react/
+│   │   │       └── shared/
+│   │   │           ├── security/
+│   │   │           └── auth/
 │   │   ├── language_analyzers/
 │   │   │   ├── __init__.py
 │   │   │   ├── base_analyzer.py

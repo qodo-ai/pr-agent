@@ -1199,88 +1199,637 @@ class JiraClient:
 
 ### 8.2 RepoSwarm Integration
 
+RepoSwarm is based on [royosherove/repo-swarm](https://github.com/royosherove/repo-swarm), an AI-powered multi-repo architecture discovery platform. We extract and adapt its core components (prompts and investigator logic) to work within PR Agent without requiring Temporal or DynamoDB.
+
+#### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        RepoSwarm Integration (Embedded)                          │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   Original RepoSwarm                      PR Agent Adaptation                    │
+│   ┌─────────────────────┐                 ┌─────────────────────┐               │
+│   │  Temporal Workflows │  ──────────►    │  Async Python       │               │
+│   │  (orchestration)    │   Replace       │  Functions          │               │
+│   └─────────────────────┘                 └─────────────────────┘               │
+│                                                                                  │
+│   ┌─────────────────────┐                 ┌─────────────────────┐               │
+│   │  DynamoDB           │  ──────────►    │  PostgreSQL         │               │
+│   │  (caching)          │   Replace       │  + pgvector         │               │
+│   └─────────────────────┘                 └─────────────────────┘               │
+│                                                                                  │
+│   ┌─────────────────────┐                 ┌─────────────────────┐               │
+│   │  Claude API         │  ──────────►    │  LiteLLM            │               │
+│   │  (direct)           │   Replace       │  (any model)        │               │
+│   └─────────────────────┘                 └─────────────────────┘               │
+│                                                                                  │
+│   ┌─────────────────────┐                 ┌─────────────────────┐               │
+│   │  prompts/           │  ──────────►    │  prompts/           │               │
+│   │  (analysis prompts) │   Keep          │  (same structure)   │               │
+│   └─────────────────────┘                 └─────────────────────┘               │
+│                                                                                  │
+│   ┌─────────────────────┐                 ┌─────────────────────┐               │
+│   │  src/investigator/  │  ──────────►    │  tools/reposwarm/   │               │
+│   │  (analysis logic)   │   Adapt         │  investigator.py    │               │
+│   └─────────────────────┘                 └─────────────────────┘               │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Directory Structure
+
+```
+pr_agent/tools/reposwarm/
+├── __init__.py
+├── investigator.py              # Core analysis logic (adapted from RepoSwarm)
+├── repo_type_detector.py        # Detect backend/frontend/mobile/etc
+├── structure_analyzer.py        # Build file tree and structure
+├── context_loader.py            # Load analysis results for PR review
+└── prompts/                     # Copied from RepoSwarm
+    ├── backend/
+    │   ├── nestjs/
+    │   │   ├── prompts.json
+    │   │   ├── api-endpoints.md
+    │   │   ├── database-entities.md
+    │   │   └── pubsub-events.md
+    │   ├── nodejs/
+    │   ├── python/
+    │   └── php/
+    ├── frontend/
+    │   └── react/
+    │       ├── prompts.json
+    │       ├── components.md
+    │       └── state-management.md
+    ├── mobile/
+    ├── libraries/
+    ├── infra-as-code/
+    └── shared/
+        ├── security/
+        ├── auth/
+        └── monitoring/
+```
+
+#### Core Investigator (Adapted from RepoSwarm)
+
 ```python
-# pr_agent/tools/reposwarm_context_loader.py
+# pr_agent/tools/reposwarm/investigator.py
+"""
+Repository architecture investigator.
+Adapted from https://github.com/royosherove/repo-swarm
+Removes Temporal/DynamoDB dependencies, uses PostgreSQL and LiteLLM.
+"""
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 from typing import Dict, List, Optional
-import aiohttp
-import yaml
+
+from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
+
+
+class RepositoryInvestigator:
+    """
+    Analyzes repository architecture and generates context for PR reviews.
+    Adapted from RepoSwarm without Temporal dependency.
+    """
+    
+    def __init__(self, db_conn, ai_handler: BaseAiHandler, prompts_dir: Path = None):
+        self.db = db_conn
+        self.ai = ai_handler
+        self.prompts_dir = prompts_dir or Path(__file__).parent / "prompts"
+    
+    def investigate(self, repo_url: str, branch: str = None) -> Dict:
+        """
+        Main entry point - analyzes a repository.
+        Replaces Temporal workflow with simple synchronous execution.
+        """
+        # 1. Check cache
+        cached = self._check_cache(repo_url, branch)
+        if cached:
+            return cached
+        
+        # 2. Clone repository
+        repo_path = self._clone_repo(repo_url, branch)
+        
+        try:
+            # 3. Detect repo type
+            repo_type = self._detect_repo_type(repo_path)
+            
+            # 4. Get structure
+            structure = self._get_structure(repo_path)
+            
+            # 5. Load prompts for this repo type
+            prompts = self._load_prompts(repo_type)
+            
+            # 6. Run AI analysis
+            results = self._analyze_with_prompts(repo_path, structure, prompts)
+            
+            # 7. Store results
+            self._store_results(repo_url, branch, repo_type, results)
+            
+            return {
+                'repo_url': repo_url,
+                'branch': branch,
+                'repo_type': repo_type,
+                'analysis': results
+            }
+            
+        finally:
+            # 8. Cleanup
+            self._cleanup(repo_path)
+    
+    def _check_cache(self, repo_url: str, branch: str) -> Optional[Dict]:
+        """Check if analysis is cached in PostgreSQL."""
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT analysis_result, analyzed_at, commit_sha
+                FROM repo_analysis_cache
+                WHERE repo_url = %s AND (branch = %s OR branch IS NULL)
+                AND analyzed_at > NOW() - INTERVAL '7 days'
+                ORDER BY analyzed_at DESC
+                LIMIT 1
+            """, (repo_url, branch))
+            row = cur.fetchone()
+            if row:
+                return json.loads(row[0])
+        return None
+    
+    def _clone_repo(self, repo_url: str, branch: str = None) -> Path:
+        """Clone repository to temporary directory."""
+        temp_dir = Path(tempfile.mkdtemp(prefix="reposwarm_"))
+        
+        cmd = ["git", "clone", "--depth", "1"]
+        if branch:
+            cmd.extend(["--branch", branch])
+        cmd.extend([repo_url, str(temp_dir / "repo")])
+        
+        subprocess.run(cmd, check=True, capture_output=True)
+        return temp_dir / "repo"
+    
+    def _detect_repo_type(self, repo_path: Path) -> str:
+        """
+        Detect repository type based on files present.
+        Returns path like 'backend/nestjs' or 'frontend/react'.
+        """
+        # Check for package.json (Node.js projects)
+        package_json = repo_path / "package.json"
+        if package_json.exists():
+            pkg = json.loads(package_json.read_text())
+            deps = {
+                **pkg.get("dependencies", {}),
+                **pkg.get("devDependencies", {})
+            }
+            
+            # NestJS
+            if "@nestjs/core" in deps:
+                return "backend/nestjs"
+            
+            # React frontend
+            if "react" in deps:
+                if "next" in deps:
+                    return "frontend/nextjs"
+                return "frontend/react"
+            
+            # Plain Node.js
+            if "express" in deps or "fastify" in deps:
+                return "backend/nodejs"
+        
+        # PHP (Laravel, etc.)
+        if (repo_path / "composer.json").exists():
+            composer = json.loads((repo_path / "composer.json").read_text())
+            require = composer.get("require", {})
+            if "laravel/framework" in require:
+                return "backend/laravel"
+            return "backend/php"
+        
+        # Python
+        if (repo_path / "requirements.txt").exists() or (repo_path / "pyproject.toml").exists():
+            # Check for FastAPI/Django/Flask
+            reqs_file = repo_path / "requirements.txt"
+            if reqs_file.exists():
+                reqs = reqs_file.read_text().lower()
+                if "fastapi" in reqs:
+                    return "backend/python-fastapi"
+                if "django" in reqs:
+                    return "backend/python-django"
+            return "backend/python"
+        
+        # Infrastructure
+        if (repo_path / "terraform").exists() or (repo_path / "main.tf").exists():
+            return "infra-as-code/terraform"
+        if (repo_path / "helm").exists():
+            return "infra-as-code/helm"
+        
+        return "backend/generic"
+    
+    def _get_structure(self, repo_path: Path, max_depth: int = 4) -> Dict:
+        """Build file tree structure."""
+        def build_tree(path: Path, depth: int = 0) -> Dict:
+            if depth > max_depth:
+                return {"truncated": True}
+            
+            result = {"name": path.name, "type": "directory", "children": []}
+            
+            try:
+                for item in sorted(path.iterdir()):
+                    # Skip hidden and common ignore patterns
+                    if item.name.startswith('.') or item.name in [
+                        'node_modules', 'venv', '__pycache__', 'dist', 'build',
+                        '.git', 'coverage', '.next'
+                    ]:
+                        continue
+                    
+                    if item.is_dir():
+                        result["children"].append(build_tree(item, depth + 1))
+                    else:
+                        result["children"].append({
+                            "name": item.name,
+                            "type": "file",
+                            "size": item.stat().st_size
+                        })
+            except PermissionError:
+                pass
+            
+            return result
+        
+        return build_tree(repo_path)
+    
+    def _load_prompts(self, repo_type: str) -> List[Dict]:
+        """Load analysis prompts for the detected repo type."""
+        prompts_file = self.prompts_dir / repo_type / "prompts.json"
+        
+        if prompts_file.exists():
+            return json.loads(prompts_file.read_text())
+        
+        # Fallback to generic prompts
+        generic_prompts = self.prompts_dir / "backend" / "generic" / "prompts.json"
+        if generic_prompts.exists():
+            return json.loads(generic_prompts.read_text())
+        
+        # Default minimal prompts
+        return [
+            {
+                "name": "overview",
+                "prompt_file": "overview.md",
+                "description": "General architecture overview"
+            }
+        ]
+    
+    def _analyze_with_prompts(
+        self, 
+        repo_path: Path, 
+        structure: Dict, 
+        prompts: List[Dict]
+    ) -> Dict:
+        """Run AI analysis using the loaded prompts."""
+        results = {}
+        
+        for prompt_config in prompts:
+            prompt_name = prompt_config["name"]
+            prompt_file = self.prompts_dir / prompt_config.get("prompt_file", f"{prompt_name}.md")
+            
+            if not prompt_file.exists():
+                continue
+            
+            prompt_template = prompt_file.read_text()
+            
+            # Gather relevant files based on prompt type
+            relevant_files = self._gather_relevant_files(repo_path, prompt_name)
+            
+            # Build the full prompt
+            full_prompt = f"""
+{prompt_template}
+
+## Repository Structure
+```json
+{json.dumps(structure, indent=2)[:5000]}
+```
+
+## Relevant Files
+{relevant_files[:50000]}
+"""
+            
+            # Call AI (via LiteLLM)
+            response, _ = self.ai.chat_completion(
+                model=self.ai.model,
+                system="You are an expert software architect analyzing repository structure.",
+                user=full_prompt
+            )
+            
+            results[prompt_name] = response
+        
+        return results
+    
+    def _gather_relevant_files(self, repo_path: Path, prompt_name: str) -> str:
+        """Gather file contents relevant to the analysis type."""
+        patterns = {
+            "api-endpoints": ["*.controller.ts", "*.controller.js", "routes/*.ts", "routes/*.js"],
+            "database-entities": ["*.entity.ts", "models/*.ts", "models/*.py", "*.model.ts"],
+            "pubsub-events": ["*.subscriber.ts", "*.publisher.ts", "*pubsub*", "*event*"],
+            "components": ["*.tsx", "*.jsx", "components/**/*"],
+            "security": ["*auth*", "*security*", "*guard*", "*middleware*"],
+            "overview": ["README.md", "package.json", "composer.json", "requirements.txt"]
+        }
+        
+        file_patterns = patterns.get(prompt_name, ["*.ts", "*.js", "*.py", "*.php"])
+        
+        content_parts = []
+        total_size = 0
+        max_size = 50000  # Limit total content size
+        
+        for pattern in file_patterns:
+            for file_path in repo_path.rglob(pattern.replace("**/*", "*")):
+                if total_size > max_size:
+                    break
+                if file_path.is_file() and file_path.stat().st_size < 10000:
+                    try:
+                        content = file_path.read_text()
+                        rel_path = file_path.relative_to(repo_path)
+                        content_parts.append(f"### {rel_path}\n```\n{content}\n```\n")
+                        total_size += len(content)
+                    except Exception:
+                        pass
+        
+        return "\n".join(content_parts)
+    
+    def _store_results(
+        self, 
+        repo_url: str, 
+        branch: str, 
+        repo_type: str, 
+        results: Dict
+    ) -> None:
+        """Store analysis results in PostgreSQL."""
+        with self.db.cursor() as cur:
+            cur.execute("""
+                INSERT INTO repo_analysis_cache 
+                (repo_url, branch, repo_type, analysis_result, analyzed_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON CONFLICT (repo_url, branch) DO UPDATE SET
+                    repo_type = EXCLUDED.repo_type,
+                    analysis_result = EXCLUDED.analysis_result,
+                    analyzed_at = EXCLUDED.analyzed_at
+            """, (repo_url, branch, repo_type, json.dumps(results)))
+        self.db.commit()
+    
+    def _cleanup(self, repo_path: Path) -> None:
+        """Remove temporary clone directory."""
+        try:
+            shutil.rmtree(repo_path.parent)
+        except Exception:
+            pass
+```
+
+#### Context Loader for PR Reviews
+
+```python
+# pr_agent/tools/reposwarm/context_loader.py
+"""Load RepoSwarm analysis results for PR review context."""
+import json
+from typing import Dict, List, Optional
+
 
 class RepoSwarmContextLoader:
-    """Load architectural context from RepoSwarm analysis."""
+    """Load architectural context from RepoSwarm analysis stored in PostgreSQL."""
     
-    def __init__(self, hub_repo: str, github_token: str):
-        self.hub_repo = hub_repo  # e.g., "Workiz/workiz-architecture-hub"
-        self.github_token = github_token
+    def __init__(self, db_conn):
+        self.db = db_conn
         self._cache = {}
     
-    async def get_architecture_context(self, repo_name: str) -> Optional[Dict]:
-        """Get .arch.md content for a repository."""
-        if repo_name in self._cache:
-            return self._cache[repo_name]
+    def get_architecture_context(self, repo_url: str) -> Optional[Dict]:
+        """Get cached analysis for a repository."""
+        if repo_url in self._cache:
+            return self._cache[repo_url]
         
-        url = f"https://raw.githubusercontent.com/{self.hub_repo}/main/repos/{repo_name}/.arch.md"
-        
-        async with aiohttp.ClientSession() as session:
-            headers = {"Authorization": f"token {self.github_token}"}
-            async with session.get(url, headers=headers) as response:
-                if response.status == 200:
-                    content = await response.text()
-                    parsed = self._parse_arch_md(content)
-                    self._cache[repo_name] = parsed
-                    return parsed
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT repo_type, analysis_result, analyzed_at
+                FROM repo_analysis_cache
+                WHERE repo_url = %s
+                ORDER BY analyzed_at DESC
+                LIMIT 1
+            """, (repo_url,))
+            row = cur.fetchone()
+            
+            if row:
+                result = {
+                    'repo_type': row[0],
+                    'analysis': json.loads(row[1]),
+                    'analyzed_at': row[2]
+                }
+                self._cache[repo_url] = result
+                return result
         
         return None
     
-    def _parse_arch_md(self, content: str) -> Dict:
-        """Parse .arch.md file into structured data."""
-        sections = {}
-        current_section = None
-        current_content = []
-        
-        for line in content.split('\n'):
-            if line.startswith('## '):
-                if current_section:
-                    sections[current_section] = '\n'.join(current_content)
-                current_section = line[3:].strip()
-                current_content = []
-            else:
-                current_content.append(line)
-        
-        if current_section:
-            sections[current_section] = '\n'.join(current_content)
-        
-        return sections
-    
-    async def get_related_services(self, repo_name: str) -> List[str]:
-        """Get list of services that interact with this repo."""
-        context = await self.get_architecture_context(repo_name)
-        if not context:
+    def get_related_services(self, repo_url: str) -> List[Dict]:
+        """Get services that interact with this repo based on analysis."""
+        context = self.get_architecture_context(repo_url)
+        if not context or 'analysis' not in context:
             return []
         
+        analysis = context['analysis']
         related = []
         
-        # Parse dependencies section
-        if 'Dependencies' in context:
-            deps = context['Dependencies']
-            # Extract service names from the content
+        # Extract from API endpoints analysis
+        if 'api-endpoints' in analysis:
+            endpoints = analysis['api-endpoints']
+            # Parse HTTP calls to other services
             import re
-            service_pattern = r'`([a-zA-Z-]+(?:-service)?)`'
-            related.extend(re.findall(service_pattern, deps))
+            service_calls = re.findall(
+                r'(?:fetch|axios|http)\s*\(\s*[\'"`]https?://([a-zA-Z-]+)',
+                endpoints
+            )
+            for svc in service_calls:
+                related.append({'service': svc, 'type': 'http'})
         
-        return list(set(related))
+        # Extract from PubSub analysis
+        if 'pubsub-events' in analysis:
+            events = analysis['pubsub-events']
+            # Parse topic subscriptions
+            topics = re.findall(r'topic[:\s]+[\'"`]([^\'"`]+)', events, re.I)
+            for topic in topics:
+                related.append({'topic': topic, 'type': 'pubsub'})
+        
+        return related
     
-    async def get_api_contracts(self, repo_name: str) -> Dict:
-        """Get API contracts for the repository."""
-        context = await self.get_architecture_context(repo_name)
-        if not context:
-            return {}
+    def get_cross_repo_context_for_pr(
+        self, 
+        pr_repo_url: str, 
+        changed_files: List[str]
+    ) -> str:
+        """
+        Build cross-repository context string for a PR review.
+        This is the main method called by WorkizPRReviewer.
+        """
+        context_parts = []
         
-        return {
-            'endpoints': context.get('API Endpoints', ''),
-            'events_published': context.get('Events Published', ''),
-            'events_consumed': context.get('Events Consumed', '')
-        }
+        # Get analysis for the PR's repository
+        repo_context = self.get_architecture_context(pr_repo_url)
+        if repo_context:
+            context_parts.append(f"## Repository Architecture ({repo_context['repo_type']})")
+            
+            analysis = repo_context.get('analysis', {})
+            
+            # Add relevant sections based on changed files
+            if any(f.endswith(('.controller.ts', '.controller.js')) for f in changed_files):
+                if 'api-endpoints' in analysis:
+                    context_parts.append("### API Endpoints")
+                    context_parts.append(analysis['api-endpoints'][:2000])
+            
+            if any('entity' in f.lower() or 'model' in f.lower() for f in changed_files):
+                if 'database-entities' in analysis:
+                    context_parts.append("### Database Entities")
+                    context_parts.append(analysis['database-entities'][:2000])
+            
+            if any('pubsub' in f.lower() or 'event' in f.lower() for f in changed_files):
+                if 'pubsub-events' in analysis:
+                    context_parts.append("### PubSub Events")
+                    context_parts.append(analysis['pubsub-events'][:2000])
+        
+        # Get related services context
+        related = self.get_related_services(pr_repo_url)
+        if related:
+            context_parts.append("## Related Services")
+            for rel in related[:5]:  # Limit to top 5
+                if rel['type'] == 'http':
+                    context_parts.append(f"- HTTP dependency: `{rel['service']}`")
+                elif rel['type'] == 'pubsub':
+                    context_parts.append(f"- PubSub topic: `{rel['topic']}`")
+        
+        return "\n\n".join(context_parts) if context_parts else ""
 ```
+
+#### Database Schema for RepoSwarm
+
+```sql
+-- Add to migrations/002_reposwarm.sql
+
+-- Cache for repository analysis results
+CREATE TABLE IF NOT EXISTS repo_analysis_cache (
+    id SERIAL PRIMARY KEY,
+    repo_url TEXT NOT NULL,
+    branch TEXT,
+    repo_type VARCHAR(100),
+    analysis_result JSONB NOT NULL,
+    commit_sha VARCHAR(40),
+    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repo_url, branch)
+);
+
+-- Index for fast lookups
+CREATE INDEX IF NOT EXISTS idx_repo_analysis_repo_url 
+    ON repo_analysis_cache(repo_url);
+
+-- Track analysis history for debugging
+CREATE TABLE IF NOT EXISTS repo_analysis_history (
+    id SERIAL PRIMARY KEY,
+    repo_url TEXT NOT NULL,
+    branch TEXT,
+    trigger_type VARCHAR(50),  -- 'scheduled', 'push', 'manual'
+    status VARCHAR(20),        -- 'success', 'failed', 'skipped'
+    duration_ms INT,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Prompts Structure (from RepoSwarm)
+
+The prompts are organized by repository type. Here's the structure based on [RepoSwarm](https://github.com/royosherove/repo-swarm):
+
+```
+prompts/
+├── backend/
+│   ├── nestjs/
+│   │   ├── prompts.json          # List of analyses to run
+│   │   ├── api-endpoints.md      # Extract REST/GraphQL endpoints
+│   │   ├── database-entities.md  # Extract TypeORM entities
+│   │   ├── pubsub-events.md      # Extract PubSub publishers/subscribers
+│   │   └── dependencies.md       # Extract service dependencies
+│   ├── nodejs/
+│   ├── python/
+│   ├── php/
+│   └── generic/
+├── frontend/
+│   └── react/
+│       ├── prompts.json
+│       ├── components.md         # Component hierarchy
+│       ├── state-management.md   # Redux/Context/Zustand usage
+│       └── api-calls.md          # HTTP client calls
+├── shared/
+│   ├── security/
+│   │   └── security-analysis.md
+│   └── auth/
+│       └── auth-patterns.md
+└── infra-as-code/
+    ├── terraform/
+    └── helm/
+```
+
+Example `prompts/backend/nestjs/prompts.json`:
+
+```json
+[
+  {
+    "name": "api-endpoints",
+    "prompt_file": "api-endpoints.md",
+    "description": "Extract all REST and GraphQL endpoints"
+  },
+  {
+    "name": "database-entities",
+    "prompt_file": "database-entities.md",
+    "description": "Extract TypeORM entities and relationships"
+  },
+  {
+    "name": "pubsub-events",
+    "prompt_file": "pubsub-events.md",
+    "description": "Extract PubSub publishers and subscribers"
+  },
+  {
+    "name": "dependencies",
+    "prompt_file": "dependencies.md",
+    "description": "Extract HTTP calls to other services"
+  }
+]
+```
+
+Example `prompts/backend/nestjs/api-endpoints.md`:
+
+~~~markdown
+Analyze this NestJS repository and extract all API endpoints.
+
+For each endpoint, identify:
+1. HTTP method (GET, POST, PUT, DELETE, PATCH)
+2. Route path
+3. Controller class and method name
+4. Request DTO (if any)
+5. Response DTO (if any)
+6. Guards and decorators applied
+7. Brief description of what it does
+
+Output format:
+```yaml
+endpoints:
+  - method: POST
+    path: /users
+    controller: UsersController
+    handler: create
+    request_dto: CreateUserDto
+    response_dto: UserResponseDto
+    guards: [JwtAuthGuard]
+    description: Creates a new user account
+```
+
+Focus on:
+- Controllers in `src/**/*.controller.ts`
+- Route decorators (@Get, @Post, etc.)
+- Parameter decorators (@Param, @Query, @Body)
+- Guard decorators (@UseGuards)
+~~~
 
 ### 8.3 Figma Integration
 

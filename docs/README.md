@@ -69,9 +69,9 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 |-------------|---------|--------|
 | **GitHub** | Webhooks, PR reviews, comments | ✅ Base exists |
 | **Jira** | Ticket context, history, compliance | ✅ Planned |
-| **RepoSwarm** | Cross-repo architecture context | ✅ Planned |
+| **RepoSwarm** | Cross-repo architecture context (adapted from [royosherove/repo-swarm](https://github.com/royosherove/repo-swarm)) | ✅ Planned |
 | **Figma** | Design verification for frontend | ✅ Planned |
-| **NPM Registry** | Internal package version tracking | ✅ Planned |
+| **GitHub Packages** | Internal @workiz package version tracking | ✅ Planned |
 
 ### Advanced Features
 
@@ -265,6 +265,21 @@ npm_org = "@workiz"
 | **Database** | Cloud SQL PostgreSQL with pgvector |
 | **Domains** | `pr-agent-staging.workiz.dev`, `pr-agent.workiz.dev` |
 
+### RepoSwarm Integration
+
+Cross-repository architecture discovery is powered by an adaptation of [RepoSwarm](https://github.com/royosherove/repo-swarm):
+
+| Original RepoSwarm | PR Agent Adaptation |
+|--------------------|---------------------|
+| Temporal workflows | Simple async Python |
+| DynamoDB caching | PostgreSQL |
+| Claude API (direct) | LiteLLM (any model) |
+| Standalone service | Embedded in PR Agent |
+| `prompts/` directory | ✅ Kept as-is |
+| `src/investigator/` | ✅ Adapted |
+
+The prompts and analysis logic from RepoSwarm are integrated directly into PR Agent, eliminating the need for a separate service or Temporal infrastructure.
+
 ---
 
 ## 📅 Implementation Timeline
@@ -292,9 +307,10 @@ npm_org = "@workiz"
 ## 🔗 References
 
 - [Original PR Agent Documentation](https://qodo-merge-docs.qodo.ai/)
-- [RepoSwarm](https://github.com/your-org/reposwarm)
+- [RepoSwarm by Roy Osherove](https://github.com/royosherove/repo-swarm) - AI-powered multi-repo architecture discovery (adapted for PR Agent)
 - [Figma MCP](https://modelcontextprotocol.io/examples)
 - [GCloud Secret Manager](https://cloud.google.com/secret-manager)
+- [Temporal](https://temporal.io/) - Original RepoSwarm orchestration (not used in our adaptation)
 
 ---
 
