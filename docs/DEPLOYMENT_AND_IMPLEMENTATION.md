@@ -8,7 +8,7 @@ This document covers local setup, production deployment, data initialization, an
 2. [Production Deployment (GKE + Helm)](#2-production-deployment-gke--helm)
 3. [Data Initialization](#3-data-initialization)
 4. [Continuous Updates](#4-continuous-updates)
-5. [Monitoring & Logging](#5-monitoring--logging)
+5. [Monitoring & Logging (Datadog)](#5-monitoring--logging)
 6. [Testing Strategy](#6-testing-strategy)
 7. [Files to Create](#7-files-to-create)
 8. [Implementation Checklists](#8-implementation-checklists)
@@ -1529,31 +1529,122 @@ async def sync_single_jira_ticket(issue_key: str):
 
 ## 5. Monitoring & Logging
 
-### Cloud Logging Setup
+### Datadog Integration
 
-```bash
-# View logs
-gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=pr-agent" \
-    --limit 100 \
-    --format="table(timestamp,textPayload)"
+All logs are written to **stdout** and automatically collected by Datadog. No additional configuration needed.
 
-# Create log-based metric for errors
-gcloud logging metrics create pr-agent-errors \
-    --description="PR Agent error count" \
-    --filter='resource.type="cloud_run_revision" AND resource.labels.service_name="pr-agent" AND severity>=ERROR'
+#### Logging Configuration
+
+```python
+# pr_agent/log_config.py
+import logging
+import json
+import sys
+
+class DatadogJSONFormatter(logging.Formatter):
+    """JSON formatter for Datadog log ingestion."""
+    
+    def format(self, record):
+        log_record = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "service": "pr-agent",
+            "env": os.environ.get("ENV", "development"),
+        }
+        
+        # Add extra fields if present
+        if hasattr(record, 'context') and record.context:
+            log_record.update(record.context)
+        
+        # Add exception info
+        if record.exc_info:
+            log_record["error"] = {
+                "message": str(record.exc_info[1]),
+                "stack": self.formatException(record.exc_info)
+            }
+        
+        return json.dumps(log_record)
+
+
+def setup_logging():
+    """Configure logging for Datadog collection via stdout."""
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(DatadogJSONFormatter())
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[handler]
+    )
+    
+    # Reduce noise from third-party libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 ```
 
-### Cloud Monitoring Alerts
+#### Usage in Code
 
-```bash
-# Create alert policy for high error rate
-gcloud alpha monitoring policies create \
-    --display-name="PR Agent High Error Rate" \
-    --condition-display-name="Error rate > 5%" \
-    --condition-filter='metric.type="logging.googleapis.com/user/pr-agent-errors"' \
-    --condition-threshold-value=0.05 \
-    --condition-threshold-duration=300s \
-    --notification-channels=your-channel-id
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+# All logs go to stdout → Datadog
+logger.info("PR review started", extra={"context": {
+    "pr_number": 123,
+    "repo": "backend",
+    "action": "review"
+}})
+
+logger.error("Review failed", extra={"context": {
+    "pr_number": 123,
+    "error_code": "LLM_TIMEOUT"
+}}, exc_info=True)
+```
+
+#### Datadog Log Query Examples
+
+```
+# Find all PR Agent errors
+service:pr-agent status:error
+
+# Find reviews for specific repo
+service:pr-agent @repo:backend @action:review
+
+# Find Auto-Fix agent activity
+service:pr-agent @action:autofix
+
+# Find slow reviews (>30s)
+service:pr-agent @action:review @duration:>30000
+
+# Find LLM API errors
+service:pr-agent @error_code:LLM_*
+```
+
+#### Recommended Datadog Monitors
+
+| Monitor | Query | Threshold |
+|---------|-------|-----------|
+| **High Error Rate** | `sum:logs("service:pr-agent status:error").as_count()` | > 10 per 5min |
+| **Review Latency** | `avg:pr_agent.review.duration{*}` | > 60s |
+| **LLM API Failures** | `sum:logs("service:pr-agent @error_code:LLM_*").as_count()` | > 5 per 5min |
+| **Auto-Fix Failures** | `sum:logs("service:pr-agent @action:autofix @status:failed").as_count()` | > 3 per hour |
+
+#### Custom Metrics (Optional)
+
+If you want custom metrics, emit them to stdout in the Datadog metric format:
+
+```python
+# Emitted to stdout, Datadog agent picks them up
+def emit_metric(name: str, value: float, tags: dict = None):
+    """Emit a custom metric to Datadog via stdout."""
+    tag_str = ",".join([f"{k}:{v}" for k, v in (tags or {}).items()])
+    print(f"MONITORING|{int(time.time())}|{value}|gauge|pr_agent.{name}|#{tag_str}")
+
+# Usage
+emit_metric("review.duration", duration_ms, {"repo": repo_name, "success": "true"})
+emit_metric("api.tokens_used", tokens, {"model": model_name})
 ```
 
 ### API Cost Tracking
@@ -1883,7 +1974,7 @@ JIRA_EMAIL=...
 | **Week 5** | Jira Integration | Full Jira sync, ticket context in reviews |
 | **Week 6** | Auto-Fix Agent | Auto-fix flow, GitHub button |
 | **Week 7** | Admin UI | React dashboard, analytics |
-| **Week 8** | Production | GCloud deployment, monitoring, alerts |
+| **Week 8** | Production | GKE deployment, Datadog dashboards |
 
 ### Future Enhancements (Post-MVP)
 

@@ -332,7 +332,7 @@ The prompts and analysis logic from RepoSwarm are integrated directly into PR Ag
 | **Week 5** | Jira | Full Jira sync, ticket context |
 | **Week 6** | Auto-Fix | Auto-fix flow, GitHub button |
 | **Week 7** | Admin UI | React dashboard, analytics |
-| **Week 8** | Production | GCloud deployment, monitoring |
+| **Week 8** | Production | GKE deployment, Datadog dashboards |
 
 ---
 
