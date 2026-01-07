@@ -5,6 +5,7 @@ Following the same pattern as spam-detect service.
 import logging
 import os
 import threading
+import time
 from contextlib import contextmanager
 
 from pgvector.psycopg import register_vector
@@ -18,22 +19,40 @@ pool = ConnectionPool(dsn, min_size=1, max_size=10)
 
 _vector_lock = threading.Lock()
 _vector_registered = False
-_vector_warned = False
+_vector_retry_count = 0
+_vector_next_retry_time = 0.0
+
+VECTOR_MAX_RETRIES = int(os.environ.get("PGVECTOR_MAX_RETRIES", "5"))
+VECTOR_RETRY_BACKOFF_SECONDS = float(os.environ.get("PGVECTOR_RETRY_BACKOFF", "60"))
 
 
 def _register_vector_once(conn):
     """Register pgvector extension on first connection (thread-safe).
     
-    Retries on each connection until successful, as the extension
-    may become available after initial failures.
+    Retries with exponential backoff until max retries reached.
+    Backoff prevents performance degradation from repeated failures.
+    
+    Config via env vars:
+        PGVECTOR_MAX_RETRIES: Max attempts before giving up (default: 5)
+        PGVECTOR_RETRY_BACKOFF: Base backoff seconds (default: 60)
     """
-    global _vector_registered, _vector_warned
+    global _vector_registered, _vector_retry_count, _vector_next_retry_time
     
     if _vector_registered:
         return
     
+    if _vector_retry_count >= VECTOR_MAX_RETRIES:
+        return
+    
+    current_time = time.time()
+    if current_time < _vector_next_retry_time:
+        return
+    
     with _vector_lock:
-        if _vector_registered:
+        if _vector_registered or _vector_retry_count >= VECTOR_MAX_RETRIES:
+            return
+        
+        if current_time < _vector_next_retry_time:
             return
         
         try:
@@ -41,11 +60,24 @@ def _register_vector_once(conn):
             _vector_registered = True
             logger.debug("pgvector extension registered successfully")
         except Exception as e:
-            if not _vector_warned:
-                _vector_warned = True
+            _vector_retry_count += 1
+            backoff = VECTOR_RETRY_BACKOFF_SECONDS * (2 ** (_vector_retry_count - 1))
+            _vector_next_retry_time = current_time + backoff
+            
+            if _vector_retry_count >= VECTOR_MAX_RETRIES:
+                logger.error(
+                    "Failed to register pgvector extension after max retries - vector operations disabled",
+                    extra={"context": {"error": str(e), "attempts": _vector_retry_count}}
+                )
+            else:
                 logger.warning(
-                    "Failed to register pgvector extension - will retry on next connection",
-                    extra={"context": {"error": str(e)}}
+                    "Failed to register pgvector extension - will retry after backoff",
+                    extra={"context": {
+                        "error": str(e),
+                        "attempt": _vector_retry_count,
+                        "max_retries": VECTOR_MAX_RETRIES,
+                        "next_retry_in_seconds": backoff
+                    }}
                 )
 
 
