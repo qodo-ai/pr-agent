@@ -50,12 +50,19 @@ def _get_dotenv_config(env_file_path: Path) -> dict[str, str]:
     return _parse_env_content(content)
 
 
+SECRET_MANAGER_TIMEOUT_SECONDS = float(os.environ.get('SECRET_MANAGER_TIMEOUT', '30'))
+
+
 def _get_secret_manager_config(
     project_id: str,
     service_name: str,
     env_name_override: str | None = None
 ) -> dict[str, str]:
-    """Load configuration from Google Cloud Secret Manager."""
+    """Load configuration from Google Cloud Secret Manager.
+    
+    Timeout is configurable via SECRET_MANAGER_TIMEOUT env var (default: 30s).
+    """
+    from google.api_core import retry
     from google.cloud import secretmanager
 
     client = secretmanager.SecretManagerServiceClient()
@@ -70,7 +77,16 @@ def _get_secret_manager_config(
 
     def fetch_secrets(name: str) -> dict[str, str]:
         secret_path = f'projects/{project_id}/secrets/{name}/versions/latest'
-        response = client.access_secret_version(request={'name': secret_path})
+        response = client.access_secret_version(
+            request={'name': secret_path},
+            timeout=SECRET_MANAGER_TIMEOUT_SECONDS,
+            retry=retry.Retry(
+                initial=1.0,
+                maximum=10.0,
+                multiplier=2.0,
+                deadline=SECRET_MANAGER_TIMEOUT_SECONDS,
+            ),
+        )
 
         if not response.payload or not response.payload.data:
             raise ValueError(f'No data loaded from Google Secrets: {name}')
