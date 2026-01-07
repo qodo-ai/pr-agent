@@ -9,12 +9,13 @@
 5. [Implementation Plan](#implementation-plan)
 6. [Database Architecture](#database-architecture)
 7. [Multi-Agent Architecture](#multi-agent-architecture)
-8. [Figma Design Verification Agent](#figma-design-verification-agent)
-9. [Local Development Setup](#local-development-setup)
-10. [Configuration Guide](#configuration-guide)
-11. [Detailed Component Implementation](#detailed-component-implementation)
-12. [Deployment Strategy](#deployment-strategy)
-13. [Timeline and Milestones](#timeline-and-milestones)
+8. [RepoSwarm Integration for Cross-Repo Context](#reposwarm-integration-for-cross-repo-context)
+9. [Figma Design Verification Agent](#figma-design-verification-agent)
+10. [Local Development Setup](#local-development-setup)
+11. [Configuration Guide](#configuration-guide)
+12. [Detailed Component Implementation](#detailed-component-implementation)
+13. [Deployment Strategy](#deployment-strategy)
+14. [Timeline and Milestones](#timeline-and-milestones)
 
 ---
 
@@ -22,7 +23,7 @@
 
 This document outlines a comprehensive plan to transform the qodo-ai/pr-agent fork into a customized, hosted PR review solution for Workiz. The enhanced agent will include:
 
-- **Cross-Repository Context (RAG)**: Find related code across all Workiz repositories
+- **Cross-Repository Context (RepoSwarm)**: Automatic architecture discovery using [RepoSwarm](https://github.com/royosherove/repo-swarm)
 - **Jira Integration**: Compare code against tickets and historical bug fixes
 - **Extended Review Comments**: Display more than 2-3 comments per review
 - **Custom Styling Rules**: Enforce functional programming, NestJS patterns, etc.
@@ -2278,6 +2279,1081 @@ async def get_pubsub_topology():
     
     return topology
 ```
+
+---
+
+## RepoSwarm Integration for Cross-Repo Context
+
+### Overview
+
+[RepoSwarm](https://github.com/royosherove/repo-swarm) is an AI-powered multi-repository architecture discovery platform that generates `.arch.md` files with comprehensive architectural documentation. This tool is **ideal for providing global cross-repository context** to our PR review agents.
+
+**Key Benefits:**
+- **Eliminates custom indexing** - RepoSwarm already handles repo analysis and documentation
+- **Temporal-based workflows** - Reliable, scalable workflow orchestration
+- **Type-aware analysis** - Different prompts for backend, frontend, mobile, libraries, infra
+- **Caching with DynamoDB** - Efficient re-analysis only when repos change
+- **Output repository** - Centralized `.arch.md` files that agents can query
+
+### Architecture Integration
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     RepoSwarm + PR Agent Integration                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                        RepoSwarm Platform                            │   │
+│   │                                                                      │   │
+│   │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐          │   │
+│   │  │   GitHub     │    │   Temporal   │    │   Claude     │          │   │
+│   │  │   Repos      │───▶│   Workflows  │───▶│   Analysis   │          │   │
+│   │  │  (Workiz)    │    │              │    │              │          │   │
+│   │  └──────────────┘    └──────────────┘    └──────────────┘          │   │
+│   │         │                    │                   │                  │   │
+│   │         │                    │                   │                  │   │
+│   │         ▼                    ▼                   ▼                  │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐  │   │
+│   │  │                 Results Hub Repository                        │  │   │
+│   │  │  workiz-architecture-hub/                                     │  │   │
+│   │  │  ├── auth-service.arch.md                                     │  │   │
+│   │  │  ├── notifications-service.arch.md                            │  │   │
+│   │  │  ├── crm-service.arch.md                                      │  │   │
+│   │  │  ├── web-app.arch.md                                          │  │   │
+│   │  │  └── ... (all 40+ repos)                                      │  │   │
+│   │  └──────────────────────────────────────────────────────────────┘  │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                         │
+│                                    │ Fetch relevant .arch.md files           │
+│                                    ▼                                         │
+│   ┌─────────────────────────────────────────────────────────────────────┐   │
+│   │                       PR Agent (Workiz)                              │   │
+│   │                                                                      │   │
+│   │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐          │   │
+│   │  │ PR Webhook   │───▶│ RepoSwarm    │───▶│   Review     │          │   │
+│   │  │ (GitHub)     │    │ Context      │    │   Agent      │          │   │
+│   │  │              │    │ Loader       │    │              │          │   │
+│   │  └──────────────┘    └──────────────┘    └──────────────┘          │   │
+│   │                              │                   │                  │   │
+│   │                              │                   ▼                  │   │
+│   │  Architecture context:       │         ┌──────────────────┐        │   │
+│   │  - Related services          │         │  Review Comments │        │   │
+│   │  - API contracts             │         │  with cross-repo │        │   │
+│   │  - Event flows               │         │  context         │        │   │
+│   │  - Dependencies              │         └──────────────────┘        │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Step-by-Step Execution Plan
+
+#### Phase 1: RepoSwarm Setup (Week 1)
+
+##### Step 1.1: Clone and Configure RepoSwarm
+
+```bash
+# Clone RepoSwarm
+git clone https://github.com/royosherove/repo-swarm.git
+cd repo-swarm
+
+# Create Python virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy and configure environment
+cp .env.example .env
+```
+
+##### Step 1.2: Configure Environment Variables
+
+```bash
+# .env file
+ANTHROPIC_API_KEY=sk-ant-api03-...
+GITHUB_TOKEN=ghp_...
+GITHUB_ORG=Workiz
+
+# DynamoDB (for caching)
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+DYNAMODB_TABLE_NAME=reposwarm-cache
+
+# Output repository
+OUTPUT_REPO_URL=https://github.com/Workiz/workiz-architecture-hub.git
+OUTPUT_REPO_BRANCH=main
+```
+
+##### Step 1.3: Create Results Hub Repository
+
+```bash
+# Create new private repository on GitHub
+# Repository: Workiz/workiz-architecture-hub
+
+# Initialize with README
+mkdir workiz-architecture-hub
+cd workiz-architecture-hub
+git init
+echo "# Workiz Architecture Hub\n\nGenerated by RepoSwarm. Contains .arch.md files for all repositories." > README.md
+git add .
+git commit -m "Initial commit"
+git remote add origin git@github.com:Workiz/workiz-architecture-hub.git
+git push -u origin main
+```
+
+##### Step 1.4: Configure Workiz Repositories
+
+Create `prompts/repos.json` with all Workiz repositories:
+
+```json
+{
+  "repositories": [
+    {
+      "name": "auth",
+      "url": "https://github.com/Workiz/architecture",
+      "path": "services/auth",
+      "type": "backend",
+      "description": "Authentication and session management service"
+    },
+    {
+      "name": "crm-service",
+      "url": "https://github.com/Workiz/crm-service",
+      "type": "backend",
+      "description": "CRM and customer management"
+    },
+    {
+      "name": "notifications-service",
+      "url": "https://github.com/Workiz/notifications-service",
+      "type": "backend",
+      "description": "Multi-channel notification delivery"
+    },
+    {
+      "name": "core-service",
+      "url": "https://github.com/Workiz/core-service",
+      "type": "backend",
+      "description": "Core business logic"
+    },
+    {
+      "name": "reporting-service",
+      "url": "https://github.com/Workiz/reporting-service",
+      "type": "backend",
+      "description": "Reporting and analytics"
+    },
+    {
+      "name": "payments-service",
+      "url": "https://github.com/Workiz/payments-service",
+      "type": "backend",
+      "description": "Payment processing"
+    },
+    {
+      "name": "web-app",
+      "url": "https://github.com/Workiz/web-app",
+      "type": "frontend",
+      "description": "React frontend application"
+    },
+    {
+      "name": "mobile-app",
+      "url": "https://github.com/Workiz/mobile-app",
+      "type": "mobile",
+      "description": "React Native mobile app"
+    },
+    {
+      "name": "workiz-php",
+      "url": "https://github.com/Workiz/workiz-php",
+      "type": "backend",
+      "description": "Legacy PHP monolith"
+    },
+    {
+      "name": "fastapi-service",
+      "url": "https://github.com/Workiz/fastapi-service",
+      "type": "backend",
+      "description": "Python FastAPI service with PostgreSQL"
+    }
+  ],
+  "npm_packages": [
+    "@workiz/pubsub-decorator-reflector",
+    "@workiz/all-exceptions-filter",
+    "@workiz/response-wrapper",
+    "@workiz/swagger-decorator",
+    "@workiz/logger"
+  ]
+}
+```
+
+#### Phase 2: Custom Prompts for Workiz Stack (Week 1-2)
+
+##### Step 2.1: Create NestJS-Specific Prompts
+
+Create `prompts/backend/nestjs/prompts.json`:
+
+```json
+{
+  "name": "nestjs-backend",
+  "description": "NestJS TypeScript backend service analysis",
+  "steps": [
+    {
+      "name": "overview",
+      "prompt_file": "overview.md",
+      "required": true
+    },
+    {
+      "name": "modules",
+      "prompt_file": "modules.md",
+      "required": true
+    },
+    {
+      "name": "controllers",
+      "prompt_file": "controllers.md",
+      "required": true
+    },
+    {
+      "name": "services",
+      "prompt_file": "services.md",
+      "required": true
+    },
+    {
+      "name": "pubsub_events",
+      "prompt_file": "pubsub.md",
+      "required": true
+    },
+    {
+      "name": "database",
+      "prompt_file": "database.md",
+      "required": true
+    },
+    {
+      "name": "dependencies",
+      "prompt_file": "dependencies.md",
+      "required": true
+    },
+    {
+      "name": "api_contracts",
+      "prompt_file": "api_contracts.md",
+      "required": true
+    }
+  ]
+}
+```
+
+Create `prompts/backend/nestjs/pubsub.md`:
+
+```markdown
+# PubSub Event Analysis
+
+Analyze the Google Cloud Pub/Sub event handlers and publishers in this NestJS service.
+
+## Instructions
+
+1. **Find all PubSub event handlers**:
+   - Look for `@PubSubTopic`, `@PubSubEvent`, `@PubSubAsyncAcknowledge` decorators
+   - Identify the topics and events being consumed
+   - Document the event DTOs and their schemas
+
+2. **Find all PubSub publishers**:
+   - Look for event emission code
+   - Identify topics being published to
+   - Document the message schemas
+
+3. **Create an event topology**:
+   - Which services does this service listen to?
+   - Which services does this service notify?
+   - What are the event flows?
+
+## Output Format
+
+### Events Consumed
+
+| Topic | Event | Handler | DTO |
+|-------|-------|---------|-----|
+| ... | ... | ... | ... |
+
+### Events Published
+
+| Topic | Event | Publisher | Schema |
+|-------|-------|-----------|--------|
+| ... | ... | ... | ... |
+
+### Event Flow Diagram
+
+```
+[Source Service] --topic/event--> [This Service] --topic/event--> [Target Service]
+```
+```
+
+Create `prompts/backend/nestjs/api_contracts.md`:
+
+```markdown
+# API Contracts Analysis
+
+Document all REST API endpoints exposed by this NestJS service.
+
+## Instructions
+
+1. **Find all controllers** and their endpoints
+2. **Document each endpoint**:
+   - HTTP method and path
+   - Request body DTO (if any)
+   - Response DTO
+   - Authentication requirements
+   - Swagger decorators
+
+3. **Find internal API calls** to other services
+
+## Output Format
+
+### Exposed Endpoints
+
+| Method | Path | Request DTO | Response DTO | Auth |
+|--------|------|-------------|--------------|------|
+| ... | ... | ... | ... | ... |
+
+### Internal Service Calls
+
+| Target Service | Endpoint | Purpose |
+|----------------|----------|---------|
+| ... | ... | ... |
+```
+
+##### Step 2.2: Create PHP-Specific Prompts
+
+Create `prompts/backend/php/prompts.json`:
+
+```json
+{
+  "name": "php-backend",
+  "description": "PHP backend analysis (Workiz monolith)",
+  "steps": [
+    {
+      "name": "overview",
+      "prompt_file": "overview.md",
+      "required": true
+    },
+    {
+      "name": "controllers",
+      "prompt_file": "controllers.md",
+      "required": true
+    },
+    {
+      "name": "database",
+      "prompt_file": "database.md",
+      "required": true
+    },
+    {
+      "name": "api_endpoints",
+      "prompt_file": "api_endpoints.md",
+      "required": true
+    }
+  ]
+}
+```
+
+##### Step 2.3: Create React Frontend Prompts
+
+Create `prompts/frontend/react/prompts.json`:
+
+```json
+{
+  "name": "react-frontend",
+  "description": "React TypeScript frontend analysis",
+  "steps": [
+    {
+      "name": "overview",
+      "prompt_file": "overview.md",
+      "required": true
+    },
+    {
+      "name": "components",
+      "prompt_file": "components.md",
+      "required": true
+    },
+    {
+      "name": "state_management",
+      "prompt_file": "state.md",
+      "required": true
+    },
+    {
+      "name": "api_calls",
+      "prompt_file": "api_calls.md",
+      "required": true
+    },
+    {
+      "name": "routing",
+      "prompt_file": "routing.md",
+      "required": true
+    }
+  ]
+}
+```
+
+#### Phase 3: Initial Analysis Run (Week 2)
+
+##### Step 3.1: Start Temporal Server
+
+```bash
+# Start Temporal server locally
+mise dev-server
+
+# In another terminal, start the worker
+mise dev-worker
+```
+
+##### Step 3.2: Run Initial Full Analysis
+
+```bash
+# Verify configuration
+mise verify-config
+
+# List all configured repos
+mise dev-repos-list
+
+# Run analysis on all repositories
+mise investigate-all
+
+# Or analyze one repo at a time for testing
+mise investigate-one auth
+mise investigate-one crm-service
+mise investigate-one notifications-service
+```
+
+##### Step 3.3: Verify Output
+
+```bash
+# Check the results hub repository
+cd ../workiz-architecture-hub
+git pull
+
+# Verify .arch.md files were generated
+ls -la *.arch.md
+
+# Example: auth.arch.md should contain:
+# - Service overview
+# - Module structure
+# - API endpoints
+# - PubSub events
+# - Database schema
+# - Dependencies on other services
+```
+
+#### Phase 4: PR Agent Integration (Week 2-3)
+
+##### Step 4.1: Create RepoSwarm Context Loader
+
+```python
+# pr_agent/tools/reposwarm/context_loader.py
+import os
+import httpx
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+import base64
+
+@dataclass
+class ArchitectureContext:
+    """Architecture context from RepoSwarm .arch.md files."""
+    repo_name: str
+    content: str
+    sections: Dict[str, str]
+
+class RepoSwarmContextLoader:
+    """
+    Load architecture context from RepoSwarm results hub.
+    
+    The results hub contains .arch.md files generated by RepoSwarm
+    with comprehensive architectural documentation for each repository.
+    """
+    
+    def __init__(self):
+        self.github_token = os.getenv('GITHUB_TOKEN')
+        self.hub_repo = os.getenv(
+            'REPOSWARM_HUB_REPO', 
+            'Workiz/workiz-architecture-hub'
+        )
+        self.hub_branch = os.getenv('REPOSWARM_HUB_BRANCH', 'main')
+        self.base_url = "https://api.github.com"
+    
+    async def get_repo_architecture(
+        self, 
+        repo_name: str
+    ) -> Optional[ArchitectureContext]:
+        """
+        Fetch .arch.md file for a specific repository.
+        
+        Args:
+            repo_name: Name of the repository (e.g., 'auth', 'crm-service')
+        
+        Returns:
+            ArchitectureContext with parsed sections
+        """
+        filename = f"{repo_name}.arch.md"
+        content = await self._fetch_file(filename)
+        
+        if not content:
+            return None
+        
+        sections = self._parse_arch_md(content)
+        
+        return ArchitectureContext(
+            repo_name=repo_name,
+            content=content,
+            sections=sections
+        )
+    
+    async def get_related_architectures(
+        self,
+        current_repo: str,
+        pr_content: str
+    ) -> List[ArchitectureContext]:
+        """
+        Find related repository architectures based on PR content.
+        
+        Analyzes the PR to find:
+        - Service names mentioned in code
+        - HTTP client calls to other services
+        - PubSub topic/event references
+        - Import statements
+        
+        Returns architecture contexts for related repos.
+        """
+        related_repos = await self._find_related_repos(current_repo, pr_content)
+        
+        contexts = []
+        for repo_name in related_repos:
+            ctx = await self.get_repo_architecture(repo_name)
+            if ctx:
+                contexts.append(ctx)
+        
+        return contexts
+    
+    async def get_all_pubsub_topology(self) -> Dict:
+        """
+        Load PubSub topology from all .arch.md files.
+        
+        Returns a mapping of topics -> publishers/subscribers.
+        """
+        all_files = await self._list_arch_files()
+        
+        topology = {
+            'topics': {},
+            'events': {}
+        }
+        
+        for filename in all_files:
+            content = await self._fetch_file(filename)
+            if content:
+                repo_name = filename.replace('.arch.md', '')
+                pubsub_section = self._extract_section(content, 'PubSub')
+                
+                if pubsub_section:
+                    self._parse_pubsub_topology(
+                        repo_name, 
+                        pubsub_section, 
+                        topology
+                    )
+        
+        return topology
+    
+    async def get_api_contracts(self, repo_name: str) -> Dict:
+        """
+        Extract API contracts from a repository's .arch.md file.
+        
+        Returns:
+            Dict with 'exposed' and 'consumed' API endpoints
+        """
+        ctx = await self.get_repo_architecture(repo_name)
+        if not ctx:
+            return {'exposed': [], 'consumed': []}
+        
+        api_section = ctx.sections.get('API Contracts', '')
+        return self._parse_api_contracts(api_section)
+    
+    async def _fetch_file(self, filename: str) -> Optional[str]:
+        """Fetch file from GitHub results hub repository."""
+        url = f"{self.base_url}/repos/{self.hub_repo}/contents/{filename}"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                headers={
+                    "Authorization": f"token {self.github_token}",
+                    "Accept": "application/vnd.github.v3+json"
+                },
+                params={"ref": self.hub_branch}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                content = base64.b64decode(data['content']).decode('utf-8')
+                return content
+            
+            return None
+    
+    async def _list_arch_files(self) -> List[str]:
+        """List all .arch.md files in the results hub."""
+        url = f"{self.base_url}/repos/{self.hub_repo}/contents"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url,
+                headers={
+                    "Authorization": f"token {self.github_token}",
+                    "Accept": "application/vnd.github.v3+json"
+                },
+                params={"ref": self.hub_branch}
+            )
+            
+            if response.status_code == 200:
+                files = response.json()
+                return [
+                    f['name'] for f in files 
+                    if f['name'].endswith('.arch.md')
+                ]
+            
+            return []
+    
+    async def _find_related_repos(
+        self, 
+        current_repo: str, 
+        pr_content: str
+    ) -> List[str]:
+        """Find related repositories based on PR content analysis."""
+        import re
+        
+        related = set()
+        
+        service_patterns = [
+            r'(?:auth|crm|notifications?|core|reporting|payments?)-service',
+            r'workiz-(?:php|api|web|mobile)',
+            r'@workiz/([a-z-]+)',
+        ]
+        
+        for pattern in service_patterns:
+            matches = re.findall(pattern, pr_content, re.IGNORECASE)
+            related.update(matches)
+        
+        http_patterns = [
+            r'fetch\([\'"]https?://([a-z-]+)\.workiz',
+            r'httpService\.(?:get|post|put|delete)\([\'"]([a-z-]+)',
+            r'process\.env\.([A-Z_]+)_SERVICE_URL',
+        ]
+        
+        for pattern in http_patterns:
+            matches = re.findall(pattern, pr_content)
+            for match in matches:
+                service_name = match.lower().replace('_', '-')
+                related.add(service_name)
+        
+        pubsub_patterns = [
+            r'@PubSubTopic\([\'"]([A-Z_]+)[\'"]',
+            r'topic:\s*[\'"]([a-z-]+)[\'"]',
+        ]
+        
+        for pattern in pubsub_patterns:
+            matches = re.findall(pattern, pr_content)
+            related.update(matches)
+        
+        related.discard(current_repo)
+        
+        return list(related)[:5]
+    
+    def _parse_arch_md(self, content: str) -> Dict[str, str]:
+        """Parse .arch.md content into sections."""
+        import re
+        
+        sections = {}
+        current_section = 'Overview'
+        current_content = []
+        
+        for line in content.split('\n'):
+            if line.startswith('## '):
+                if current_content:
+                    sections[current_section] = '\n'.join(current_content)
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                current_content.append(line)
+        
+        if current_content:
+            sections[current_section] = '\n'.join(current_content)
+        
+        return sections
+    
+    def _extract_section(self, content: str, section_name: str) -> Optional[str]:
+        """Extract a specific section from .arch.md content."""
+        sections = self._parse_arch_md(content)
+        
+        for key, value in sections.items():
+            if section_name.lower() in key.lower():
+                return value
+        
+        return None
+    
+    def _parse_pubsub_topology(
+        self, 
+        repo_name: str, 
+        pubsub_section: str,
+        topology: Dict
+    ) -> None:
+        """Parse PubSub section and update topology."""
+        import re
+        
+        consumed_pattern = r'\|\s*([A-Z_]+)\s*\|\s*([A-Z_]+)\s*\|'
+        for match in re.finditer(consumed_pattern, pubsub_section):
+            topic, event = match.groups()
+            
+            if topic not in topology['topics']:
+                topology['topics'][topic] = {'publishers': [], 'subscribers': []}
+            
+            if repo_name not in topology['topics'][topic]['subscribers']:
+                topology['topics'][topic]['subscribers'].append(repo_name)
+    
+    def _parse_api_contracts(self, api_section: str) -> Dict:
+        """Parse API contracts section."""
+        import re
+        
+        contracts = {'exposed': [], 'consumed': []}
+        
+        endpoint_pattern = r'\|\s*(GET|POST|PUT|DELETE|PATCH)\s*\|\s*([^\|]+)\s*\|'
+        for match in re.finditer(endpoint_pattern, api_section):
+            method, path = match.groups()
+            contracts['exposed'].append({
+                'method': method.strip(),
+                'path': path.strip()
+            })
+        
+        return contracts
+```
+
+##### Step 4.2: Integrate with PR Reviewer
+
+```python
+# pr_agent/tools/pr_reviewer.py - Add RepoSwarm integration
+
+from pr_agent.tools.reposwarm.context_loader import RepoSwarmContextLoader
+
+class PRReviewer:
+    def __init__(self, ...):
+        # ... existing init ...
+        self.reposwarm_loader = RepoSwarmContextLoader()
+    
+    async def _get_cross_repo_context(self) -> str:
+        """
+        Fetch cross-repository context from RepoSwarm.
+        
+        Returns markdown-formatted context for the AI prompt.
+        """
+        repo_name = self._extract_repo_name()
+        pr_diff = await self.git_provider.get_diff_text()
+        
+        current_arch = await self.reposwarm_loader.get_repo_architecture(repo_name)
+        
+        related_archs = await self.reposwarm_loader.get_related_architectures(
+            repo_name, 
+            pr_diff
+        )
+        
+        context_parts = []
+        
+        if current_arch:
+            context_parts.append(f"""
+## Current Repository Architecture: {repo_name}
+
+{current_arch.sections.get('Overview', '')}
+
+### API Contracts
+{current_arch.sections.get('API Contracts', 'Not documented')}
+
+### PubSub Events
+{current_arch.sections.get('PubSub', 'Not documented')}
+""")
+        
+        if related_archs:
+            context_parts.append("\n## Related Services Architecture\n")
+            for arch in related_archs:
+                context_parts.append(f"""
+### {arch.repo_name}
+
+{arch.sections.get('Overview', '')[:500]}...
+
+**Relevant APIs:**
+{arch.sections.get('API Contracts', 'Not documented')[:300]}
+""")
+        
+        return '\n'.join(context_parts)
+    
+    async def run(self):
+        # ... existing code ...
+        
+        cross_repo_context = await self._get_cross_repo_context()
+        
+        self.vars['cross_repo_context'] = cross_repo_context
+        
+        # ... rest of existing code ...
+```
+
+##### Step 4.3: Update Review Prompt
+
+Add to `pr_agent/settings/pr_reviewer_prompts.toml`:
+
+```toml
+[pr_review_prompt]
+system = """You are an expert code reviewer for a multi-service architecture.
+
+{%- if cross_repo_context %}
+
+## Cross-Repository Context (from RepoSwarm)
+
+The following architectural context is relevant to this PR:
+
+{{ cross_repo_context }}
+
+Use this context to:
+1. Verify API contracts are correctly implemented
+2. Check PubSub event schemas match expected formats
+3. Identify potential breaking changes to other services
+4. Suggest improvements based on patterns in related services
+
+{%- endif %}
+
+... rest of existing prompt ...
+"""
+```
+
+#### Phase 5: Automated Updates (Week 3)
+
+##### Step 5.1: Create GitHub Webhook for Repo Updates
+
+```python
+# pr_agent/servers/reposwarm_webhook.py
+from fastapi import FastAPI, Request, BackgroundTasks
+from temporalio.client import Client
+import os
+
+app = FastAPI()
+
+TEMPORAL_SERVER = os.getenv('TEMPORAL_SERVER_URL', 'localhost:7233')
+
+@app.post("/webhooks/github/push")
+async def handle_push(request: Request, background_tasks: BackgroundTasks):
+    """
+    Handle GitHub push events to trigger RepoSwarm re-analysis.
+    
+    When code is pushed to main/master, trigger RepoSwarm to
+    re-analyze the repository and update the .arch.md file.
+    """
+    payload = await request.json()
+    
+    ref = payload.get('ref', '')
+    if ref not in ['refs/heads/main', 'refs/heads/master']:
+        return {"status": "skipped", "reason": "not main branch"}
+    
+    repo_name = payload['repository']['name']
+    
+    background_tasks.add_task(trigger_reanalysis, repo_name)
+    
+    return {"status": "queued", "repo": repo_name}
+
+async def trigger_reanalysis(repo_name: str):
+    """Trigger RepoSwarm re-analysis via Temporal workflow."""
+    client = await Client.connect(TEMPORAL_SERVER)
+    
+    await client.execute_workflow(
+        "investigate_single_repo_workflow",
+        args=[repo_name],
+        id=f"reanalyze-{repo_name}-{int(time.time())}",
+        task_queue="investigation-queue"
+    )
+```
+
+##### Step 5.2: Create Scheduled Re-Analysis
+
+```python
+# scripts/scheduled_reanalysis.py
+"""
+Cron job to periodically re-analyze all repositories.
+
+Schedule: Daily at 2 AM
+Cron: 0 2 * * *
+"""
+
+import asyncio
+from temporalio.client import Client
+import os
+
+TEMPORAL_SERVER = os.getenv('TEMPORAL_SERVER_URL', 'localhost:7233')
+
+async def run_full_reanalysis():
+    """Trigger full re-analysis of all repositories."""
+    client = await Client.connect(TEMPORAL_SERVER)
+    
+    await client.execute_workflow(
+        "investigate_all_repos_workflow",
+        id=f"scheduled-reanalysis-{int(time.time())}",
+        task_queue="investigation-queue"
+    )
+
+if __name__ == "__main__":
+    asyncio.run(run_full_reanalysis())
+```
+
+##### Step 5.3: Cloud Scheduler Setup (GCloud)
+
+```bash
+# Create Cloud Scheduler job for daily re-analysis
+gcloud scheduler jobs create http reposwarm-daily-analysis \
+  --location=us-central1 \
+  --schedule="0 2 * * *" \
+  --uri="https://reposwarm-worker.workiz.com/trigger/full-analysis" \
+  --http-method=POST \
+  --oidc-service-account-email=reposwarm-sa@workiz.iam.gserviceaccount.com
+```
+
+#### Phase 6: Production Deployment (Week 3-4)
+
+##### Step 6.1: Docker Configuration
+
+Create `Dockerfile` for RepoSwarm worker:
+
+```dockerfile
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source
+COPY src/ ./src/
+COPY prompts/ ./prompts/
+COPY scripts/ ./scripts/
+
+# Set environment
+ENV PYTHONPATH=/app
+
+# Run worker
+CMD ["python", "-m", "src.worker"]
+```
+
+##### Step 6.2: GCloud Deployment
+
+```bash
+# Build and push Docker image
+gcloud builds submit --tag gcr.io/workiz-prod/reposwarm-worker
+
+# Deploy to Cloud Run
+gcloud run deploy reposwarm-worker \
+  --image gcr.io/workiz-prod/reposwarm-worker \
+  --platform managed \
+  --region us-central1 \
+  --memory 2Gi \
+  --cpu 2 \
+  --timeout 3600 \
+  --set-env-vars "TEMPORAL_SERVER_URL=temporal.workiz.internal:7233" \
+  --set-secrets "ANTHROPIC_API_KEY=reposwarm-anthropic-key:latest,GITHUB_TOKEN=reposwarm-github-token:latest"
+```
+
+##### Step 6.3: Store Secrets in GCloud
+
+```bash
+# Store API keys in Secret Manager
+echo -n "sk-ant-api03-..." | gcloud secrets create reposwarm-anthropic-key --data-file=-
+echo -n "ghp_..." | gcloud secrets create reposwarm-github-token --data-file=-
+echo -n "aws-access-key-..." | gcloud secrets create reposwarm-aws-access-key --data-file=-
+echo -n "aws-secret-key-..." | gcloud secrets create reposwarm-aws-secret-key --data-file=-
+```
+
+### Configuration Summary
+
+| Component | Configuration | Environment Variable |
+|-----------|---------------|---------------------|
+| Anthropic API | Claude API key | `ANTHROPIC_API_KEY` |
+| GitHub Access | Personal Access Token | `GITHUB_TOKEN` |
+| Results Hub | Repository path | `REPOSWARM_HUB_REPO` |
+| Temporal Server | Server URL | `TEMPORAL_SERVER_URL` |
+| DynamoDB | AWS credentials | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+
+### mise Tasks Reference
+
+| Task | Description |
+|------|-------------|
+| `mise dev-server` | Start Temporal server locally |
+| `mise dev-worker` | Start Temporal worker |
+| `mise verify-config` | Validate configuration |
+| `mise dev-repos-list` | List configured repos |
+| `mise investigate-all` | Analyze all repos |
+| `mise investigate-one <repo>` | Analyze single repo |
+| `mise monitor-workflow <id>` | Check workflow status |
+
+### Expected .arch.md Output Structure
+
+Each `.arch.md` file will contain:
+
+```markdown
+# auth-service Architecture
+
+## Overview
+Authentication and session management service built with NestJS/TypeScript.
+
+## Module Structure
+- SessionsModule
+- ApiKeysModule
+- UsersModule
+- ...
+
+## API Contracts
+
+### Exposed Endpoints
+| Method | Path | Request DTO | Response DTO | Auth |
+|--------|------|-------------|--------------|------|
+| POST | /proxy-sessions | - | SessionResponse | Cookie |
+| POST | /api-keys/validate | ValidateApiKeyDto | ApiKeyResponse | None |
+| ... | ... | ... | ... | ... |
+
+### Internal Service Calls
+| Target Service | Endpoint | Purpose |
+|----------------|----------|---------|
+| crm-service | GET /users/:id | Fetch user details |
+| ... | ... | ... |
+
+## PubSub Events
+
+### Events Consumed
+| Topic | Event | Handler | DTO |
+|-------|-------|---------|-----|
+| USER_TOPIC | USER_CREATED | onUserCreated | UserCreatedDto |
+| ... | ... | ... | ... |
+
+### Events Published
+| Topic | Event | Publisher | Schema |
+|-------|-------|-----------|--------|
+| AUTH_TOPIC | SESSION_CREATED | SessionsService | SessionCreatedEvent |
+| ... | ... | ... | ... |
+
+## Database Schema
+- MySQL: sessions, api_keys, users
+- Redis: session cache
+
+## Dependencies
+- @workiz/pubsub-decorator-reflector
+- @workiz/all-exceptions-filter
+- ...
+
+## Related Services
+- crm-service: User data
+- notifications-service: Email verification
+```
+
+### Integration Benefits
+
+| Feature | Without RepoSwarm | With RepoSwarm |
+|---------|-------------------|----------------|
+| Cross-repo context | Manual, incomplete | Automatic, comprehensive |
+| API contract awareness | None | Full documentation |
+| PubSub topology | Manual tracking | Auto-generated |
+| Update frequency | Manual | Automated on push |
+| Setup time | Weeks | Days |
+| Maintenance | High | Low (automated) |
 
 ---
 
@@ -8638,6 +9714,24 @@ Extra instructions:
 | **Missing Component** | Figma component not found in code | "Header component from design not implemented" |
 
 **Integration**: Figma MCP server extracts design tokens → React analyzer extracts code styles → AI compares → Review comments
+
+### ✅ RepoSwarm Integration (Cross-Repo Context)
+
+| Phase | Tasks | Timeline |
+|-------|-------|----------|
+| **Setup** | Clone RepoSwarm, configure repos.json, create results hub | Week 1 |
+| **Custom Prompts** | NestJS, PHP, React prompts for Workiz stack | Week 1-2 |
+| **Initial Run** | Analyze all 40+ repos, generate .arch.md files | Week 2 |
+| **PR Integration** | RepoSwarmContextLoader, update review prompts | Week 2-3 |
+| **Automation** | GitHub webhooks, Cloud Scheduler, re-analysis | Week 3 |
+| **Deployment** | Docker, GCloud, Temporal worker | Week 3-4 |
+
+**Output**: `.arch.md` files with API contracts, PubSub topology, dependencies, module structure
+
+**Benefits**:
+- Automatic cross-repo context in PR reviews
+- "This PR may break notifications-service because it changes the UserCreated event schema"
+- No custom indexing needed - RepoSwarm handles everything
 
 ### ✅ Databases Covered
 
