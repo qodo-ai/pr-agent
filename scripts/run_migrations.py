@@ -12,6 +12,11 @@ import psycopg
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from pr_agent.log_config import setup_logging, get_logger
+
+setup_logging()
+logger = get_logger(__name__)
+
 SERVICE_NAME = "pr-agent"
 
 
@@ -34,10 +39,10 @@ def load_configuration():
         if env_path.exists():
             from dotenv import load_dotenv
             load_dotenv(env_path)
-            print(f"✓ Loaded environment from {env_path}")
+            logger.info("Loaded environment from file", extra={"context": {"path": str(env_path)}})
             return
 
-        print("⚠ NODE_ENV not set and no .env file found. Using defaults.")
+        logger.warning("NODE_ENV not set and no .env file found, using defaults")
         return
 
     env_file_path = service_root / f".env.{node_env}"
@@ -45,7 +50,7 @@ def load_configuration():
     if env_file_path.exists():
         from dotenv import load_dotenv
         load_dotenv(env_file_path)
-        print(f"✓ Loaded environment from {env_file_path}")
+        logger.info("Loaded environment from file", extra={"context": {"path": str(env_file_path)}})
         return
 
     if not gcp_project_id:
@@ -56,10 +61,12 @@ def load_configuration():
 
     try:
         config = load_config_sync(gcp_project_id, SERVICE_NAME)
-        print(f"✓ Loaded {len(config)} config values from Google Secret Manager ({node_env}-{SERVICE_NAME})")
+        logger.info("Loaded config from Secret Manager", extra={"context": {
+            "keys_count": len(config),
+            "secret": f"{node_env}-{SERVICE_NAME}"
+        }})
     except Exception as e:
-        print(f"⚠ Failed to load config from Secret Manager: {e}")
-        print("  Falling back to environment variables")
+        logger.warning("Failed to load config from Secret Manager, using env vars", extra={"context": {"error": str(e)}})
 
 
 def create_database_if_not_exists(database_url: str):
@@ -73,7 +80,7 @@ def create_database_if_not_exists(database_url: str):
     
     postgres_url = database_url.replace(f"/{db_name}", "/postgres")
     
-    print(f"Ensuring database '{db_name}' exists...")
+    logger.info("Checking database exists", extra={"context": {"database": db_name}})
     try:
         with psycopg.connect(postgres_url, autocommit=True) as conn:
             result = conn.execute(
@@ -83,13 +90,16 @@ def create_database_if_not_exists(database_url: str):
             exists = result.fetchone() is not None
             
             if not exists:
-                print(f"  Creating database '{db_name}'...")
+                logger.info("Creating database", extra={"context": {"database": db_name}})
                 conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
-                print(f"  ✓ Database '{db_name}' created")
+                logger.info("Database created", extra={"context": {"database": db_name}})
             else:
-                print(f"  ✓ Database '{db_name}' already exists")
+                logger.debug("Database already exists", extra={"context": {"database": db_name}})
     except Exception as e:
-        print(f"  ⚠ Could not create database (may need manual creation): {e}")
+        logger.warning("Could not create database (may need manual creation)", extra={"context": {
+            "database": db_name,
+            "error": str(e)
+        }})
 
 
 def run_migrations():
@@ -98,17 +108,18 @@ def run_migrations():
     migration_files = sorted(migrations_dir.glob("*.sql"))
     
     if not migration_files:
-        print("No migration files found")
+        logger.warning("No migration files found")
         return
     
     database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/pr_agent")
     
     create_database_if_not_exists(database_url)
     
-    print(f"\nConnecting to database...")
-    print(f"  Using DATABASE_URL: {database_url.split('@')[1] if '@' in database_url else 'localhost'}")
+    db_host = database_url.split('@')[1] if '@' in database_url else 'localhost'
+    logger.info("Connecting to database", extra={"context": {"host": db_host}})
+    
     with psycopg.connect(database_url) as conn:
-        print("Setting up migration tracking...")
+        logger.debug("Setting up migration tracking table")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 filename VARCHAR(255) PRIMARY KEY,
@@ -123,10 +134,10 @@ def run_migrations():
         new_migrations = 0
         for migration_file in migration_files:
             if migration_file.name in executed:
-                print(f"⏭️  Skipping {migration_file.name} (already executed)")
+                logger.debug("Skipping migration (already executed)", extra={"context": {"file": migration_file.name}})
                 continue
-                
-            print(f"Running {migration_file.name}...")
+            
+            logger.info("Running migration", extra={"context": {"file": migration_file.name}})
             try:
                 with open(migration_file) as f:
                     sql = f.read()
@@ -138,25 +149,28 @@ def run_migrations():
                         (migration_file.name,)
                     )
                 
-                print(f"  ✓ {migration_file.name} completed")
+                logger.info("Migration completed", extra={"context": {"file": migration_file.name}})
                 new_migrations += 1
             except Exception as e:
-                print(f"  ❌ {migration_file.name} failed: {e}")
+                logger.error("Migration failed", extra={"context": {
+                    "file": migration_file.name,
+                    "error": str(e)
+                }})
                 raise
     
     if new_migrations == 0:
-        print("\n✅ No new migrations to run. Database is up to date!")
+        logger.info("Database is up to date, no new migrations")
     else:
-        print(f"\n✅ Successfully ran {new_migrations} new migration(s)!")
+        logger.info("Migrations completed", extra={"context": {"new_migrations": new_migrations}})
 
 
 if __name__ == "__main__":
     try:
-        print("Loading configuration...")
+        logger.info("Starting migration runner")
         load_configuration()
-        print()
         run_migrations()
+        logger.info("Migration runner finished successfully")
     except Exception as e:
-        print(f"\n❌ Migration failed: {e}")
-        exit(1)
+        logger.error("Migration failed", extra={"context": {"error": str(e)}})
+        sys.exit(1)
 
