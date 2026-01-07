@@ -9,11 +9,12 @@
 5. [Implementation Plan](#implementation-plan)
 6. [Database Architecture](#database-architecture)
 7. [Multi-Agent Architecture](#multi-agent-architecture)
-8. [Local Development Setup](#local-development-setup)
-9. [Configuration Guide](#configuration-guide)
-10. [Detailed Component Implementation](#detailed-component-implementation)
-11. [Deployment Strategy](#deployment-strategy)
-12. [Timeline and Milestones](#timeline-and-milestones)
+8. [Figma Design Verification Agent](#figma-design-verification-agent)
+9. [Local Development Setup](#local-development-setup)
+10. [Configuration Guide](#configuration-guide)
+11. [Detailed Component Implementation](#detailed-component-implementation)
+12. [Deployment Strategy](#deployment-strategy)
+13. [Timeline and Milestones](#timeline-and-milestones)
 
 ---
 
@@ -28,6 +29,7 @@ This document outlines a comprehensive plan to transform the qodo-ai/pr-agent fo
 - **SQL Review**: Deep SQL query analysis
 - **Security Checks**: Standard and custom security validations
 - **Multi-Agent Architecture**: Parallel processing with orchestration
+- **Figma Design Verification**: Compare React implementations against Figma designs via MCP
 
 ---
 
@@ -2275,6 +2277,951 @@ async def get_pubsub_topology():
         })
     
     return topology
+```
+
+---
+
+## Figma Design Verification Agent
+
+### Overview
+
+This is a **separate specialized agent** for frontend React PRs that verifies implementation matches the Figma design. The agent uses Figma's MCP (Model Context Protocol) server to extract design data and compare it against the React code changes.
+
+### Available Figma Integration Options
+
+| Tool/API | Purpose | Best For |
+|----------|---------|----------|
+| **Figma Context MCP** (`figma-context-mcp`) | Extract design data for AI agents | AI-driven design verification |
+| **Cursor Talk To Figma MCP** (`mcp-figma`) | Read and modify designs | Bidirectional Figma interaction |
+| **Figma REST API** | Direct API access to files/nodes | Custom integrations |
+| **Figma Code Connect** | Link code components to Figma | Component mapping |
+| **Chromatic Figma Plugin** | Embed Storybook in Figma | Visual regression testing |
+
+### Recommended Architecture: Figma Context MCP
+
+Based on research, the **`figma-context-mcp`** server is the best fit for design verification in PR reviews.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Design Verification Flow                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   Jira Ticket                    PR Created                          │
+│   ┌───────────────┐              ┌───────────────┐                   │
+│   │ Figma Link    │              │ React Code    │                   │
+│   │ in description│              │ Changes       │                   │
+│   └───────┬───────┘              └───────┬───────┘                   │
+│           │                              │                           │
+│           ▼                              ▼                           │
+│   ┌───────────────────────────────────────────────────┐             │
+│   │           Design Verification Agent               │             │
+│   │  ┌─────────────────┐    ┌─────────────────┐      │             │
+│   │  │ Figma MCP Client│    │ React Analyzer  │      │             │
+│   │  └────────┬────────┘    └────────┬────────┘      │             │
+│   │           │                      │               │             │
+│   │           ▼                      ▼               │             │
+│   │  ┌─────────────────┐    ┌─────────────────┐      │             │
+│   │  │ Design Tokens   │    │ Component       │      │             │
+│   │  │ - Colors        │    │ Extraction      │      │             │
+│   │  │ - Typography    │    │ - CSS values    │      │             │
+│   │  │ - Spacing       │    │ - Styled comps  │      │             │
+│   │  │ - Layout        │    │ - Tailwind cls  │      │             │
+│   │  └────────┬────────┘    └────────┬────────┘      │             │
+│   │           │                      │               │             │
+│   │           └──────────┬───────────┘               │             │
+│   │                      ▼                           │             │
+│   │           ┌─────────────────┐                    │             │
+│   │           │   AI Comparison │                    │             │
+│   │           │   & Reporting   │                    │             │
+│   │           └────────┬────────┘                    │             │
+│   └────────────────────│─────────────────────────────┘             │
+│                        ▼                                            │
+│   ┌───────────────────────────────────────────────────┐             │
+│   │              PR Review Comments                    │             │
+│   │  • "Color mismatch: design uses #1E88E5,          │             │
+│   │     code uses #2196F3"                            │             │
+│   │  • "Font size should be 16px per design,          │             │
+│   │     found 14px in Button.tsx"                     │             │
+│   │  • "Missing 8px padding on card component"        │             │
+│   └───────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Components
+
+#### 1. Figma Link Extractor
+
+Extracts Figma file/frame links from Jira tickets or PR descriptions:
+
+```python
+# pr_agent/tools/figma/figma_link_extractor.py
+import re
+from typing import Optional, Dict, List
+from dataclasses import dataclass
+
+@dataclass
+class FigmaLink:
+    file_key: str
+    node_id: Optional[str]
+    original_url: str
+
+class FigmaLinkExtractor:
+    """Extract Figma links from Jira tickets or PR descriptions."""
+    
+    FIGMA_URL_PATTERNS = [
+        r'https://(?:www\.)?figma\.com/(?:file|design)/([a-zA-Z0-9]+)(?:/[^?]*)?(?:\?node-id=([0-9]+-[0-9]+))?',
+        r'https://(?:www\.)?figma\.com/proto/([a-zA-Z0-9]+)',
+        r'https://(?:www\.)?figma\.com/board/([a-zA-Z0-9]+)',
+    ]
+    
+    def extract_from_text(self, text: str) -> List[FigmaLink]:
+        """Extract all Figma links from text (Jira ticket, PR description)."""
+        links = []
+        
+        for pattern in self.FIGMA_URL_PATTERNS:
+            matches = re.finditer(pattern, text)
+            for match in matches:
+                file_key = match.group(1)
+                node_id = match.group(2) if len(match.groups()) > 1 else None
+                
+                links.append(FigmaLink(
+                    file_key=file_key,
+                    node_id=node_id.replace('-', ':') if node_id else None,
+                    original_url=match.group(0)
+                ))
+        
+        return links
+    
+    async def get_from_jira_ticket(
+        self, 
+        jira_client, 
+        ticket_key: str
+    ) -> List[FigmaLink]:
+        """Fetch Jira ticket and extract Figma links."""
+        ticket = await jira_client.get_issue(ticket_key)
+        
+        sources = [
+            ticket.get('description', ''),
+            *[comment.get('body', '') for comment in ticket.get('comments', [])]
+        ]
+        
+        all_links = []
+        for source in sources:
+            all_links.extend(self.extract_from_text(source))
+        
+        return list({link.file_key + str(link.node_id): link 
+                    for link in all_links}.values())
+```
+
+#### 2. Figma MCP Client
+
+Wrapper for the Figma Context MCP server:
+
+```python
+# pr_agent/tools/figma/figma_mcp_client.py
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+import httpx
+import os
+
+@dataclass
+class FigmaDesignData:
+    """Simplified design data from Figma."""
+    file_key: str
+    name: str
+    nodes: List[Dict]
+    global_styles: Dict
+    components: Dict
+    colors: Dict[str, str]
+    typography: Dict[str, Dict]
+    spacing: List[int]
+
+class FigmaMCPClient:
+    """Client for Figma Context MCP Server."""
+    
+    def __init__(self):
+        self.api_key = os.getenv('FIGMA_API_KEY')
+        self.base_url = os.getenv('FIGMA_MCP_SERVER_URL', 'http://localhost:3333')
+    
+    async def get_design_data(
+        self, 
+        file_key: str, 
+        node_id: Optional[str] = None,
+        depth: int = 5
+    ) -> FigmaDesignData:
+        """
+        Fetch design data from Figma via MCP server.
+        
+        Uses the get_figma_data tool from figma-context-mcp.
+        """
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/tools/get_figma_data",
+                json={
+                    "fileKey": file_key,
+                    "nodeId": node_id,
+                    "depth": depth
+                },
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+            response.raise_for_status()
+            data = response.json()
+        
+        return self._parse_design_data(file_key, data)
+    
+    def _parse_design_data(self, file_key: str, raw_data: Dict) -> FigmaDesignData:
+        """Parse raw MCP response into structured design data."""
+        metadata = raw_data.get('metadata', {})
+        nodes = raw_data.get('nodes', [])
+        global_vars = raw_data.get('globalVars', {})
+        styles = global_vars.get('styles', {})
+        
+        colors = self._extract_colors(nodes, styles)
+        typography = self._extract_typography(nodes, styles)
+        spacing = self._extract_spacing(nodes, styles)
+        
+        return FigmaDesignData(
+            file_key=file_key,
+            name=metadata.get('name', 'Unknown'),
+            nodes=nodes,
+            global_styles=styles,
+            components=metadata.get('components', {}),
+            colors=colors,
+            typography=typography,
+            spacing=spacing
+        )
+    
+    def _extract_colors(self, nodes: List, styles: Dict) -> Dict[str, str]:
+        """Extract unique colors from design."""
+        colors = {}
+        
+        for style_key, style_value in styles.items():
+            if 'fill' in style_value or 'color' in style_value:
+                fill = style_value.get('fill') or style_value.get('color')
+                if isinstance(fill, dict) and 'r' in fill:
+                    hex_color = self._rgba_to_hex(fill)
+                    colors[style_key] = hex_color
+                elif isinstance(fill, str):
+                    colors[style_key] = fill
+        
+        return colors
+    
+    def _extract_typography(self, nodes: List, styles: Dict) -> Dict[str, Dict]:
+        """Extract typography styles from design."""
+        typography = {}
+        
+        for style_key, style_value in styles.items():
+            if 'fontSize' in style_value or 'fontFamily' in style_value:
+                typography[style_key] = {
+                    'fontSize': style_value.get('fontSize'),
+                    'fontFamily': style_value.get('fontFamily'),
+                    'fontWeight': style_value.get('fontWeight'),
+                    'lineHeight': style_value.get('lineHeight'),
+                    'letterSpacing': style_value.get('letterSpacing')
+                }
+        
+        return typography
+    
+    def _extract_spacing(self, nodes: List, styles: Dict) -> List[int]:
+        """Extract common spacing values from design."""
+        spacing_values = set()
+        
+        for style_key, style_value in styles.items():
+            if 'padding' in style_value:
+                padding = style_value['padding']
+                if isinstance(padding, (int, float)):
+                    spacing_values.add(int(padding))
+                elif isinstance(padding, str):
+                    values = [int(v.replace('px', '')) 
+                             for v in padding.split() 
+                             if v.replace('px', '').isdigit()]
+                    spacing_values.update(values)
+            
+            if 'itemSpacing' in style_value:
+                spacing_values.add(int(style_value['itemSpacing']))
+        
+        return sorted(list(spacing_values))
+    
+    def _rgba_to_hex(self, rgba: Dict) -> str:
+        """Convert RGBA dict to hex color."""
+        r = int(rgba.get('r', 0) * 255)
+        g = int(rgba.get('g', 0) * 255)
+        b = int(rgba.get('b', 0) * 255)
+        return f"#{r:02x}{g:02x}{b:02x}"
+```
+
+#### 3. React Style Analyzer
+
+Extracts styles from React code changes:
+
+```python
+# pr_agent/tools/figma/react_style_analyzer.py
+import re
+from typing import Dict, List, Optional
+from dataclasses import dataclass
+
+@dataclass
+class ExtractedStyles:
+    """Styles extracted from React code."""
+    colors: Dict[str, List[str]]      # color_value -> [file:line locations]
+    font_sizes: Dict[str, List[str]]  # size_value -> [locations]
+    spacing: Dict[str, List[str]]     # spacing_value -> [locations]
+    components: List[Dict]            # Component info
+
+class ReactStyleAnalyzer:
+    """Extract style information from React/TypeScript code."""
+    
+    CSS_COLOR_PATTERNS = [
+        r'#[0-9a-fA-F]{6}',
+        r'#[0-9a-fA-F]{3}',
+        r'rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)',
+        r'rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*\)',
+    ]
+    
+    TAILWIND_COLOR_PATTERN = r'(?:bg|text|border|fill|stroke)-([a-z]+-\d+)'
+    TAILWIND_SPACING_PATTERN = r'(?:p|m|gap|space)-(?:[xy]?-)?(\d+)'
+    TAILWIND_FONT_SIZE_PATTERN = r'text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)'
+    
+    STYLED_COMPONENTS_PATTERN = r'styled\.[a-z]+`([^`]+)`'
+    CSS_IN_JS_PATTERN = r'(?:style|css)=\{\{([^}]+)\}\}'
+    
+    def analyze_diff(self, diff_files: List[Dict]) -> ExtractedStyles:
+        """Analyze React diff files for style information."""
+        colors = {}
+        font_sizes = {}
+        spacing = {}
+        components = []
+        
+        for file in diff_files:
+            file_path = file.get('filename', '')
+            
+            if not self._is_frontend_file(file_path):
+                continue
+            
+            content = file.get('patch', '')
+            added_lines = self._get_added_lines(content)
+            
+            for line_num, line in added_lines:
+                location = f"{file_path}:{line_num}"
+                
+                for color in self._extract_colors(line):
+                    colors.setdefault(color, []).append(location)
+                
+                for size in self._extract_font_sizes(line):
+                    font_sizes.setdefault(size, []).append(location)
+                
+                for space in self._extract_spacing(line):
+                    spacing.setdefault(space, []).append(location)
+            
+            if self._is_component_file(file_path):
+                components.append({
+                    'file': file_path,
+                    'name': self._extract_component_name(file_path, content)
+                })
+        
+        return ExtractedStyles(
+            colors=colors,
+            font_sizes=font_sizes,
+            spacing=spacing,
+            components=components
+        )
+    
+    def _is_frontend_file(self, path: str) -> bool:
+        """Check if file is a frontend file."""
+        frontend_patterns = [
+            r'\.tsx$', r'\.jsx$',
+            r'\.css$', r'\.scss$', r'\.sass$',
+            r'\.styled\.ts$'
+        ]
+        return any(re.search(p, path) for p in frontend_patterns)
+    
+    def _is_component_file(self, path: str) -> bool:
+        """Check if file is a React component."""
+        return path.endswith('.tsx') or path.endswith('.jsx')
+    
+    def _get_added_lines(self, patch: str) -> List[tuple]:
+        """Extract added lines from git diff patch."""
+        lines = []
+        line_num = 0
+        
+        for line in patch.split('\n'):
+            if line.startswith('@@'):
+                match = re.search(r'\+(\d+)', line)
+                if match:
+                    line_num = int(match.group(1)) - 1
+            elif line.startswith('+') and not line.startswith('+++'):
+                line_num += 1
+                lines.append((line_num, line[1:]))
+            elif not line.startswith('-'):
+                line_num += 1
+        
+        return lines
+    
+    def _extract_colors(self, line: str) -> List[str]:
+        """Extract color values from a line."""
+        colors = []
+        
+        for pattern in self.CSS_COLOR_PATTERNS:
+            colors.extend(re.findall(pattern, line, re.IGNORECASE))
+        
+        tailwind_colors = re.findall(self.TAILWIND_COLOR_PATTERN, line)
+        colors.extend([f"tailwind:{c}" for c in tailwind_colors])
+        
+        return colors
+    
+    def _extract_font_sizes(self, line: str) -> List[str]:
+        """Extract font size values from a line."""
+        sizes = []
+        
+        px_sizes = re.findall(r'font-size:\s*(\d+)px', line)
+        sizes.extend([f"{s}px" for s in px_sizes])
+        
+        rem_sizes = re.findall(r'font-size:\s*([\d.]+)rem', line)
+        sizes.extend([f"{s}rem" for s in rem_sizes])
+        
+        tailwind_sizes = re.findall(self.TAILWIND_FONT_SIZE_PATTERN, line)
+        sizes.extend([f"tailwind:text-{s}" for s in tailwind_sizes])
+        
+        return sizes
+    
+    def _extract_spacing(self, line: str) -> List[str]:
+        """Extract spacing values from a line."""
+        spacing = []
+        
+        px_spacing = re.findall(
+            r'(?:padding|margin|gap)(?:-(?:top|right|bottom|left))?:\s*(\d+)px', 
+            line
+        )
+        spacing.extend([f"{s}px" for s in px_spacing])
+        
+        tailwind_spacing = re.findall(self.TAILWIND_SPACING_PATTERN, line)
+        spacing.extend([f"tailwind:{s}" for s in tailwind_spacing])
+        
+        return spacing
+    
+    def _extract_component_name(self, path: str, content: str) -> str:
+        """Extract component name from file."""
+        patterns = [
+            r'export\s+(?:default\s+)?(?:function|const)\s+(\w+)',
+            r'export\s+default\s+(\w+)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, content)
+            if match:
+                return match.group(1)
+        
+        filename = path.split('/')[-1]
+        return filename.replace('.tsx', '').replace('.jsx', '')
+```
+
+#### 4. Design Verification Agent
+
+The main agent that coordinates Figma and React analysis:
+
+```python
+# pr_agent/tools/figma/design_verification_agent.py
+from typing import Dict, List, Optional
+from dataclasses import dataclass
+
+from pr_agent.tools.figma.figma_link_extractor import FigmaLinkExtractor, FigmaLink
+from pr_agent.tools.figma.figma_mcp_client import FigmaMCPClient, FigmaDesignData
+from pr_agent.tools.figma.react_style_analyzer import ReactStyleAnalyzer, ExtractedStyles
+from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+from pr_agent.log import get_logger
+
+logger = get_logger()
+
+@dataclass
+class DesignDiscrepancy:
+    """A discrepancy between design and implementation."""
+    type: str           # 'color', 'typography', 'spacing', 'layout', 'component'
+    severity: str       # 'error', 'warning', 'suggestion'
+    description: str
+    design_value: str
+    code_value: str
+    location: str       # file:line
+    suggestion: str
+
+class DesignVerificationAgent:
+    """
+    Specialized agent for verifying React implementation against Figma designs.
+    
+    This agent:
+    1. Extracts Figma links from Jira tickets
+    2. Fetches design data via Figma MCP
+    3. Analyzes React code changes for style values
+    4. Uses AI to compare and identify discrepancies
+    5. Generates review comments for design mismatches
+    """
+    
+    def __init__(self, ai_handler: Optional[LiteLLMAIHandler] = None):
+        self.link_extractor = FigmaLinkExtractor()
+        self.figma_client = FigmaMCPClient()
+        self.react_analyzer = ReactStyleAnalyzer()
+        self.ai_handler = ai_handler or LiteLLMAIHandler()
+    
+    async def verify_design(
+        self,
+        pr_files: List[Dict],
+        jira_ticket_key: Optional[str] = None,
+        pr_description: Optional[str] = None,
+        jira_client = None
+    ) -> List[DesignDiscrepancy]:
+        """
+        Main method to verify design implementation.
+        
+        Returns list of discrepancies found between design and code.
+        """
+        if not self._has_frontend_changes(pr_files):
+            logger.info("No frontend changes detected, skipping design verification")
+            return []
+        
+        figma_links = await self._get_figma_links(
+            jira_ticket_key, pr_description, jira_client
+        )
+        
+        if not figma_links:
+            logger.info("No Figma links found, skipping design verification")
+            return []
+        
+        design_data = await self._fetch_design_data(figma_links)
+        code_styles = self.react_analyzer.analyze_diff(pr_files)
+        
+        discrepancies = await self._compare_design_and_code(
+            design_data, code_styles
+        )
+        
+        return discrepancies
+    
+    def _has_frontend_changes(self, pr_files: List[Dict]) -> bool:
+        """Check if PR has frontend file changes."""
+        frontend_extensions = ['.tsx', '.jsx', '.css', '.scss']
+        return any(
+            any(f.get('filename', '').endswith(ext) for ext in frontend_extensions)
+            for f in pr_files
+        )
+    
+    async def _get_figma_links(
+        self,
+        jira_ticket_key: Optional[str],
+        pr_description: Optional[str],
+        jira_client
+    ) -> List[FigmaLink]:
+        """Collect Figma links from all sources."""
+        links = []
+        
+        if pr_description:
+            links.extend(self.link_extractor.extract_from_text(pr_description))
+        
+        if jira_ticket_key and jira_client:
+            links.extend(await self.link_extractor.get_from_jira_ticket(
+                jira_client, jira_ticket_key
+            ))
+        
+        unique_links = {
+            f"{l.file_key}:{l.node_id}": l for l in links
+        }
+        return list(unique_links.values())
+    
+    async def _fetch_design_data(
+        self, 
+        links: List[FigmaLink]
+    ) -> List[FigmaDesignData]:
+        """Fetch design data for all Figma links."""
+        design_data = []
+        
+        for link in links:
+            data = await self.figma_client.get_design_data(
+                link.file_key,
+                link.node_id
+            )
+            design_data.append(data)
+        
+        return design_data
+    
+    async def _compare_design_and_code(
+        self,
+        design_data: List[FigmaDesignData],
+        code_styles: ExtractedStyles
+    ) -> List[DesignDiscrepancy]:
+        """Use AI to compare design data with code styles."""
+        
+        design_summary = self._summarize_design_data(design_data)
+        code_summary = self._summarize_code_styles(code_styles)
+        
+        prompt = f"""You are a design verification agent. Compare the Figma design data 
+with the React code implementation and identify discrepancies.
+
+## Figma Design Data:
+{design_summary}
+
+## React Code Styles:
+{code_summary}
+
+## Instructions:
+1. Compare colors - are the hex values matching or close enough?
+2. Compare typography - font sizes, families, weights
+3. Compare spacing - padding, margins, gaps
+4. Identify any missing implementations
+
+For each discrepancy found, provide:
+- Type: color/typography/spacing/layout/component
+- Severity: error (major mismatch) / warning (minor) / suggestion (improvement)
+- Description: What is wrong
+- Design value: What the design specifies
+- Code value: What the code has
+- Location: Where in the code (file:line if possible)
+- Suggestion: How to fix it
+
+Return as JSON array of discrepancies. Return empty array if no issues found.
+"""
+        
+        response = await self.ai_handler.chat_completion(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a design verification assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1
+        )
+        
+        return self._parse_ai_response(response)
+    
+    def _summarize_design_data(self, design_data: List[FigmaDesignData]) -> str:
+        """Create a summary of design data for AI."""
+        summary = []
+        
+        for data in design_data:
+            summary.append(f"### Design: {data.name}")
+            
+            if data.colors:
+                summary.append("**Colors:**")
+                for name, color in list(data.colors.items())[:20]:
+                    summary.append(f"  - {name}: {color}")
+            
+            if data.typography:
+                summary.append("**Typography:**")
+                for name, typo in list(data.typography.items())[:10]:
+                    summary.append(
+                        f"  - {name}: {typo.get('fontSize')}px "
+                        f"{typo.get('fontFamily')} {typo.get('fontWeight')}"
+                    )
+            
+            if data.spacing:
+                summary.append(f"**Spacing values:** {data.spacing}")
+        
+        return "\n".join(summary)
+    
+    def _summarize_code_styles(self, code_styles: ExtractedStyles) -> str:
+        """Create a summary of code styles for AI."""
+        summary = []
+        
+        if code_styles.colors:
+            summary.append("**Colors used in code:**")
+            for color, locations in list(code_styles.colors.items())[:20]:
+                summary.append(f"  - {color}: {', '.join(locations[:3])}")
+        
+        if code_styles.font_sizes:
+            summary.append("**Font sizes in code:**")
+            for size, locations in list(code_styles.font_sizes.items())[:10]:
+                summary.append(f"  - {size}: {', '.join(locations[:3])}")
+        
+        if code_styles.spacing:
+            summary.append("**Spacing in code:**")
+            for space, locations in list(code_styles.spacing.items())[:10]:
+                summary.append(f"  - {space}: {', '.join(locations[:3])}")
+        
+        if code_styles.components:
+            summary.append("**Components modified:**")
+            for comp in code_styles.components:
+                summary.append(f"  - {comp['name']} ({comp['file']})")
+        
+        return "\n".join(summary)
+    
+    def _parse_ai_response(self, response: str) -> List[DesignDiscrepancy]:
+        """Parse AI response into DesignDiscrepancy objects."""
+        import json
+        
+        try:
+            json_match = re.search(r'\[[\s\S]*\]', response)
+            if json_match:
+                data = json.loads(json_match.group())
+                return [
+                    DesignDiscrepancy(
+                        type=d.get('type', 'unknown'),
+                        severity=d.get('severity', 'warning'),
+                        description=d.get('description', ''),
+                        design_value=d.get('design_value', ''),
+                        code_value=d.get('code_value', ''),
+                        location=d.get('location', ''),
+                        suggestion=d.get('suggestion', '')
+                    )
+                    for d in data
+                ]
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse AI response for design verification")
+        
+        return []
+    
+    def format_review_comments(
+        self, 
+        discrepancies: List[DesignDiscrepancy]
+    ) -> List[Dict]:
+        """Format discrepancies as PR review comments."""
+        comments = []
+        
+        for d in discrepancies:
+            emoji = {"error": "🔴", "warning": "🟡", "suggestion": "💡"}.get(
+                d.severity, "ℹ️"
+            )
+            
+            comment = f"""{emoji} **Design Mismatch ({d.type})**
+
+{d.description}
+
+| Design | Code |
+|--------|------|
+| `{d.design_value}` | `{d.code_value}` |
+
+**Suggestion:** {d.suggestion}
+"""
+            
+            comments.append({
+                'body': comment,
+                'path': d.location.split(':')[0] if ':' in d.location else None,
+                'line': int(d.location.split(':')[1]) if ':' in d.location else None,
+                'severity': d.severity
+            })
+        
+        return comments
+```
+
+#### 5. Integration with PR Reviewer
+
+Add design verification as a sub-agent in the multi-agent architecture:
+
+```python
+# In pr_agent/tools/pr_reviewer.py - add to run() method
+
+async def run(self):
+    # ... existing code ...
+    
+    if self._should_verify_design():
+        design_agent = DesignVerificationAgent(self.ai_handler)
+        discrepancies = await design_agent.verify_design(
+            pr_files=self.git_provider.get_diff_files(),
+            jira_ticket_key=self._extract_jira_ticket(),
+            pr_description=self.git_provider.pr.body,
+            jira_client=self.jira_client
+        )
+        
+        if discrepancies:
+            design_comments = design_agent.format_review_comments(discrepancies)
+            self.review_comments.extend(design_comments)
+    
+    # ... rest of existing code ...
+
+def _should_verify_design(self) -> bool:
+    """Check if design verification should run."""
+    return (
+        get_settings().get('figma.enabled', False) and
+        self._has_frontend_changes()
+    )
+```
+
+### Configuration
+
+Add to `configuration.toml`:
+
+```toml
+[figma]
+enabled = true
+api_key = ""  # Set via FIGMA_API_KEY env var
+mcp_server_url = "http://localhost:3333"
+
+[figma.verification]
+check_colors = true
+check_typography = true
+check_spacing = true
+color_tolerance = 5  # Allow ±5 in RGB values
+
+[figma.tailwind_mapping]
+enabled = true
+config_path = "./tailwind.config.js"
+```
+
+### Figma MCP Server Setup
+
+#### Option 1: Using figma-context-mcp (Recommended)
+
+```bash
+npm install -g figma-developer-mcp
+
+export FIGMA_API_KEY="figd_your_personal_access_token"
+
+npx figma-developer-mcp
+```
+
+#### Option 2: Direct Figma REST API
+
+If MCP server is not desired, use direct API:
+
+```python
+# pr_agent/tools/figma/figma_rest_client.py
+import httpx
+import os
+
+class FigmaRestClient:
+    """Direct Figma REST API client (alternative to MCP)."""
+    
+    BASE_URL = "https://api.figma.com/v1"
+    
+    def __init__(self):
+        self.api_key = os.getenv('FIGMA_API_KEY')
+        self.headers = {"X-Figma-Token": self.api_key}
+    
+    async def get_file(self, file_key: str, depth: int = 2) -> dict:
+        """Fetch Figma file data."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/files/{file_key}",
+                params={"depth": depth},
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+    
+    async def get_file_nodes(
+        self, 
+        file_key: str, 
+        node_ids: list
+    ) -> dict:
+        """Fetch specific nodes from a file."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/files/{file_key}/nodes",
+                params={"ids": ",".join(node_ids)},
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+    
+    async def get_file_styles(self, file_key: str) -> dict:
+        """Fetch all styles from a file."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/files/{file_key}/styles",
+                headers=self.headers
+            )
+            response.raise_for_status()
+            return response.json()
+```
+
+### Review Comment Examples
+
+When the agent finds discrepancies, it generates comments like:
+
+#### Color Mismatch
+```markdown
+🔴 **Design Mismatch (color)**
+
+Button background color doesn't match the Figma design.
+
+| Design | Code |
+|--------|------|
+| `#1E88E5` | `#2196F3` |
+
+**Suggestion:** Update the button background to use `bg-blue-600` or `#1E88E5` as specified in the design.
+```
+
+#### Typography Issue
+```markdown
+🟡 **Design Mismatch (typography)**
+
+Heading font size differs from design specification.
+
+| Design | Code |
+|--------|------|
+| `24px Inter Bold` | `20px text-xl` |
+
+**Suggestion:** Change from `text-xl` to `text-2xl` (24px) to match the design.
+```
+
+#### Missing Spacing
+```markdown
+💡 **Design Mismatch (spacing)**
+
+Card padding doesn't follow the 8px grid system from the design.
+
+| Design | Code |
+|--------|------|
+| `16px` | `14px` |
+
+**Suggestion:** Use `p-4` (16px) instead of custom 14px value to align with design system.
+```
+
+### Chromatic Integration (Visual Regression - Optional)
+
+For actual visual comparison, integrate with Chromatic:
+
+```python
+# pr_agent/tools/figma/chromatic_integration.py
+import httpx
+import os
+
+class ChromaticIntegration:
+    """Optional integration with Chromatic for visual regression."""
+    
+    def __init__(self):
+        self.project_token = os.getenv('CHROMATIC_PROJECT_TOKEN')
+        self.base_url = "https://www.chromatic.com/api"
+    
+    async def get_build_for_commit(self, commit_sha: str) -> dict:
+        """Get Chromatic build for a specific commit."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/builds",
+                params={"commit": commit_sha},
+                headers={"Authorization": f"Bearer {self.project_token}"}
+            )
+            if response.status_code == 200:
+                builds = response.json()
+                return builds[0] if builds else None
+        return None
+    
+    async def get_visual_changes(self, build_id: str) -> list:
+        """Get list of visual changes from a build."""
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/builds/{build_id}/changes",
+                headers={"Authorization": f"Bearer {self.project_token}"}
+            )
+            if response.status_code == 200:
+                return response.json()
+        return []
+```
+
+### Summary
+
+| Component | Purpose | Status |
+|-----------|---------|--------|
+| `figma_link_extractor.py` | Extract Figma URLs from Jira/PR | New |
+| `figma_mcp_client.py` | Interface with Figma MCP server | New |
+| `figma_rest_client.py` | Direct Figma API (fallback) | New |
+| `react_style_analyzer.py` | Extract styles from React code | New |
+| `design_verification_agent.py` | Main coordination agent | New |
+| `chromatic_integration.py` | Visual regression (optional) | New |
+
+### Environment Variables
+
+```bash
+# Required
+FIGMA_API_KEY=figd_your_personal_access_token
+
+# Optional
+FIGMA_MCP_SERVER_URL=http://localhost:3333
+CHROMATIC_PROJECT_TOKEN=your_chromatic_token
 ```
 
 ---
@@ -7680,6 +8627,17 @@ Extra instructions:
 | **PubSub** | @PubSubAsyncAcknowledge, async handlers, maskSensitive | Comment if decorators missing or sync handler |
 | **TypeORM** | Raw SQL in migrations | Comment if using `createTable()` instead of raw SQL |
 | **Security** | No hardcoded secrets, SQL injection prevention | Comment on detected secrets or string SQL |
+
+### ✅ Figma Design Verification (Separate Agent)
+
+| Check | Trigger | Review Comment |
+|-------|---------|----------------|
+| **Color Mismatch** | Hex/RGB values differ from Figma | "Button uses #2196F3, design specifies #1E88E5" |
+| **Typography Mismatch** | Font size/family differs | "Heading is 20px, design specifies 24px" |
+| **Spacing Issues** | Padding/margin differs from design | "Card has 14px padding, design uses 16px" |
+| **Missing Component** | Figma component not found in code | "Header component from design not implemented" |
+
+**Integration**: Figma MCP server extracts design tokens → React analyzer extracts code styles → AI compares → Review comments
 
 ### ✅ Databases Covered
 
