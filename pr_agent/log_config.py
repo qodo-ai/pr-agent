@@ -45,7 +45,11 @@ class DatadogJSONFormatter(logging.Formatter):
         return json.dumps(log_record, default=str)
 
 
-def setup_logging(level: str = "INFO", configure_root: bool = False) -> None:
+def setup_logging(
+    level: str = "INFO",
+    configure_root: bool = False,
+    replace_handlers: bool = True
+) -> None:
     """
     Configure logging for Datadog collection via stdout.
     
@@ -53,10 +57,17 @@ def setup_logging(level: str = "INFO", configure_root: bool = False) -> None:
     with third-party library logging. Set configure_root=True to also
     configure the root logger.
     
+    WARNING: By default (replace_handlers=True), this clears existing handlers
+    on the configured loggers. Set replace_handlers=False to add the JSON
+    handler alongside existing handlers.
+    
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         configure_root: If True, also configures the root logger. Default False
                        to avoid overriding other libraries' logging config.
+        replace_handlers: If True (default), clears existing handlers before
+                         adding the JSON handler. Set to False to preserve
+                         existing handlers (may result in duplicate logs).
     """
     log_level = getattr(logging, level.upper(), logging.INFO)
     
@@ -65,14 +76,16 @@ def setup_logging(level: str = "INFO", configure_root: bool = False) -> None:
     
     pr_agent_logger = logging.getLogger("pr_agent")
     pr_agent_logger.setLevel(log_level)
-    pr_agent_logger.handlers.clear()
+    if replace_handlers:
+        pr_agent_logger.handlers.clear()
     pr_agent_logger.addHandler(handler)
     pr_agent_logger.propagate = False
     
     if configure_root:
         root_logger = logging.getLogger()
         root_logger.setLevel(log_level)
-        root_logger.handlers.clear()
+        if replace_handlers:
+            root_logger.handlers.clear()
         root_logger.addHandler(handler)
     
     noisy_loggers = ["httpx", "urllib3", "httpcore", "openai", "anthropic", "litellm"]
@@ -82,7 +95,8 @@ def setup_logging(level: str = "INFO", configure_root: bool = False) -> None:
     pr_agent_logger.info("Logging configured", extra={"context": {
         "level": level,
         "env": os.environ.get("ENV", "development"),
-        "root_configured": configure_root
+        "root_configured": configure_root,
+        "handlers_replaced": replace_handlers
     }})
 
 
