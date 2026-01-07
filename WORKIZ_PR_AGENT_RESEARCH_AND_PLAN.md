@@ -2408,554 +2408,980 @@ git push -u origin main
 
 Create `prompts/repos.json` with all Workiz repositories:
 
-```json
-{
-  "repositories": [
-    // === CORE BACKEND ===
-    {
-      "name": "backend",
-      "url": "https://github.com/Workiz/backend",
-      "type": "backend-php",
-      "language": "PHP",
-      "main_branch": "workiz.com",
-      "databases": ["mysql", "mongodb", "elasticsearch"],
-      "description": "Main PHP backend monolith"
-    },
-    {
-      "name": "Core",
-      "url": "https://github.com/Workiz/Core",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "databases": ["mysql"],
-      "description": "Core business logic NestJS service"
-    },
-    {
-      "name": "crm",
-      "url": "https://github.com/Workiz/crm",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "databases": ["mysql"],
-      "description": "CRM and customer management"
-    },
+## Automated Repository Discovery System
+
+Instead of hardcoding repositories, the PR Agent uses an **automated discovery system** that:
+1. Discovers all repos via GitHub API
+2. Auto-detects language/framework by analyzing source files
+3. Caches results in PostgreSQL with periodic refresh
+4. Handles monorepos with multiple services
+
+### Configuration (Only exclusions and overrides needed)
+
+```yaml
+# repos_config.yaml - Minimal configuration
+github:
+  organization: "Workiz"
+  main_branches: ["workiz.com", "main", "master"]
+
+# Repos to exclude from review (auto-discovered but skipped)
+exclude_patterns:
+  - "*-automation"      # Test automation repos
+  - "*-tests"           # Test repos
+  - "*docs*"            # Documentation repos
+  - "*backup*"          # Backup repos
+  - "*credentials*"     # Credential repos
+  - "workiz-helm"       # Helm charts (no code review needed)
+  - "workiz-actions"    # GitHub Actions
+  - "infra"             # Infrastructure (optional)
+
+# Manual overrides for edge cases (optional)
+overrides:
+  # Force specific framework when auto-detection fails
+  - repo: "some-legacy-repo"
+    framework: "express"
     
-    // === ARCHITECTURE MONOREPO (Multi-service) ===
-    {
-      "name": "architecture",
-      "url": "https://github.com/Workiz/architecture",
-      "type": "monorepo",
-      "language": "TypeScript/JavaScript",
-      "main_branch": "workiz.com",
-      "services": [
-        {
-          "path": "services/auth",
-          "type": "backend-nestjs",
-          "databases": ["mysql", "redis"],
-          "description": "Authentication and session management"
-        },
-        {
-          "path": "services/signup",
-          "type": "backend-nestjs",
-          "description": "User signup and onboarding"
-        },
-        {
-          "path": "services/account",
-          "type": "backend-nodejs",
-          "description": "Account management service"
-        },
-        {
-          "path": "services/billing-service",
-          "type": "backend-nodejs",
-          "description": "Stripe billing and subscriptions"
+# NPM packages to track across repos
+npm_packages:
+  - "@workiz/pubsub-decorator-reflector"
+  - "@workiz/all-exceptions-filter"
+  - "@workiz/response-wrapper"
+  - "@workiz/swagger-decorator"
+  - "@workiz/node-logger"
+  - "@workiz/config-loader"
+  - "@workiz/pubsub-publish-client"
+  - "@workiz/redis-nestjs"
+  - "@workiz/jwt-headers-generator"
+  - "@workiz/socket-io-updater"
+```
+
+### Repository Auto-Discovery Service
+
+```python
+# pr_agent/services/repo_discovery_service.py
+
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+import asyncio
+import aiohttp
+from datetime import datetime, timedelta
+
+
+class Framework(Enum):
+    # Backend
+    NESTJS = "nestjs"
+    EXPRESS = "express"
+    FASTAPI = "fastapi"
+    FLASK = "flask"
+    DJANGO = "django"
+    PHP_LARAVEL = "laravel"
+    PHP_SYMFONY = "symfony"
+    PHP_VANILLA = "php"
+    
+    # Frontend
+    REACT = "react"
+    REACT_NATIVE = "react-native"
+    NEXTJS = "nextjs"
+    VUE = "vue"
+    ANGULAR = "angular"
+    
+    # Mobile
+    SWIFT = "swift"
+    KOTLIN = "kotlin"
+    FLUTTER = "flutter"
+    
+    # Desktop
+    ELECTRON = "electron"
+    
+    # Data
+    DBT = "dbt"
+    AIRFLOW = "airflow"
+    
+    # Infrastructure
+    TERRAFORM = "terraform"
+    PULUMI = "pulumi"
+    HELM = "helm"
+    
+    # Other
+    UNKNOWN = "unknown"
+
+
+class Language(Enum):
+    TYPESCRIPT = "typescript"
+    JAVASCRIPT = "javascript"
+    PYTHON = "python"
+    PHP = "php"
+    SWIFT = "swift"
+    KOTLIN = "kotlin"
+    JAVA = "java"
+    GO = "go"
+    RUST = "rust"
+    SQL = "sql"
+    YAML = "yaml"
+    HCL = "hcl"
+    UNKNOWN = "unknown"
+
+
+class RepoType(Enum):
+    BACKEND = "backend"
+    FRONTEND = "frontend"
+    MOBILE = "mobile"
+    DESKTOP = "desktop"
+    DATA = "data"
+    INFRASTRUCTURE = "infrastructure"
+    TESTING = "testing"
+    DOCUMENTATION = "documentation"
+    LIBRARY = "library"
+    MONOREPO = "monorepo"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class DetectedService:
+    """For monorepos with multiple services"""
+    path: str
+    framework: Framework
+    language: Language
+    repo_type: RepoType
+    databases: list[str]
+
+
+@dataclass
+class DiscoveredRepo:
+    name: str
+    url: str
+    default_branch: str
+    primary_language: Language
+    framework: Framework
+    repo_type: RepoType
+    databases: list[str]
+    is_monorepo: bool
+    services: list[DetectedService]  # For monorepos
+    is_archived: bool
+    last_push: datetime
+    discovered_at: datetime
+    confidence: float  # 0.0-1.0 detection confidence
+
+
+class FrameworkDetector:
+    """Auto-detect framework by analyzing repo contents"""
+    
+    async def detect(
+        self, 
+        github_client: 'GitHubClient',
+        repo_name: str,
+        branch: str
+    ) -> tuple[Framework, Language, RepoType, list[str], float]:
+        """
+        Analyze repo contents to detect framework, language, and type.
+        Returns (framework, language, repo_type, databases, confidence)
+        """
+        # Fetch key files in parallel
+        files_to_check = [
+            'package.json',
+            'composer.json', 
+            'requirements.txt',
+            'pyproject.toml',
+            'Pipfile',
+            'go.mod',
+            'Cargo.toml',
+            'build.gradle',
+            'build.gradle.kts',
+            'Podfile',
+            'pubspec.yaml',
+            'nest-cli.json',
+            'angular.json',
+            'next.config.js',
+            'next.config.ts',
+            'vite.config.ts',
+            'tsconfig.json',
+            'Dockerfile',
+            'docker-compose.yml',
+            'terraform.tf',
+            'main.tf',
+            'Pulumi.yaml',
+            'dbt_project.yml',
+            'Chart.yaml',
+        ]
+        
+        file_contents = await github_client.get_files_content(
+            repo_name, branch, files_to_check
+        )
+        
+        # Also get directory listing for monorepo detection
+        root_dirs = await github_client.list_directory(repo_name, branch, '')
+        
+        framework, confidence = self._detect_framework(file_contents)
+        language = self._detect_language(file_contents, framework)
+        repo_type = self._detect_type(framework, file_contents)
+        databases = self._detect_databases(file_contents)
+        
+        return framework, language, repo_type, databases, confidence
+    
+    def _detect_framework(
+        self, 
+        files: dict[str, Optional[str]]
+    ) -> tuple[Framework, float]:
+        """Detect framework from file contents"""
+        
+        # Check package.json for Node.js projects
+        if pkg := files.get('package.json'):
+            return self._detect_node_framework(pkg)
+        
+        # Check composer.json for PHP projects
+        if composer := files.get('composer.json'):
+            return self._detect_php_framework(composer)
+        
+        # Check Python project files
+        if any(files.get(f) for f in ['requirements.txt', 'pyproject.toml', 'Pipfile']):
+            return self._detect_python_framework(files)
+        
+        # Check Go
+        if files.get('go.mod'):
+            return Framework.UNKNOWN, 0.7  # Could add Go framework detection
+        
+        # Check Rust
+        if files.get('Cargo.toml'):
+            return Framework.UNKNOWN, 0.7
+        
+        # Check mobile
+        if files.get('Podfile'):
+            return Framework.SWIFT, 0.9
+        if files.get('build.gradle') or files.get('build.gradle.kts'):
+            return Framework.KOTLIN, 0.8
+        if files.get('pubspec.yaml'):
+            return Framework.FLUTTER, 0.95
+        
+        # Check infrastructure
+        if files.get('main.tf') or files.get('terraform.tf'):
+            return Framework.TERRAFORM, 0.95
+        if files.get('Pulumi.yaml'):
+            return Framework.PULUMI, 0.95
+        if files.get('Chart.yaml'):
+            return Framework.HELM, 0.95
+        
+        # Check data
+        if files.get('dbt_project.yml'):
+            return Framework.DBT, 0.95
+        
+        return Framework.UNKNOWN, 0.3
+    
+    def _detect_node_framework(
+        self, 
+        package_json: str
+    ) -> tuple[Framework, float]:
+        """Detect Node.js framework from package.json"""
+        import json
+        try:
+            pkg = json.loads(package_json)
+        except json.JSONDecodeError:
+            return Framework.UNKNOWN, 0.3
+        
+        deps = {
+            **pkg.get('dependencies', {}),
+            **pkg.get('devDependencies', {})
         }
-      ]
-    },
+        
+        # NestJS detection (highest priority for backend)
+        if '@nestjs/core' in deps:
+            return Framework.NESTJS, 0.98
+        
+        # React Native
+        if 'react-native' in deps:
+            return Framework.REACT_NATIVE, 0.95
+        
+        # Next.js
+        if 'next' in deps:
+            return Framework.NEXTJS, 0.95
+        
+        # React (frontend)
+        if 'react' in deps and 'react-dom' in deps:
+            # Check if it's a frontend app (has build scripts, public folder markers)
+            scripts = pkg.get('scripts', {})
+            if any(k in scripts for k in ['build', 'start', 'dev']):
+                # Additional check: if it has @nestjs it's backend with React admin
+                if '@nestjs/core' not in deps:
+                    return Framework.REACT, 0.85
+        
+        # Express
+        if 'express' in deps:
+            return Framework.EXPRESS, 0.85
+        
+        # Electron
+        if 'electron' in deps:
+            return Framework.ELECTRON, 0.95
+        
+        # Vue
+        if 'vue' in deps:
+            return Framework.VUE, 0.9
+        
+        # Angular
+        if '@angular/core' in deps:
+            return Framework.ANGULAR, 0.95
+        
+        # Generic Node.js
+        return Framework.EXPRESS, 0.5  # Default to express for Node
     
-    // === COMMUNICATION MONOREPO ===
-    {
-      "name": "Communication",
-      "url": "https://github.com/Workiz/Communication",
-      "type": "monorepo",
-      "language": "TypeScript/Python",
-      "main_branch": "workiz.com",
-      "services": [
-        {
-          "path": "services/messaging",
-          "type": "backend-nestjs",
-          "databases": ["mysql"],
-          "description": "SMS/Email messaging service"
-        },
-        {
-          "path": "services/notifications",
-          "type": "backend-nestjs",
-          "databases": ["mysql"],
-          "description": "Multi-channel notification delivery"
-        },
-        {
-          "path": "services/spam-detect",
-          "type": "backend-python",
-          "databases": ["postgresql"],
-          "description": "ML-based spam detection (FastAPI)"
+    def _detect_php_framework(
+        self, 
+        composer_json: str
+    ) -> tuple[Framework, float]:
+        """Detect PHP framework from composer.json"""
+        import json
+        try:
+            composer = json.loads(composer_json)
+        except json.JSONDecodeError:
+            return Framework.PHP_VANILLA, 0.5
+        
+        require = {
+            **composer.get('require', {}),
+            **composer.get('require-dev', {})
         }
-      ]
-    },
+        
+        if 'laravel/framework' in require:
+            return Framework.PHP_LARAVEL, 0.95
+        
+        if 'symfony/framework-bundle' in require:
+            return Framework.PHP_SYMFONY, 0.95
+        
+        return Framework.PHP_VANILLA, 0.7
     
-    // === AUTOMATION SERVICES ===
-    {
-      "name": "automation-notifications",
-      "url": "https://github.com/Workiz/automation-notifications",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Automation workflow notifications"
-    },
-    {
-      "name": "automation-notifications-dispatcher",
-      "url": "https://github.com/Workiz/automation-notifications-dispatcher",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Automation notification dispatcher"
-    },
-    {
-      "name": "automation-rules-engine",
-      "url": "https://github.com/Workiz/automation-rules-engine",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Business rules engine for automations"
-    },
+    def _detect_python_framework(
+        self, 
+        files: dict[str, Optional[str]]
+    ) -> tuple[Framework, float]:
+        """Detect Python framework"""
+        # Check pyproject.toml first (modern)
+        if pyproject := files.get('pyproject.toml'):
+            if 'fastapi' in pyproject.lower():
+                return Framework.FASTAPI, 0.95
+            if 'django' in pyproject.lower():
+                return Framework.DJANGO, 0.95
+            if 'flask' in pyproject.lower():
+                return Framework.FLASK, 0.95
+        
+        # Check requirements.txt
+        if reqs := files.get('requirements.txt'):
+            reqs_lower = reqs.lower()
+            if 'fastapi' in reqs_lower:
+                return Framework.FASTAPI, 0.9
+            if 'django' in reqs_lower:
+                return Framework.DJANGO, 0.9
+            if 'flask' in reqs_lower:
+                return Framework.FLASK, 0.9
+            if 'airflow' in reqs_lower:
+                return Framework.AIRFLOW, 0.9
+        
+        return Framework.UNKNOWN, 0.5
     
-    // === AI SERVICES ===
-    {
-      "name": "ai-completion-service",
-      "url": "https://github.com/Workiz/ai-completion-service",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "AI completion/copilot service"
-    },
-    {
-      "name": "ai-service",
-      "url": "https://github.com/Workiz/ai-service",
-      "type": "backend-python",
-      "language": "Python",
-      "main_branch": "workiz.com",
-      "description": "AI/ML service"
-    },
-    {
-      "name": "visionAI",
-      "url": "https://github.com/Workiz/visionAI",
-      "type": "backend-python",
-      "language": "Python",
-      "main_branch": "workiz.com",
-      "description": "Computer vision AI service"
-    },
-    {
-      "name": "twilio-gpt",
-      "url": "https://github.com/Workiz/twilio-gpt",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Twilio GPT integration"
-    },
-    
-    // === REPORTING & ANALYTICS ===
-    {
-      "name": "reporting-service",
-      "url": "https://github.com/Workiz/reporting-service",
-      "type": "backend-nestjs",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "databases": ["mysql", "elasticsearch"],
-      "description": "Reporting and analytics"
-    },
-    {
-      "name": "workiz-dbt",
-      "url": "https://github.com/Workiz/workiz-dbt",
-      "type": "data",
-      "language": "SQL/Python",
-      "main_branch": "workiz.com",
-      "description": "DBT data transformations"
-    },
-    {
-      "name": "bq_exporter",
-      "url": "https://github.com/Workiz/bq_exporter",
-      "type": "data",
-      "language": "Python",
-      "main_branch": "workiz.com",
-      "description": "BigQuery data exporter"
-    },
-    
-    // === PUBSUB LISTENERS ===
-    {
-      "name": "pubsub-listeners",
-      "url": "https://github.com/Workiz/pubsub-listeners",
-      "type": "monorepo",
-      "language": "JavaScript",
-      "main_branch": "workiz.com",
-      "services": [
-        {
-          "path": "services/elasticsearch-listener",
-          "databases": ["elasticsearch", "redis"],
-          "description": "Elasticsearch indexing listener"
-        },
-        {
-          "path": "services/mongodb-listener",
-          "databases": ["mongodb"],
-          "description": "MongoDB sync listener"
+    def _detect_language(
+        self, 
+        files: dict[str, Optional[str]],
+        framework: Framework
+    ) -> Language:
+        """Detect primary language"""
+        # Framework implies language in most cases
+        framework_language_map = {
+            Framework.NESTJS: Language.TYPESCRIPT,
+            Framework.EXPRESS: Language.JAVASCRIPT,
+            Framework.REACT: Language.TYPESCRIPT,
+            Framework.REACT_NATIVE: Language.TYPESCRIPT,
+            Framework.NEXTJS: Language.TYPESCRIPT,
+            Framework.VUE: Language.TYPESCRIPT,
+            Framework.ANGULAR: Language.TYPESCRIPT,
+            Framework.ELECTRON: Language.TYPESCRIPT,
+            Framework.FASTAPI: Language.PYTHON,
+            Framework.FLASK: Language.PYTHON,
+            Framework.DJANGO: Language.PYTHON,
+            Framework.PHP_LARAVEL: Language.PHP,
+            Framework.PHP_SYMFONY: Language.PHP,
+            Framework.PHP_VANILLA: Language.PHP,
+            Framework.SWIFT: Language.SWIFT,
+            Framework.KOTLIN: Language.KOTLIN,
+            Framework.FLUTTER: Language.UNKNOWN,  # Dart
+            Framework.TERRAFORM: Language.HCL,
+            Framework.PULUMI: Language.TYPESCRIPT,
+            Framework.DBT: Language.SQL,
+            Framework.HELM: Language.YAML,
         }
-      ]
-    },
+        
+        if framework in framework_language_map:
+            lang = framework_language_map[framework]
+            if lang != Language.UNKNOWN:
+                return lang
+        
+        # Check tsconfig for TypeScript
+        if files.get('tsconfig.json'):
+            return Language.TYPESCRIPT
+        
+        # Check package.json for JS/TS
+        if files.get('package.json'):
+            return Language.JAVASCRIPT
+        
+        return Language.UNKNOWN
     
-    // === PAYMENTS ===
-    {
-      "name": "Payment",
-      "url": "https://github.com/Workiz/Payment",
-      "type": "monorepo",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Payment processing services"
-    },
-    {
-      "name": "quickBooks",
-      "url": "https://github.com/Workiz/quickBooks",
-      "type": "backend",
-      "language": "JavaScript",
-      "main_branch": "workiz.com",
-      "description": "QuickBooks Online integration"
-    },
-    {
-      "name": "quickbooks-desktop-integration",
-      "url": "https://github.com/Workiz/quickbooks-desktop-integration",
-      "type": "backend",
-      "language": "JavaScript",
-      "main_branch": "workiz.com",
-      "description": "QuickBooks Desktop integration"
-    },
+    def _detect_type(
+        self, 
+        framework: Framework,
+        files: dict[str, Optional[str]]
+    ) -> RepoType:
+        """Detect repository type"""
+        framework_type_map = {
+            Framework.NESTJS: RepoType.BACKEND,
+            Framework.EXPRESS: RepoType.BACKEND,
+            Framework.FASTAPI: RepoType.BACKEND,
+            Framework.FLASK: RepoType.BACKEND,
+            Framework.DJANGO: RepoType.BACKEND,
+            Framework.PHP_LARAVEL: RepoType.BACKEND,
+            Framework.PHP_SYMFONY: RepoType.BACKEND,
+            Framework.PHP_VANILLA: RepoType.BACKEND,
+            Framework.REACT: RepoType.FRONTEND,
+            Framework.NEXTJS: RepoType.FRONTEND,
+            Framework.VUE: RepoType.FRONTEND,
+            Framework.ANGULAR: RepoType.FRONTEND,
+            Framework.REACT_NATIVE: RepoType.MOBILE,
+            Framework.SWIFT: RepoType.MOBILE,
+            Framework.KOTLIN: RepoType.MOBILE,
+            Framework.FLUTTER: RepoType.MOBILE,
+            Framework.ELECTRON: RepoType.DESKTOP,
+            Framework.TERRAFORM: RepoType.INFRASTRUCTURE,
+            Framework.PULUMI: RepoType.INFRASTRUCTURE,
+            Framework.HELM: RepoType.INFRASTRUCTURE,
+            Framework.DBT: RepoType.DATA,
+            Framework.AIRFLOW: RepoType.DATA,
+        }
+        
+        return framework_type_map.get(framework, RepoType.UNKNOWN)
     
-    // === FRONTEND APPLICATIONS ===
-    {
-      "name": "frontend",
-      "url": "https://github.com/Workiz/frontend",
-      "type": "frontend-react",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Main React web application"
-    },
-    {
-      "name": "admin",
-      "url": "https://github.com/Workiz/admin",
-      "type": "frontend-react",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Admin panel React application"
-    },
-    {
-      "name": "bookingV2",
-      "url": "https://github.com/Workiz/bookingV2",
-      "type": "frontend-react",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Online booking widget v2"
-    },
-    {
-      "name": "pay",
-      "url": "https://github.com/Workiz/pay",
-      "type": "frontend-react",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Payment pages"
-    },
-    {
-      "name": "ui",
-      "url": "https://github.com/Workiz/ui",
-      "type": "frontend-react",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Shared UI component library"
-    },
-    {
-      "name": "client-portal-backend",
-      "url": "https://github.com/Workiz/client-portal-backend",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Client portal backend service"
-    },
+    def _detect_databases(
+        self, 
+        files: dict[str, Optional[str]]
+    ) -> list[str]:
+        """Detect databases used in the project"""
+        databases = []
+        
+        # Check all file contents for database indicators
+        all_content = ' '.join(
+            content for content in files.values() 
+            if content
+        ).lower()
+        
+        db_indicators = {
+            'mysql': ['mysql', 'mysql2', 'typeorm', 'sequelize'],
+            'postgresql': ['pg', 'postgres', 'psycopg', 'asyncpg'],
+            'mongodb': ['mongoose', 'mongodb', 'mongo'],
+            'redis': ['redis', 'ioredis', 'bull'],
+            'elasticsearch': ['elasticsearch', '@elastic/elasticsearch'],
+            'dynamodb': ['dynamodb', '@aws-sdk/client-dynamodb'],
+        }
+        
+        for db, indicators in db_indicators.items():
+            if any(ind in all_content for ind in indicators):
+                databases.append(db)
+        
+        return databases
+
+
+class MonorepoDetector:
+    """Detect and analyze monorepos with multiple services"""
     
-    // === MOBILE APPLICATIONS ===
-    {
-      "name": "android-app",
-      "url": "https://github.com/Workiz/android-app",
-      "type": "mobile-android",
-      "language": "Kotlin/Java",
-      "main_branch": "workiz.com",
-      "description": "Android mobile application"
-    },
-    {
-      "name": "ios-app",
-      "url": "https://github.com/Workiz/ios-app",
-      "type": "mobile-ios",
-      "language": "Swift",
-      "main_branch": "workiz.com",
-      "description": "iOS mobile application"
-    },
-    {
-      "name": "native.workiz",
-      "url": "https://github.com/Workiz/native.workiz",
-      "type": "mobile",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "React Native mobile app"
-    },
+    async def detect_services(
+        self,
+        github_client: 'GitHubClient',
+        repo_name: str,
+        branch: str,
+        framework_detector: FrameworkDetector
+    ) -> list[DetectedService]:
+        """Detect services within a monorepo"""
+        services = []
+        
+        # Common monorepo patterns
+        service_dirs = ['services', 'packages', 'apps', 'libs', 'modules']
+        
+        for dir_name in service_dirs:
+            try:
+                subdirs = await github_client.list_directory(
+                    repo_name, branch, dir_name
+                )
+                
+                for subdir in subdirs:
+                    if subdir.get('type') == 'dir':
+                        service_path = f"{dir_name}/{subdir['name']}"
+                        
+                        # Analyze each service
+                        framework, language, repo_type, databases, _ = \
+                            await framework_detector.detect(
+                                github_client, 
+                                repo_name, 
+                                branch,
+                                base_path=service_path
+                            )
+                        
+                        if framework != Framework.UNKNOWN:
+                            services.append(DetectedService(
+                                path=service_path,
+                                framework=framework,
+                                language=language,
+                                repo_type=repo_type,
+                                databases=databases
+                            ))
+            except Exception:
+                continue  # Directory doesn't exist
+        
+        return services
+
+
+class RepoDiscoveryService:
+    """Main service for discovering and cataloging repositories"""
     
-    // === DESKTOP APPLICATIONS ===
-    {
-      "name": "dialer.electron",
-      "url": "https://github.com/Workiz/dialer.electron",
-      "type": "desktop",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Electron desktop dialer app"
-    },
+    def __init__(
+        self,
+        github_token: str,
+        organization: str,
+        db_connection,
+        config: dict
+    ):
+        self.github = GitHubClient(github_token)
+        self.organization = organization
+        self.db = db_connection
+        self.config = config
+        self.framework_detector = FrameworkDetector()
+        self.monorepo_detector = MonorepoDetector()
+        
+        # Compile exclusion patterns
+        self.exclude_patterns = [
+            self._compile_pattern(p) 
+            for p in config.get('exclude_patterns', [])
+        ]
     
-    // === REAL-TIME & WEBSOCKETS ===
-    {
-      "name": "workiz-socket-io",
-      "url": "https://github.com/Workiz/workiz-socket-io",
-      "type": "backend-nodejs",
-      "language": "JavaScript",
-      "main_branch": "workiz.com",
-      "description": "Socket.IO real-time server"
-    },
+    def _compile_pattern(self, pattern: str):
+        """Convert glob pattern to regex"""
+        import re
+        regex = pattern.replace('*', '.*')
+        return re.compile(f'^{regex}$', re.IGNORECASE)
     
-    // === VOICE & TELEPHONY ===
-    {
-      "name": "workiz_voice_service",
-      "url": "https://github.com/Workiz/workiz_voice_service",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Voice/telephony service"
-    },
-    {
-      "name": "workiz_dialers_hub",
-      "url": "https://github.com/Workiz/workiz_dialers_hub",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Dialers hub service"
-    },
-    {
-      "name": "calls-analyzer-graph",
-      "url": "https://github.com/Workiz/calls-analyzer-graph",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Call analytics with graph DB"
-    },
+    def _should_exclude(self, repo_name: str) -> bool:
+        """Check if repo should be excluded from review"""
+        return any(
+            pattern.match(repo_name) 
+            for pattern in self.exclude_patterns
+        )
     
-    // === INTEGRATIONS ===
-    {
-      "name": "integrations",
-      "url": "https://github.com/Workiz/integrations",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Third-party integrations service"
-    },
-    {
-      "name": "workiz-integrations",
-      "url": "https://github.com/Workiz/workiz-integrations",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Workiz integrations hub"
-    },
-    {
-      "name": "slack-bot",
-      "url": "https://github.com/Workiz/slack-bot",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Slack integration bot"
-    },
-    {
-      "name": "wordpress-ninja-forms-plugin",
-      "url": "https://github.com/Workiz/wordpress-ninja-forms-plugin",
-      "type": "plugin",
-      "language": "PHP",
-      "main_branch": "workiz.com",
-      "description": "WordPress Ninja Forms plugin"
-    },
+    async def discover_all_repos(self) -> list[DiscoveredRepo]:
+        """Discover all repos in the organization"""
+        repos = await self.github.list_org_repos(self.organization)
+        discovered = []
+        
+        for repo in repos:
+            if repo['archived']:
+                continue
+                
+            discovered_repo = await self._analyze_repo(repo)
+            discovered.append(discovered_repo)
+        
+        # Save to database
+        await self._save_to_db(discovered)
+        
+        return discovered
     
-    // === INFRASTRUCTURE ===
-    {
-      "name": "infra",
-      "url": "https://github.com/Workiz/infra",
-      "type": "infrastructure",
-      "language": "Terraform/Pulumi/YAML",
-      "main_branch": "workiz.com",
-      "description": "Infrastructure as code (K8s, Terraform, Pulumi)"
-    },
-    {
-      "name": "workiz-helm",
-      "url": "https://github.com/Workiz/workiz-helm",
-      "type": "infrastructure",
-      "language": "YAML",
-      "main_branch": "workiz.com",
-      "description": "Helm charts for K8s deployments"
-    },
-    {
-      "name": "cloud-functions",
-      "url": "https://github.com/Workiz/cloud-functions",
-      "type": "serverless",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "GCP Cloud Functions"
-    },
-    {
-      "name": "workiz-actions",
-      "url": "https://github.com/Workiz/workiz-actions",
-      "type": "ci-cd",
-      "language": "YAML",
-      "main_branch": "workiz.com",
-      "description": "Shared GitHub Actions"
-    },
+    async def _analyze_repo(self, repo: dict) -> DiscoveredRepo:
+        """Analyze a single repository"""
+        repo_name = repo['name']
+        default_branch = repo.get('default_branch', 'main')
+        
+        # Detect framework and language
+        framework, language, repo_type, databases, confidence = \
+            await self.framework_detector.detect(
+                self.github,
+                f"{self.organization}/{repo_name}",
+                default_branch
+            )
+        
+        # Check for monorepo
+        services = []
+        is_monorepo = False
+        
+        if framework == Framework.UNKNOWN or confidence < 0.7:
+            # Might be a monorepo - check for services
+            services = await self.monorepo_detector.detect_services(
+                self.github,
+                f"{self.organization}/{repo_name}",
+                default_branch,
+                self.framework_detector
+            )
+            if services:
+                is_monorepo = True
+                repo_type = RepoType.MONOREPO
+        
+        return DiscoveredRepo(
+            name=repo_name,
+            url=repo['html_url'],
+            default_branch=default_branch,
+            primary_language=language,
+            framework=framework,
+            repo_type=repo_type,
+            databases=databases,
+            is_monorepo=is_monorepo,
+            services=services,
+            is_archived=repo['archived'],
+            last_push=datetime.fromisoformat(
+                repo['pushed_at'].replace('Z', '+00:00')
+            ),
+            discovered_at=datetime.utcnow(),
+            confidence=confidence
+        )
     
-    // === TESTING & QA ===
-    {
-      "name": "workiz-cypress-automation",
-      "url": "https://github.com/Workiz/workiz-cypress-automation",
-      "type": "testing",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Cypress E2E tests"
-    },
-    {
-      "name": "E2E-api-tests",
-      "url": "https://github.com/Workiz/E2E-api-tests",
-      "type": "testing",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "API E2E tests"
-    },
-    {
-      "name": "percy-visual-automation",
-      "url": "https://github.com/Workiz/percy-visual-automation",
-      "type": "testing",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Percy visual regression tests"
-    },
-    {
-      "name": "load-testing",
-      "url": "https://github.com/Workiz/load-testing",
-      "type": "testing",
-      "language": "JavaScript",
-      "main_branch": "workiz.com",
-      "description": "Load/performance testing"
-    },
-    {
-      "name": "full-native-automation",
-      "url": "https://github.com/Workiz/full-native-automation",
-      "type": "testing",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Native app E2E tests"
-    },
+    async def _save_to_db(self, repos: list[DiscoveredRepo]):
+        """Save discovered repos to database"""
+        async with self.db.transaction():
+            for repo in repos:
+                # Upsert main repo record
+                await self.db.execute("""
+                    INSERT INTO discovered_repositories (
+                        name, url, default_branch, primary_language,
+                        framework, repo_type, databases, is_monorepo,
+                        is_archived, is_excluded, last_push, 
+                        discovered_at, confidence
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                    ON CONFLICT (name) DO UPDATE SET
+                        default_branch = EXCLUDED.default_branch,
+                        primary_language = EXCLUDED.primary_language,
+                        framework = EXCLUDED.framework,
+                        repo_type = EXCLUDED.repo_type,
+                        databases = EXCLUDED.databases,
+                        is_monorepo = EXCLUDED.is_monorepo,
+                        is_archived = EXCLUDED.is_archived,
+                        last_push = EXCLUDED.last_push,
+                        discovered_at = EXCLUDED.discovered_at,
+                        confidence = EXCLUDED.confidence
+                """, 
+                    repo.name, repo.url, repo.default_branch,
+                    repo.primary_language.value, repo.framework.value,
+                    repo.repo_type.value, repo.databases, repo.is_monorepo,
+                    repo.is_archived, self._should_exclude(repo.name),
+                    repo.last_push, repo.discovered_at, repo.confidence
+                )
+                
+                # Save services for monorepos
+                if repo.is_monorepo:
+                    # Clear old services
+                    await self.db.execute("""
+                        DELETE FROM repository_services 
+                        WHERE repository_name = $1
+                    """, repo.name)
+                    
+                    # Insert new services
+                    for service in repo.services:
+                        await self.db.execute("""
+                            INSERT INTO repository_services (
+                                repository_name, service_path, framework,
+                                language, repo_type, databases
+                            ) VALUES ($1, $2, $3, $4, $5, $6)
+                        """,
+                            repo.name, service.path, service.framework.value,
+                            service.language.value, service.repo_type.value,
+                            service.databases
+                        )
     
-    // === DOCUMENTATION ===
-    {
-      "name": "apidocs",
-      "url": "https://github.com/Workiz/apidocs",
-      "type": "documentation",
-      "language": "YAML/Markdown",
-      "main_branch": "workiz.com",
-      "description": "API v1 documentation"
-    },
-    {
-      "name": "apiv2docs",
-      "url": "https://github.com/Workiz/apiv2docs",
-      "type": "documentation",
-      "language": "YAML/Markdown",
-      "main_branch": "workiz.com",
-      "description": "API v2 documentation"
-    },
+    async def get_repo_info(self, repo_name: str) -> Optional[DiscoveredRepo]:
+        """Get cached repo info, refresh if stale"""
+        row = await self.db.fetchrow("""
+            SELECT * FROM discovered_repositories 
+            WHERE name = $1
+        """, repo_name)
+        
+        if not row:
+            # Repo not in cache, discover it
+            repo_data = await self.github.get_repo(
+                f"{self.organization}/{repo_name}"
+            )
+            if repo_data:
+                return await self._analyze_repo(repo_data)
+            return None
+        
+        # Check if stale (older than 24 hours)
+        if datetime.utcnow() - row['discovered_at'] > timedelta(hours=24):
+            # Refresh in background
+            asyncio.create_task(self._refresh_repo(repo_name))
+        
+        return self._row_to_repo(row)
     
-    // === WORKFLOW SERVICES ===
-    {
-      "name": "workflows-distribution",
-      "url": "https://github.com/Workiz/workflows-distribution",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Workflow distribution service"
-    },
-    {
-      "name": "queue-transmitter",
-      "url": "https://github.com/Workiz/queue-transmitter",
-      "type": "backend",
-      "language": "TypeScript",
-      "main_branch": "workiz.com",
-      "description": "Message queue transmitter"
-    },
+    async def _refresh_repo(self, repo_name: str):
+        """Refresh repo info in background"""
+        try:
+            repo_data = await self.github.get_repo(
+                f"{self.organization}/{repo_name}"
+            )
+            if repo_data:
+                repo = await self._analyze_repo(repo_data)
+                await self._save_to_db([repo])
+        except Exception as e:
+            logger.error(f"Failed to refresh repo {repo_name}", error=str(e))
+
+
+class GitHubClient:
+    """GitHub API client for repo discovery"""
     
-    // === TOOLS (PR Agent) ===
-    {
-      "name": "workiz-pr-agent",
-      "url": "https://github.com/Workiz/workiz-pr-agent",
-      "type": "tools",
-      "language": "Python",
-      "main_branch": "workiz.com",
-      "description": "Workiz PR Agent (this project)"
-    }
-  ],
-  
-  "total_repos": 115,
-  "main_branches": ["workiz.com", "main", "master"],
-  
-  "language_distribution": {
-    "TypeScript": "~45%",
-    "JavaScript": "~20%",
-    "PHP": "~15%",
-    "Python": "~10%",
-    "Swift/Kotlin": "~5%",
-    "Other (YAML, SQL, etc.)": "~5%"
-  },
-  
-  "npm_packages": [
-    "@workiz/pubsub-decorator-reflector",
-    "@workiz/all-exceptions-filter",
-    "@workiz/response-wrapper",
-    "@workiz/swagger-decorator",
-    "@workiz/node-logger",
-    "@workiz/config-loader",
-    "@workiz/pubsub-publish-client",
-    "@workiz/redis-nestjs",
-    "@workiz/jwt-headers-generator",
-    "@workiz/socket-io-updater"
-  ],
-  
-  "repos_excluded_from_review": [
-    "workiz-cypress-automation",
-    "E2E-api-tests",
-    "percy-visual-automation",
-    "load-testing",
-    "full-native-automation",
-    "apidocs",
-    "apiv2docs",
-    "workiz-helm",
-    "workiz-actions",
-    "ios-apple-credentials",
-    "apple-credentials",
-    "WorkizBizOpsBackup",
-    "microservice-for-infra-tests",
-    "nestjs-for-tests"
-  ]
-}
+    def __init__(self, token: str):
+        self.token = token
+        self.base_url = "https://api.github.com"
+        self.headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+    
+    async def list_org_repos(
+        self, 
+        org: str, 
+        per_page: int = 100
+    ) -> list[dict]:
+        """List all repos in an organization"""
+        repos = []
+        page = 1
+        
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            while True:
+                url = f"{self.base_url}/orgs/{org}/repos"
+                params = {
+                    "per_page": per_page,
+                    "page": page,
+                    "type": "all"
+                }
+                
+                async with session.get(url, params=params) as resp:
+                    if resp.status != 200:
+                        break
+                    
+                    page_repos = await resp.json()
+                    if not page_repos:
+                        break
+                    
+                    repos.extend(page_repos)
+                    page += 1
+        
+        return repos
+    
+    async def get_files_content(
+        self,
+        repo: str,
+        branch: str,
+        files: list[str],
+        base_path: str = ''
+    ) -> dict[str, Optional[str]]:
+        """Get content of multiple files in parallel"""
+        async def get_file(session, file_path):
+            full_path = f"{base_path}/{file_path}" if base_path else file_path
+            url = f"{self.base_url}/repos/{repo}/contents/{full_path}"
+            params = {"ref": branch}
+            
+            async with session.get(url, params=params) as resp:
+                if resp.status != 200:
+                    return file_path, None
+                
+                data = await resp.json()
+                if data.get('encoding') == 'base64':
+                    import base64
+                    content = base64.b64decode(data['content']).decode('utf-8')
+                    return file_path, content
+                
+                return file_path, None
+        
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            tasks = [get_file(session, f) for f in files]
+            results = await asyncio.gather(*tasks)
+            return dict(results)
+    
+    async def list_directory(
+        self,
+        repo: str,
+        branch: str,
+        path: str
+    ) -> list[dict]:
+        """List contents of a directory"""
+        url = f"{self.base_url}/repos/{repo}/contents/{path}"
+        params = {"ref": branch}
+        
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            async with session.get(url, params=params) as resp:
+                if resp.status != 200:
+                    return []
+                return await resp.json()
+```
+
+### Database Schema for Repository Discovery
+
+```sql
+-- Add to existing schema
+
+CREATE TABLE discovered_repositories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    default_branch VARCHAR(100) DEFAULT 'workiz.com',
+    primary_language VARCHAR(50),
+    framework VARCHAR(50),
+    repo_type VARCHAR(50),
+    databases TEXT[],
+    is_monorepo BOOLEAN DEFAULT FALSE,
+    is_archived BOOLEAN DEFAULT FALSE,
+    is_excluded BOOLEAN DEFAULT FALSE,  -- Excluded from review
+    last_push TIMESTAMP,
+    discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    confidence FLOAT DEFAULT 0.5,
+    
+    -- Indexes for fast lookups
+    INDEX idx_repo_framework (framework),
+    INDEX idx_repo_type (repo_type),
+    INDEX idx_repo_excluded (is_excluded),
+    INDEX idx_repo_archived (is_archived)
+);
+
+CREATE TABLE repository_services (
+    id SERIAL PRIMARY KEY,
+    repository_name VARCHAR(255) REFERENCES discovered_repositories(name),
+    service_path VARCHAR(500) NOT NULL,
+    framework VARCHAR(50),
+    language VARCHAR(50),
+    repo_type VARCHAR(50),
+    databases TEXT[],
+    
+    UNIQUE(repository_name, service_path)
+);
+
+-- View for active repos to review
+CREATE VIEW active_review_repositories AS
+SELECT 
+    dr.*,
+    COALESCE(
+        (SELECT json_agg(rs.*) FROM repository_services rs 
+         WHERE rs.repository_name = dr.name),
+        '[]'::json
+    ) as services
+FROM discovered_repositories dr
+WHERE 
+    dr.is_archived = FALSE 
+    AND dr.is_excluded = FALSE;
+```
+
+### Integration with PR Agent
+
+```python
+# pr_agent/services/repo_context_service.py
+
+class RepoContextService:
+    """Get repository context for PR reviews"""
+    
+    def __init__(self, discovery_service: RepoDiscoveryService):
+        self.discovery = discovery_service
+    
+    async def get_review_context(
+        self, 
+        repo_name: str,
+        file_path: Optional[str] = None
+    ) -> dict:
+        """
+        Get appropriate review context based on auto-detected framework.
+        For monorepos, uses file_path to determine which service.
+        """
+        repo = await self.discovery.get_repo_info(repo_name)
+        
+        if not repo:
+            return {'framework': 'unknown', 'rules': []}
+        
+        # For monorepos, find the relevant service
+        if repo.is_monorepo and file_path:
+            for service in repo.services:
+                if file_path.startswith(service.path):
+                    return {
+                        'framework': service.framework.value,
+                        'language': service.language.value,
+                        'repo_type': service.repo_type.value,
+                        'databases': service.databases,
+                        'rules': self._get_rules_for_framework(service.framework)
+                    }
+        
+        return {
+            'framework': repo.framework.value,
+            'language': repo.primary_language.value,
+            'repo_type': repo.repo_type.value,
+            'databases': repo.databases,
+            'rules': self._get_rules_for_framework(repo.framework)
+        }
+    
+    def _get_rules_for_framework(self, framework: Framework) -> list[str]:
+        """Get applicable rules for a framework"""
+        # Maps framework to rule sets
+        framework_rules = {
+            Framework.NESTJS: [
+                'nestjs_di_pattern',
+                'nestjs_structured_logging',
+                'nestjs_pubsub_pattern',
+                'nestjs_controller_structure',
+                'nestjs_functional_style',
+                'typescript_no_any',
+                'code_reuse',
+            ],
+            Framework.REACT: [
+                'react_hooks_rules',
+                'react_no_inline_styles',
+                'react_key_prop',
+                'typescript_no_any',
+                'code_reuse',
+            ],
+            Framework.FASTAPI: [
+                'python_type_hints',
+                'python_async_patterns',
+                'sql_injection_check',
+                'code_reuse',
+            ],
+            Framework.PHP_VANILLA: [
+                'php_no_raw_sql',
+                'php_security',
+                'code_reuse',
+            ],
+            # Add more...
+        }
+        
+        return framework_rules.get(framework, ['code_reuse'])
+```
+
+### Scheduled Discovery Refresh
+
+```python
+# Cron job to refresh repository discovery daily
+
+async def scheduled_repo_discovery():
+    """Run daily to discover new repos and refresh existing"""
+    discovery = RepoDiscoveryService(
+        github_token=settings.github.token,
+        organization=settings.github.organization,
+        db_connection=get_db(),
+        config=load_config('repos_config.yaml')
+    )
+    
+    logger.info("Starting scheduled repository discovery")
+    
+    repos = await discovery.discover_all_repos()
+    
+    logger.info(f"Discovered {len(repos)} repositories", {
+        'total': len(repos),
+        'by_framework': Counter(r.framework.value for r in repos),
+        'monorepos': sum(1 for r in repos if r.is_monorepo),
+        'excluded': sum(1 for r in repos if discovery._should_exclude(r.name))
+    })
+```
+
+### Benefits of Auto-Discovery
+
+| Feature | Hardcoded | Auto-Discovery |
+|---------|-----------|----------------|
+| New repos | Manual update | Auto-detected |
+| Framework detection | Error-prone | Analyzed from source |
+| Monorepo support | Complex config | Auto-detected services |
+| Maintenance | High | Low |
+| Accuracy | Depends on human | 95%+ with validation |
+| Staleness | Can be outdated | Refreshed daily |
 ```
 
 #### Phase 2: Custom Prompts for Workiz Stack (Week 1-2)
@@ -5900,175 +6326,37 @@ psql -d pr_agent -f db/init/01_schema.sql
 
 ### Initial Data Population
 
-Create `repos.yaml` configuration:
+**Note:** Repository configuration is handled automatically by the Auto-Discovery Service.
+You only need to configure exclusions in `repos_config.yaml` (see Automated Repository Discovery section above).
 
-```yaml
-# repos.yaml - Repository configuration for indexing
-# Based on actual Workiz repositories
+For initial population, run:
 
-repositories:
-  # =====================================================
-  # PHP Backend (Main Legacy Application)
-  # =====================================================
-  - url: https://github.com/Workiz/backend.git
-    language: php
-    framework: custom  # PHP with custom MVC, uses MySQL, MongoDB, Elasticsearch
-    databases:
-      - mysql
-      - mongodb
-      - elasticsearch
-    description: "Main PHP backend with legacy API, uses Traefik for routing"
-    
-  # =====================================================
-  # NestJS Microservices (TypeScript)
-  # =====================================================
-  - url: https://github.com/Workiz/auth.git
-    language: typescript
-    framework: nestjs
-    databases:
-      - mysql
-    internal_packages:
-      - "@workiz/all-exceptions-filter"
-      - "@workiz/config-loader"
-      - "@workiz/is-boolean-validation-pipe"
-      - "@workiz/jwt-headers-generator"
-      - "@workiz/node-logger"
-      - "@workiz/pubsub-decorator-reflector"
-      - "@workiz/pubsub-publish-client"
-      - "@workiz/redis-nestjs"
-      - "@workiz/socket-io-updater"
-    description: "Authentication service - handles sessions, 2FA, API keys"
-    
-  - url: https://github.com/Workiz/crm-service.git
-    language: typescript
-    framework: nestjs
-    databases:
-      - mysql
-    description: "CRM service for customer relationship management"
-    
-  - url: https://github.com/Workiz/ai-completion-service.git
-    language: typescript
-    framework: nestjs
-    description: "AI completion service for text generation"
-    
-  - url: https://github.com/Workiz/csv-uploader.git
-    language: typescript
-    framework: nestjs
-    description: "CSV upload and processing service"
-    
-  - url: https://github.com/Workiz/core-service.git
-    language: typescript
-    framework: nestjs
-    databases:
-      - mysql
-    description: "Core business logic service"
-    
-  - url: https://github.com/Workiz/reporting-service.git
-    language: typescript
-    framework: nestjs
-    databases:
-      - mysql
-      - elasticsearch
-    description: "Reporting and analytics service"
+```bash
+# 1. Auto-discover all repositories (uses GitHub API)
+python -m pr_agent.cli_admin discover-repos
 
-  # =====================================================
-  # Python Services
-  # =====================================================
-  - url: https://github.com/Workiz/python-service.git
-    language: python
-    framework: fastapi  # or django
-    databases:
-      - postgres
-    description: "Python microservice with PostgreSQL"
+# 2. Index discovered repos for RAG (code embeddings)
+python -m pr_agent.cli_admin index-repos
 
-  # =====================================================
-  # React Frontend (TypeScript)
-  # =====================================================
-  - url: https://github.com/Workiz/web-app.git
-    language: typescript
-    framework: react
-    description: "Main web application frontend"
-    
-  - url: https://github.com/Workiz/mobile-web.git
-    language: typescript
-    framework: react
-    description: "Mobile-optimized web frontend"
+# 3. Sync Jira projects
+python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS,INFRA,MOBILE
 
-  # =====================================================
-  # Internal NPM Packages
-  # =====================================================
-  - url: https://github.com/Workiz/all-exceptions-filter.git
-    language: typescript
-    framework: nestjs
-    is_internal_package: true
-    
-  - url: https://github.com/Workiz/config-loader.git
-    language: typescript
-    framework: nestjs
-    is_internal_package: true
-    
-  - url: https://github.com/Workiz/node-logger.git
-    language: typescript
-    framework: nestjs
-    is_internal_package: true
-    
-  - url: https://github.com/Workiz/pubsub-decorator-reflector.git
-    language: typescript
-    framework: nestjs
-    is_internal_package: true
-    
-  - url: https://github.com/Workiz/pubsub-publish-client.git
-    language: typescript
-    framework: nestjs
-    is_internal_package: true
-    
-  - url: https://github.com/Workiz/redis-nestjs.git
-    language: typescript
-    framework: nestjs
-    is_internal_package: true
-
-# Jira configuration
-jira:
-  projects:
-    - WORK
-    - DEVOPS
-    - INFRA
-    - MOBILE
-
-# Indexing settings
-settings:
-  branch: main
-  exclude_paths:
-    - node_modules/
-    - vendor/
-    - dist/
-    - build/
-    - __tests__/
-    - test/
-    - coverage/
-    - .next/
-    - _assets/
-    - gCache/
-    - tmp/
-    
-  # Database patterns to detect
-  database_patterns:
-    mysql:
-      - "mysql2"
-      - "typeorm"
-      - "knex"
-    postgres:
-      - "asyncpg"
-      - "psycopg2"
-      - "sqlalchemy"
-    mongodb:
-      - "mongoose"
-      - "mongodb"
-      - "pymongo"
-    elasticsearch:
-      - "@elastic/elasticsearch"
-      - "elasticsearch"
+# 4. Verify status
+python -m pr_agent.cli_admin status
 ```
+
+**What happens during discovery:**
+- Fetches all repos from the `Workiz` GitHub organization
+- Auto-detects framework (NestJS, React, FastAPI, PHP, etc.) by analyzing `package.json`, `composer.json`, `pyproject.toml`
+- Detects databases used (MySQL, PostgreSQL, MongoDB, Elasticsearch, Redis)
+- Identifies monorepos and their internal services
+- Applies exclusion patterns from `repos_config.yaml`
+- Saves results to PostgreSQL for caching
+
+**Discovery runs automatically:**
+- Daily cron job refreshes the repo list
+- New repos are auto-detected
+- Framework changes are tracked
 
 ---
 
@@ -6269,8 +6557,11 @@ export JIRA_BASE_URL="https://workiz.atlassian.net"
 export JIRA_API_TOKEN="your_jira_token"
 export JIRA_EMAIL="your_email@workiz.com"
 
-# Run initial indexing (this may take a while)
-python -m pr_agent.cli_admin index-repos --config repos.yaml
+# Run initial repository discovery (auto-detects all repos)
+python -m pr_agent.cli_admin discover-repos
+
+# Index discovered repos for RAG
+python -m pr_agent.cli_admin index-repos
 
 # Run Jira sync
 python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS,INFRA,MOBILE --full
@@ -6307,8 +6598,11 @@ For environments without webhook access, set up cron jobs:
 ```bash
 # Add to crontab -e
 
-# Incremental repo sync every 6 hours
-0 */6 * * * cd /path/to/workiz-pr-agent && source venv/bin/activate && python -m pr_agent.cli_admin index-repos --config repos.yaml --incremental
+# Discover new repos and refresh framework detection daily
+0 2 * * * cd /path/to/workiz-pr-agent && source venv/bin/activate && python -m pr_agent.cli_admin discover-repos
+
+# Incremental repo indexing every 6 hours
+0 */6 * * * cd /path/to/workiz-pr-agent && source venv/bin/activate && python -m pr_agent.cli_admin index-repos --incremental
 
 # Jira sync every 2 hours
 0 */2 * * * cd /path/to/workiz-pr-agent && source venv/bin/activate && python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS,INFRA,MOBILE
@@ -9329,7 +9623,9 @@ Create: `pr_agent/cli_admin.py`
 Admin CLI for managing PR Agent data.
 
 Usage:
-    python -m pr_agent.cli_admin index-repos --config repos.yaml
+    python -m pr_agent.cli_admin discover-repos              # Auto-discover all repos
+    python -m pr_agent.cli_admin index-repos                 # Index repos for RAG
+    python -m pr_agent.cli_admin index-repos --incremental   # Incremental update
     python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS
     python -m pr_agent.cli_admin status
 """
@@ -9463,9 +9759,13 @@ if __name__ == '__main__':
     main()
 ```
 
-### Repository Configuration Example
+### Repository Configuration
 
-Create: `repos.yaml` (example config)
+Repositories are **auto-discovered** using the GitHub API. You only need to configure:
+
+1. **`repos_config.yaml`** - Exclusion patterns and overrides (see Automated Repository Discovery section)
+
+Example `repos_config.yaml`:
 
 ```yaml
 # Repository configuration for indexing
@@ -10529,8 +10829,9 @@ export JIRA_EMAIL="your_email@workiz.com"
 # Run auto-discovery (will find all repos and projects)
 python -m pr_agent.cli_admin discover --orgs workiz
 
-# Or manually index specific repos
-python -m pr_agent.cli_admin index-repos --config repos.yaml
+# Discover and index all repos (auto-detection)
+python -m pr_agent.cli_admin discover-repos
+python -m pr_agent.cli_admin index-repos
 
 # Sync Jira
 python -m pr_agent.cli_admin sync-jira --full
@@ -11173,7 +11474,8 @@ PR with comments → /autofix → Fixes PR created → Review loop → All fixed
 
 | Command | Purpose |
 |---------|---------|
-| `python -m pr_agent.cli_admin index-repos --config repos.yaml` | Full repository indexing |
+| `python -m pr_agent.cli_admin discover-repos` | Auto-discover all organization repos |
+| `python -m pr_agent.cli_admin index-repos` | Full repository indexing for RAG |
 | `python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS --full` | Full Jira sync |
 | `python -m pr_agent.cli_admin status` | Check indexing status |
 | Docker Compose + `db/init/01_schema.sql` | Database schema creation |
@@ -11233,7 +11535,7 @@ db/
     └── 01_schema.sql                    # PostgreSQL schema
 docker-compose.local.yml                  # Local DB setup
 Dockerfile.production                     # Production Docker image
-repos.yaml                                # Repository configuration
+repos_config.yaml                         # Exclusion patterns & overrides (minimal config)
 ```
 
 ### Quick Start Checklist (Local Development)
@@ -12106,7 +12408,7 @@ class TestNestJSAnalyzer:
 1. **Review this document** with the team
 2. **Set up local development environment** following the guide above
 3. **Create the database schema** in a local PostgreSQL instance
-4. **Configure repos.yaml** with your actual repository URLs
+4. **Run auto-discovery** to populate repos (`python -m pr_agent.cli_admin discover-repos`)
 5. **Start Phase 1** implementation (database setup + global context)
 
 For questions or clarifications, refer to the original qodo-ai/pr-agent documentation at https://qodo-merge-docs.qodo.ai/
