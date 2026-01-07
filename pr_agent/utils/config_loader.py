@@ -44,10 +44,24 @@ def _get_env_file_path(service_root: Path) -> Path:
     return service_root / f'.env.{env_name}'
 
 
+class ConfigLoadError(Exception):
+    """Raised when configuration cannot be loaded."""
+    pass
+
+
 def _get_dotenv_config(env_file_path: Path) -> dict[str, str]:
-    """Load configuration from a .env file."""
-    content = env_file_path.read_text()
-    return _parse_env_content(content)
+    """Load configuration from a .env file.
+    
+    Raises:
+        ConfigLoadError: If the file cannot be read.
+    """
+    try:
+        content = env_file_path.read_text()
+        return _parse_env_content(content)
+    except PermissionError as e:
+        raise ConfigLoadError(f"Permission denied reading config file: {env_file_path}") from e
+    except IOError as e:
+        raise ConfigLoadError(f"Failed to read config file {env_file_path}: {e}") from e
 
 
 SECRET_MANAGER_TIMEOUT_SECONDS = float(os.environ.get('SECRET_MANAGER_TIMEOUT', '30'))
@@ -61,11 +75,26 @@ def _get_secret_manager_config(
     """Load configuration from Google Cloud Secret Manager.
     
     Timeout is configurable via SECRET_MANAGER_TIMEOUT env var (default: 30s).
+    
+    Raises:
+        ConfigLoadError: If secrets cannot be fetched (auth, network, not found).
     """
-    from google.api_core import retry
-    from google.cloud import secretmanager
+    try:
+        from google.api_core import retry
+        from google.api_core.exceptions import GoogleAPIError, NotFound, PermissionDenied
+        from google.cloud import secretmanager
+    except ImportError as e:
+        raise ConfigLoadError(
+            "google-cloud-secret-manager package not installed. "
+            "Install with: pip install google-cloud-secret-manager"
+        ) from e
 
-    client = secretmanager.SecretManagerServiceClient()
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+    except Exception as e:
+        raise ConfigLoadError(
+            f"Failed to create Secret Manager client. Check GCP credentials: {e}"
+        ) from e
 
     node_env = os.environ.get('NODE_ENV', 'development')
     env_name = env_name_override if env_name_override else ('prod' if node_env == 'production' else node_env)
@@ -77,19 +106,36 @@ def _get_secret_manager_config(
 
     def fetch_secrets(name: str) -> dict[str, str]:
         secret_path = f'projects/{project_id}/secrets/{name}/versions/latest'
-        response = client.access_secret_version(
-            request={'name': secret_path},
-            timeout=SECRET_MANAGER_TIMEOUT_SECONDS,
-            retry=retry.Retry(
-                initial=1.0,
-                maximum=10.0,
-                multiplier=2.0,
-                deadline=SECRET_MANAGER_TIMEOUT_SECONDS,
-            ),
-        )
+        try:
+            response = client.access_secret_version(
+                request={'name': secret_path},
+                timeout=SECRET_MANAGER_TIMEOUT_SECONDS,
+                retry=retry.Retry(
+                    initial=1.0,
+                    maximum=10.0,
+                    multiplier=2.0,
+                    deadline=SECRET_MANAGER_TIMEOUT_SECONDS,
+                ),
+            )
+        except NotFound:
+            raise ConfigLoadError(
+                f"Secret not found: {name}. "
+                f"Create it in GCP project '{project_id}' or check the secret name."
+            )
+        except PermissionDenied as e:
+            raise ConfigLoadError(
+                f"Permission denied accessing secret '{name}'. "
+                f"Check service account permissions: {e}"
+            )
+        except GoogleAPIError as e:
+            raise ConfigLoadError(f"Failed to fetch secret '{name}': {e}")
+        except Exception as e:
+            raise ConfigLoadError(
+                f"Unexpected error fetching secret '{name}': {type(e).__name__}: {e}"
+            )
 
         if not response.payload or not response.payload.data:
-            raise ValueError(f'No data loaded from Google Secrets: {name}')
+            raise ConfigLoadError(f'Secret exists but has no data: {name}')
 
         content = response.payload.data.decode('UTF-8')
         return _parse_env_content(content)
@@ -97,8 +143,11 @@ def _get_secret_manager_config(
     config = fetch_secrets(secrets_name)
 
     if temp_cloud_env_secret:
-        cloud_env_config = fetch_secrets(temp_cloud_env_secret)
-        config = {**config, **cloud_env_config}
+        try:
+            cloud_env_config = fetch_secrets(temp_cloud_env_secret)
+            config = {**config, **cloud_env_config}
+        except ConfigLoadError:
+            logger.debug(f"Optional namespace secret not found: {temp_cloud_env_secret}")
 
     return config
 
