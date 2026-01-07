@@ -4,6 +4,7 @@ Following the same pattern as spam-detect service.
 """
 import logging
 import os
+from contextlib import contextmanager
 
 from pgvector.psycopg import register_vector
 from psycopg_pool import ConnectionPool
@@ -18,11 +19,9 @@ _vector_registered = False
 _vector_registration_failed = False
 
 
-def get_conn():
-    """Get a connection from the pool with pgvector registered."""
+def _register_vector_once(conn):
+    """Register pgvector extension on first connection."""
     global _vector_registered, _vector_registration_failed
-    
-    conn = pool.getconn()
     
     if not _vector_registered and not _vector_registration_failed:
         try:
@@ -35,11 +34,42 @@ def get_conn():
                 "Failed to register pgvector extension - vector operations may not work",
                 extra={"context": {"error": str(e)}}
             )
+
+
+def get_conn():
+    """
+    Get a connection from the pool with pgvector registered.
     
+    IMPORTANT: You MUST call put_conn() when done to return the connection.
+    Prefer using get_db_connection() context manager instead.
+    """
+    conn = pool.getconn()
+    _register_vector_once(conn)
     return conn
 
 
 def put_conn(conn):
     """Return a connection to the pool."""
     pool.putconn(conn)
+
+
+@contextmanager
+def get_db_connection():
+    """
+    Context manager for database connections (recommended).
+    
+    Automatically returns connection to pool when done.
+    
+    Usage:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT * FROM repositories")
+                rows = cur.fetchall()
+    """
+    conn = pool.getconn()
+    _register_vector_once(conn)
+    try:
+        yield conn
+    finally:
+        pool.putconn(conn)
 
