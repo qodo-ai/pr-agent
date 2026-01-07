@@ -138,13 +138,13 @@ def run_migrations():
     
     with psycopg.connect(database_url) as conn:
         logger.debug("Setting up migration tracking table")
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                filename VARCHAR(255) PRIMARY KEY,
-                executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
+        with conn.transaction():
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    filename VARCHAR(255) PRIMARY KEY,
+                    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
         
         result = conn.execute("SELECT filename FROM schema_migrations")
         executed = {row[0] for row in result.fetchall()}
