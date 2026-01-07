@@ -5,6 +5,7 @@ Following the same pattern as spam-detect service.
 import logging
 import os
 import threading
+import warnings
 from contextlib import contextmanager
 
 from pgvector.psycopg import register_vector
@@ -69,9 +70,28 @@ def get_conn():
     """
     Get a connection from the pool with pgvector registered.
     
+    .. deprecated::
+        Use get_db_connection() context manager instead to prevent connection leaks.
+        This function requires manual cleanup via put_conn().
+    
     IMPORTANT: You MUST call put_conn() when done to return the connection.
-    Prefer using get_db_connection() context manager instead.
+    Failing to do so will leak connections and eventually exhaust the pool.
+    
+    Example of UNSAFE usage (don't do this):
+        conn = get_conn()
+        conn.execute(...)  # If this raises, connection is leaked!
+        put_conn(conn)
+    
+    Use this instead:
+        with get_db_connection() as conn:
+            conn.execute(...)  # Safe - connection returned even on error
     """
+    warnings.warn(
+        "get_conn() is deprecated and may leak connections. "
+        "Use get_db_connection() context manager instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     conn = pool.getconn()
     _vector_tracker.register_on_connection(conn)
     return conn
