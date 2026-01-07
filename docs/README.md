@@ -84,16 +84,19 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **Admin UI** | Web dashboard for management | ✅ Planned |
 | **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
 
-### Automation Summary
+### Automation Summary (100% Webhook-Driven)
 
-| Process | Trigger | Frequency |
-|---------|---------|-----------|
-| **PR Review** | GitHub webhook (PR opened) | Real-time |
-| **Code Indexing** | GitHub webhook (push to main) | Real-time |
-| **RepoSwarm Analysis** | GitHub webhook + CronJob | Real-time + every 12h |
-| **Jira Sync** | Jira webhook + CronJob | Real-time + every 2h |
-| **Repo Discovery** | CronJob | Every 6 hours |
-| **NPM Packages Sync** | CronJob | Daily at 3 AM |
+| Process | Trigger | Latency |
+|---------|---------|---------|
+| **PR Review** | GitHub webhook (`pull_request`) | ⚡ Real-time |
+| **Code Indexing** | GitHub webhook (`push` to main) | ⚡ Real-time |
+| **RepoSwarm Analysis** | GitHub webhook (`push` to main) | ⚡ Real-time |
+| **Repo Discovery** | GitHub org webhook (`repository.created`) | ⚡ Real-time |
+| **Jira Sync** | Jira webhook (`issue_created/updated`) | ⚡ Real-time |
+| **NPM Packages Sync** | GitHub webhook (`registry_package.published`) | ⚡ Real-time |
+| **Reconciliation** | Weekly CronJob (safety net) | Weekly |
+
+**No frequent CronJobs needed!** All updates happen instantly via webhooks.
 
 ---
 

@@ -428,27 +428,13 @@ preUpgradeHook:
     - "-c"
     - "NODE_ENV=staging GCP_PROJECT_ID=workiz-development python scripts/run_migrations.py"
 
-# Scheduled jobs (CronJobs)
+# Scheduled jobs (CronJobs) - Only for reconciliation/safety net
+# Primary triggers are webhooks (see Continuous Updates section)
 cronjobs:
-  # Discovery - every 6 hours
-  - name: discovery
-    schedule: "0 */6 * * *"
-    command: ["python", "scripts/cli_admin.py", "discover", "--orgs", "Workiz"]
-  
-  # RepoSwarm analysis - every 12 hours
-  - name: reposwarm-analysis
-    schedule: "0 */12 * * *"
-    command: ["python", "scripts/cli_admin.py", "analyze-repos", "--all"]
-  
-  # Jira sync - every 2 hours
-  - name: jira-sync
-    schedule: "0 */2 * * *"
-    command: ["python", "scripts/cli_admin.py", "sync-jira"]
-  
-  # NPM packages sync - daily at 3 AM
-  - name: npm-sync
-    schedule: "0 3 * * *"
-    command: ["python", "scripts/cli_admin.py", "sync-npm"]
+  # Weekly reconciliation - catch any missed webhook events
+  - name: weekly-reconciliation
+    schedule: "0 2 * * 0"  # Sunday 2 AM
+    command: ["python", "scripts/cli_admin.py", "reconcile", "--all"]
 ```
 
 Create `infra/helm/prod.yaml`:
@@ -955,6 +941,36 @@ def status():
     click.echo(f"Reviews: {reviews}")
 
 
+@cli.command()
+@click.option('--all', 'reconcile_all', is_flag=True, help='Reconcile everything')
+@click.option('--repos', is_flag=True, help='Reconcile repositories only')
+@click.option('--jira', is_flag=True, help='Reconcile Jira only')
+@click.option('--npm', is_flag=True, help='Reconcile NPM packages only')
+def reconcile(reconcile_all, repos, jira, npm):
+    """
+    Reconcile data - catch any missed webhook events.
+    Used as weekly safety net (Sunday 2 AM CronJob).
+    """
+    if reconcile_all or repos:
+        click.echo("Reconciling repositories...")
+        # Re-discover all repos and check for changes
+        ctx = click.get_current_context()
+        ctx.invoke(discover, orgs=['Workiz'])
+        ctx.invoke(analyze_repos, analyze_all=True)
+    
+    if reconcile_all or jira:
+        click.echo("Reconciling Jira tickets...")
+        ctx = click.get_current_context()
+        ctx.invoke(sync_jira, full=True)
+    
+    if reconcile_all or npm:
+        click.echo("Reconciling NPM packages...")
+        ctx = click.get_current_context()
+        ctx.invoke(sync_npm)
+    
+    click.echo("✅ Reconciliation complete")
+
+
 if __name__ == '__main__':
     cli()
 ```
@@ -988,75 +1004,79 @@ python scripts/cli_admin.py status
 
 ## 4. Continuous Updates
 
-### Complete Automation Wiring
+### Webhook-Driven Architecture (No CronJobs Needed!)
+
+All updates are triggered by **webhooks** in real-time. CronJobs are only used as a weekly safety net.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                           Automation Flow Diagram                                     │
+│                    Real-Time Webhook Automation Flow                                  │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                       │
-│  TRIGGERS                          ACTIONS                         STORAGE           │
-│  ────────                          ───────                         ───────           │
+│  GITHUB WEBHOOKS (Real-time)                                                         │
+│  ───────────────────────────                                                         │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ GitHub PR    │────────────────► WorkizPRReviewer                                  │
-│  │ (webhook)    │                  ├─► Load RepoSwarm context ────► PostgreSQL       │
-│  └──────────────┘                  ├─► Load Jira context ─────────► PostgreSQL       │
-│                                    ├─► Apply custom rules                             │
-│                                    ├─► Run language analyzers                         │
-│                                    └─► Post review comments ──────► GitHub           │
+│  ┌────────────────────┐                                                              │
+│  │ pull_request       │───────► WorkizPRReviewer                                     │
+│  │ (opened/updated)   │         ├─► Load context (RepoSwarm, Jira)                   │
+│  └────────────────────┘         ├─► Apply rules & analyzers                          │
+│                                 └─► Post review ──────────────────► GitHub           │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ GitHub Push  │────────────────► index_repository_incremental                      │
-│  │ to main      │                  └─► Update code_chunks ────────► PostgreSQL       │
-│  │ (webhook)    │────────────────► run_reposwarm_analysis                            │
-│  └──────────────┘                  └─► Update repo_analysis_cache ► PostgreSQL       │
+│  ┌────────────────────┐                                                              │
+│  │ push               │───────► index_repository_incremental()                       │
+│  │ (to main branch)   │         └─► Update code_chunks ───────────► PostgreSQL       │
+│  └────────────────────┘───────► run_reposwarm_analysis()                             │
+│                                 └─► Update repo_analysis_cache ───► PostgreSQL       │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ Jira Update  │────────────────► sync_single_jira_ticket                           │
-│  │ (webhook)    │                  └─► Update jira_tickets ───────► PostgreSQL       │
-│  └──────────────┘                                                                    │
+│  ┌────────────────────┐                                                              │
+│  │ repository.created │───────► discover_and_register_repo()                         │
+│  │ (org-level webhook)│         └─► Insert into repositories ─────► PostgreSQL       │
+│  └────────────────────┘         └─► Trigger initial RepoSwarm analysis               │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ CronJob      │────────────────► GitHubDiscoveryService                            │
-│  │ Every 6h     │                  └─► Discover new repos ────────► PostgreSQL       │
-│  └──────────────┘                                                                    │
+│  ┌────────────────────┐                                                              │
+│  │ registry_package   │───────► sync_internal_package()                              │
+│  │ .published         │         └─► Update internal_packages ─────► PostgreSQL       │
+│  └────────────────────┘                                                              │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ CronJob      │────────────────► RepositoryInvestigator                            │
-│  │ Every 12h    │                  └─► Analyze all repos ─────────► PostgreSQL       │
-│  └──────────────┘                                                                    │
+│  JIRA WEBHOOKS (Real-time)                                                           │
+│  ─────────────────────────                                                           │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ CronJob      │────────────────► JiraClient.sync_projects()                        │
-│  │ Every 2h     │                  └─► Sync all tickets ──────────► PostgreSQL       │
-│  └──────────────┘                                                                    │
+│  ┌────────────────────┐                                                              │
+│  │ jira:issue_created │───────► sync_single_jira_ticket()                            │
+│  │ jira:issue_updated │         └─► Upsert jira_tickets ──────────► PostgreSQL       │
+│  └────────────────────┘                                                              │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ CronJob      │────────────────► InternalPackageRegistry                           │
-│  │ Daily 3AM    │                  └─► Sync @workiz packages ─────► PostgreSQL       │
-│  └──────────────┘                                                                    │
+│  SAFETY NET (Weekly CronJob)                                                         │
+│  ───────────────────────────                                                         │
 │                                                                                       │
-│  ┌──────────────┐                                                                    │
-│  │ Admin API    │────────────────► Manual triggers for any action                    │
-│  │ /api/admin/* │                                                                    │
-│  └──────────────┘                                                                    │
+│  ┌────────────────────┐                                                              │
+│  │ Weekly Reconcile   │───────► Catch any missed webhook events                      │
+│  │ (Sunday 2 AM)      │         ├─► Re-scan all repos for changes                    │
+│  └────────────────────┘         ├─► Re-sync Jira projects                            │
+│                                 └─► Re-sync NPM packages                             │
 │                                                                                       │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Update Mechanisms
 
-| Method | Trigger | Action | Target Table |
-|--------|---------|--------|--------------|
-| **GitHub Webhook** | Push to main branch | Code chunks indexing + RepoSwarm analysis | `code_chunks`, `repo_analysis_cache` |
-| **GitHub Webhook** | PR opened/updated | Review with context | `review_history`, `api_usage` |
-| **Jira Webhook** | Issue created/updated | Sync single ticket | `jira_tickets` |
-| **K8s CronJob** | Every 6 hours | Full repo discovery | `repositories` |
-| **K8s CronJob** | Every 12 hours | RepoSwarm analysis (all repos) | `repo_analysis_cache` |
-| **K8s CronJob** | Every 2 hours | Jira incremental sync | `jira_tickets` |
-| **K8s CronJob** | Daily at 3 AM | NPM packages sync | `internal_packages` |
-| **Admin API** | Manual trigger | On-demand any action | Any |
+| Event Source | Webhook Event | Action | Real-Time? |
+|--------------|---------------|--------|------------|
+| **GitHub** | `pull_request` | PR Review | ✅ Yes |
+| **GitHub** | `push` (main branch) | Code indexing + RepoSwarm analysis | ✅ Yes |
+| **GitHub** | `repository.created` | New repo discovery + initial analysis | ✅ Yes |
+| **GitHub** | `registry_package.published` | NPM package sync | ✅ Yes |
+| **Jira** | `jira:issue_created/updated` | Ticket sync | ✅ Yes |
+| **K8s CronJob** | Weekly (Sunday 2 AM) | Reconciliation (safety net) | Weekly |
+
+### Why No Frequent CronJobs?
+
+| Old Approach | Problem | New Approach |
+|--------------|---------|--------------|
+| CronJob every 6h for discovery | Delays new repo detection by up to 6h | `repository.created` webhook → instant |
+| CronJob every 12h for analysis | Redundant (push already triggers it) | `push` webhook → instant |
+| CronJob every 2h for Jira | Redundant (Jira webhook already exists) | Jira webhook → instant |
+| CronJob daily for NPM | Delays package version detection | `registry_package.published` → instant |
 
 ### Webhook Handler Updates
 
@@ -1138,6 +1158,79 @@ async def trigger_repo_analysis(repo_name: str):
     
     asyncio.create_task(run_reposwarm_analysis(repo_url, None))
     return {"status": "analysis_started", "repo": repo_name}
+
+
+@router.post("/api/v1/webhooks/github/organization")
+async def handle_github_org_webhook(request: Request):
+    """
+    Handle GitHub organization-level webhooks.
+    Configure at: GitHub Org Settings → Webhooks
+    Events: repository, registry_package
+    """
+    payload = await request.json()
+    action = payload.get('action')
+    
+    # New repository created
+    if payload.get('repository') and action == 'created':
+        repo = payload['repository']
+        asyncio.create_task(discover_new_repository(
+            org=repo['owner']['login'],
+            repo_name=repo['name'],
+            repo_url=repo['html_url'],
+            default_branch=repo.get('default_branch', 'main')
+        ))
+        return {"status": "repo_discovery_started"}
+    
+    # NPM package published (GitHub Packages)
+    if payload.get('registry_package') and action == 'published':
+        package = payload['registry_package']
+        if package.get('package_type') == 'npm':
+            asyncio.create_task(sync_npm_package(
+                package_name=package['name'],
+                version=package.get('package_version', {}).get('version')
+            ))
+            return {"status": "package_sync_started"}
+    
+    return {"status": "ignored"}
+
+
+async def discover_new_repository(org: str, repo_name: str, repo_url: str, default_branch: str):
+    """Handle newly created repository."""
+    from pr_agent.db.conn import get_conn, put_conn
+    from pr_agent.services.discovery_service import GitHubDiscoveryService
+    
+    conn = get_conn()
+    try:
+        github_token = os.environ.get('GITHUB_USER_TOKEN')
+        discovery = GitHubDiscoveryService(github_token, conn)
+        
+        # Detect stack and register
+        result = await discovery.register_single_repo(org, repo_name, repo_url, default_branch)
+        
+        # Trigger initial RepoSwarm analysis
+        if result.get('registered'):
+            await run_reposwarm_analysis(repo_url, default_branch)
+    finally:
+        put_conn(conn)
+
+
+async def sync_npm_package(package_name: str, version: str):
+    """Sync a single NPM package from GitHub Packages."""
+    from pr_agent.db.conn import get_conn, put_conn
+    
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO internal_packages (package_name, latest_version, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (package_name) DO UPDATE SET
+                    latest_version = EXCLUDED.latest_version,
+                    updated_at = EXCLUDED.updated_at
+            """, (f"@workiz/{package_name}", version))
+        conn.commit()
+    finally:
+        put_conn(conn)
 ```
 
 ---
@@ -1439,9 +1532,24 @@ JIRA_EMAIL=...
 - [ ] Test webhook endpoints
 - [ ] Run production workflow
 
-#### Jira Webhook
-- [ ] Create webhook in Jira settings
-- [ ] Point to `https://pr-agent.workiz.dev/api/v1/webhooks/jira`
+#### Webhooks Setup
+
+**GitHub App Webhook** (PR-level events):
+- [ ] Webhook URL: `https://pr-agent.workiz.dev/api/v1/github_webhooks`
+- [ ] Events: Issue comment, Pull request, Pull request review, Push
+
+**GitHub Organization Webhook** (org-level events):
+- [ ] Go to: GitHub Org Settings → Webhooks → Add webhook
+- [ ] Webhook URL: `https://pr-agent.workiz.dev/api/v1/webhooks/github/organization`
+- [ ] Content type: `application/json`
+- [ ] Events: Select individual events:
+  - [ ] `Repositories` (for new repo detection)
+  - [ ] `Registry packages` (for @workiz package updates)
+
+**Jira Webhook**:
+- [ ] Create webhook in Jira Settings → System → Webhooks
+- [ ] URL: `https://pr-agent.workiz.dev/api/v1/webhooks/jira`
+- [ ] Events: Issue created, Issue updated
 
 #### Verification
 - [ ] Check pods are running: `kubectl get pods -n staging`
@@ -1449,13 +1557,12 @@ JIRA_EMAIL=...
 - [ ] Test a PR review
 - [ ] Verify migrations ran (pre-upgrade hook)
 
-#### Automation Verification
-- [ ] Verify CronJobs are created: `kubectl get cronjobs -n staging`
-- [ ] Test push webhook: push to a repo, verify RepoSwarm analysis runs
-- [ ] Test Jira webhook: update a ticket, verify sync runs
-- [ ] Manually trigger discovery: `POST /api/v1/admin/discover`
-- [ ] Check CLI admin status: `python scripts/cli_admin.py status`
-- [ ] Verify API cost tracking is recording: check `api_usage` table
+#### Webhook Testing
+- [ ] **PR webhook**: Create a test PR → verify review runs
+- [ ] **Push webhook**: Push to main → verify RepoSwarm analysis runs
+- [ ] **Repo created webhook**: Create a test repo → verify it's discovered
+- [ ] **Jira webhook**: Update a ticket → verify sync runs
+- [ ] **NPM package webhook**: Publish a test package → verify sync runs
 
 #### End-to-End Test Checklist
 - [ ] Create a test PR with a NestJS change
@@ -1465,6 +1572,7 @@ JIRA_EMAIL=...
 - [ ] Verify custom rules are applied (structured logging, etc.)
 - [ ] Test `/auto-fix` command (if enabled)
 - [ ] Check Admin UI dashboard shows activity
+- [ ] Verify API cost tracking in `api_usage` table
 
 ---
 
