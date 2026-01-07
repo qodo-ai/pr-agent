@@ -2,6 +2,13 @@
 """
 Run SQL migrations from migrations/ directory.
 Following the same pattern as spam-detect service.
+
+Preferred usage:
+    PYTHONPATH=. python scripts/run_migrations.py
+    
+Or install in dev mode:
+    pip install -e .
+    python scripts/run_migrations.py
 """
 import os
 import sys
@@ -9,8 +16,15 @@ from pathlib import Path
 
 import psycopg
 
-PROJECT_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+def _ensure_project_importable():
+    """Add project root to path only if pr_agent isn't already importable."""
+    try:
+        import pr_agent  # noqa: F401
+    except ImportError:
+        project_root = Path(__file__).parent.parent
+        sys.path.insert(0, str(project_root))
+
+_ensure_project_importable()
 
 from pr_agent.log_config import setup_logging, get_logger
 
