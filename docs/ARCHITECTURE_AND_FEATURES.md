@@ -1842,6 +1842,27 @@ class GitHubDiscoveryService:
 
 ## 11. NPM Package Management
 
+### Overview
+
+Workiz internal packages are hosted on **GitHub Packages** (not npmjs.org):
+
+- **Registry**: `https://npm.pkg.github.com/`
+- **Scope**: `@workiz`
+- **Source**: `Workiz/architecture` repository, `packages/` directory
+- **Publishing**: Automatic via `release-packages.yml` workflow on push to `main`
+- **Authentication**: 
+  - Install: `NPM_READONLY_TOKEN`
+  - Publish: `GH_TOKEN_PACKAGES`
+
+### .npmrc Configuration
+
+Services that use `@workiz` packages must have this `.npmrc`:
+
+```
+@workiz:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${NPM_READONLY_TOKEN}
+```
+
 ### Package Analyzer
 
 ```python
@@ -1865,9 +1886,13 @@ class PackageDependencyIssue:
 class NPMPackageAnalyzer:
     """Analyze NPM package dependencies in PRs."""
     
-    def __init__(self, db, internal_packages: List[str] = None):
+    def __init__(self, db, github_token: str, internal_packages: List[str] = None):
         self.db = db
+        self.github_token = github_token
         self.internal_packages = internal_packages or ['@workiz/']
+        # GitHub Packages registry for @workiz packages
+        self.github_packages_api = "https://api.github.com/orgs/Workiz/packages/npm"
+        # Public NPM registry for external packages
         self.npm_registry = "https://registry.npmjs.org"
     
     def is_internal_package(self, package_name: str) -> bool:
@@ -1952,6 +1977,124 @@ class NPMPackageAnalyzer:
         clean = re.sub(r'^[\^~>=<]+', '', version_spec)
         clean = re.sub(r'[^0-9.].*$', '', clean)
         return clean if clean else None
+    
+    async def _get_internal_package_latest(self, pkg_name: str) -> Optional[str]:
+        """Get latest version of internal @workiz package from GitHub Packages."""
+        # First check database cache
+        async with self.db.connection() as conn:
+            row = await conn.fetchrow("""
+                SELECT latest_version FROM internal_packages
+                WHERE package_name = $1
+            """, pkg_name)
+            if row:
+                return row['latest_version']
+        
+        # Query GitHub Packages API
+        # Package name without scope: @workiz/config-loader -> config-loader
+        package_short_name = pkg_name.replace('@workiz/', '')
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.github_packages_api}/{package_short_name}/versions"
+                headers = {
+                    "Authorization": f"Bearer {self.github_token}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        versions = await response.json()
+                        if versions:
+                            # Versions are returned newest first
+                            return versions[0].get('name', '').lstrip('v')
+        except Exception as e:
+            pass
+        
+        return None
+    
+    async def _check_internal_package(
+        self, 
+        pkg_name: str, 
+        version_spec: str,
+        file_path: str
+    ) -> Optional[PackageDependencyIssue]:
+        """Check internal @workiz package for issues."""
+        latest = await self._get_internal_package_latest(pkg_name)
+        
+        if not latest:
+            return None
+        
+        current = self._parse_version(version_spec)
+        
+        if current and latest and version.parse(current) < version.parse(latest):
+            return PackageDependencyIssue(
+                package_name=pkg_name,
+                issue_type='outdated_internal',
+                message=f"Internal package '{pkg_name}' has newer version: {latest} (current: {current})",
+                severity='info',
+                current_version=version_spec,
+                recommended_version=f"^{latest}",
+                affected_file=file_path
+            )
+        
+        return None
+
+
+class InternalPackageRegistry:
+    """Manage registry of internal @workiz packages from GitHub Packages."""
+    
+    def __init__(self, db, github_token: str):
+        self.db = db
+        self.github_token = github_token
+        self.github_api = "https://api.github.com/orgs/Workiz/packages"
+    
+    async def sync_from_github_packages(self) -> Dict:
+        """Sync internal packages from GitHub Packages registry."""
+        synced = 0
+        
+        async with aiohttp.ClientSession() as session:
+            url = f"{self.github_api}?package_type=npm"
+            headers = {
+                "Authorization": f"Bearer {self.github_token}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+            
+            async with session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    return {'error': f"Failed to fetch from GitHub: {response.status}"}
+                
+                packages = await response.json()
+                
+                for pkg in packages:
+                    name = pkg.get('name')
+                    
+                    # Get latest version
+                    version_url = f"{self.github_api}/npm/{name}/versions"
+                    async with session.get(version_url, headers=headers) as ver_response:
+                        if ver_response.status == 200:
+                            versions = await ver_response.json()
+                            latest_version = versions[0].get('name', '').lstrip('v') if versions else None
+                            
+                            if latest_version:
+                                await self._register_package(
+                                    f"@workiz/{name}",
+                                    latest_version,
+                                    pkg.get('html_url', '')
+                                )
+                                synced += 1
+                
+                return {'synced': synced, 'total_found': len(packages)}
+    
+    async def _register_package(self, name: str, version: str, url: str) -> None:
+        """Register or update an internal package in the database."""
+        async with self.db.connection() as conn:
+            await conn.execute("""
+                INSERT INTO internal_packages 
+                (package_name, latest_version, repo_url)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (package_name) DO UPDATE SET
+                    latest_version = EXCLUDED.latest_version,
+                    updated_at = CURRENT_TIMESTAMP
+            """, name, version, url)
 ```
 
 ---

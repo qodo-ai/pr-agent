@@ -119,8 +119,17 @@ email = "your-email@workiz.com"
 
 [workiz]
 database_url = "postgresql://pr_agent:pr_agent_dev@localhost:5432/pr_agent"
-npm_org = "@workiz"
-internal_package_prefixes = ["@workiz/", "workiz-"]
+internal_package_prefixes = ["@workiz/"]
+
+# GitHub Packages authentication (for @workiz packages)
+# The GITHUB_USER_TOKEN is also used for GitHub Packages API access
+# For services that install @workiz packages, use NPM_READONLY_TOKEN in .npmrc
+```
+
+**Note**: The `GITHUB_USER_TOKEN` is used for both GitHub API and GitHub Packages API access. Services that install `@workiz` packages need `.npmrc`:
+```
+@workiz:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${NPM_READONLY_TOKEN}
 ```
 
 ### Configure Main Settings
@@ -552,15 +561,18 @@ def sync_jira(projects, full):
     asyncio.run(run())
 
 @cli.command('sync-npm')
-@click.option('--org', '-o', default='@workiz', help='NPM organization')
-def sync_npm(org):
-    """Sync internal NPM packages."""
+def sync_npm():
+    """Sync internal @workiz packages from GitHub Packages."""
     async def run():
         from pr_agent.tools.npm_package_analyzer import InternalPackageRegistry
-        registry = InternalPackageRegistry(db)
-        click.echo(f"Syncing NPM packages from {org}...")
-        result = await registry.sync_from_npm_org(org)
-        click.echo(f"  Synced {result.get('synced', 0)} packages")
+        github_token = os.environ.get('GITHUB_USER_TOKEN')
+        registry = InternalPackageRegistry(db, github_token)
+        click.echo("Syncing @workiz packages from GitHub Packages...")
+        result = await registry.sync_from_github_packages()
+        if 'error' in result:
+            click.echo(f"  Error: {result['error']}")
+        else:
+            click.echo(f"  Synced {result.get('synced', 0)} packages")
     
     asyncio.run(run())
 
@@ -599,8 +611,8 @@ python -m pr_agent.cli_admin index-repos --all
 # 3. Sync Jira tickets
 python -m pr_agent.cli_admin sync-jira --full
 
-# 4. Sync internal NPM packages
-python -m pr_agent.cli_admin sync-npm --org @workiz
+# 4. Sync internal @workiz packages from GitHub Packages
+python -m pr_agent.cli_admin sync-npm
 
 # 5. Check status
 python -m pr_agent.cli_admin status
@@ -880,7 +892,7 @@ docs/
 - [ ] Create `.secrets.toml` with credentials (GitHub, OpenAI, Jira)
 - [ ] Run auto-discovery: `python -m pr_agent.cli_admin discover --orgs Workiz`
 - [ ] Run Jira sync: `python -m pr_agent.cli_admin sync-jira --full`
-- [ ] Sync internal NPM packages: `python -m pr_agent.cli_admin sync-npm --org @workiz`
+- [ ] Sync internal packages from GitHub Packages: `python -m pr_agent.cli_admin sync-npm`
 - [ ] Start server: `python -m uvicorn pr_agent.servers.github_app:app --port 3000`
 - [ ] Start ngrok: `ngrok http 3000`
 - [ ] Configure GitHub webhook with ngrok URL

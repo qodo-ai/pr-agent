@@ -109,15 +109,34 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 
 ### Workiz Internal Packages
 
-| Package | Purpose |
-|---------|---------|
-| `@workiz/all-exceptions-filter` | Global exception handling |
-| `@workiz/config-loader` | Configuration with GCloud Secrets |
-| `@workiz/node-logger` | Structured logging (Winston) |
-| `@workiz/pubsub-decorator-reflector` | PubSub decorators |
-| `@workiz/pubsub-publish-client` | PubSub publishing |
-| `@workiz/redis-nestjs` | Redis integration |
-| `@workiz/jwt-headers-generator` | JWT header utilities |
+All `@workiz` packages are hosted on **GitHub Packages** (not npmjs.org).
+
+**Registry**: `https://npm.pkg.github.com/`
+**Source**: `architecture/packages/` monorepo
+**Publishing**: Automatic via `release-packages.yml` workflow on push to `main`
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `@workiz/all-exceptions-filter` | 1.1.2 | Global NestJS exception handling |
+| `@workiz/config-loader` | 1.0.15 | Configuration with GCloud Secrets |
+| `@workiz/node-logger` | 2.0.0 | Structured logging (Winston) |
+| `@workiz/pubsub-decorator-reflector` | 1.3.2 | PubSub decorators for NestJS |
+| `@workiz/pubsub-publish-client` | - | PubSub publishing client |
+| `@workiz/redis-nestjs` | - | Redis integration for NestJS |
+| `@workiz/jwt-headers-generator` | - | JWT header utilities |
+| `@workiz/socket-io-updater` | - | Socket.io updates |
+| `@workiz/gcs-nestjs` | - | Google Cloud Storage integration |
+| `@workiz/elasticsearch-nestjs` | - | Elasticsearch integration |
+| `@workiz/feature-flag-getter` | - | Feature flag utilities |
+| `@workiz/message-builder` | - | Message building utilities |
+| `@workiz/xss-security` | - | XSS protection utilities |
+| `@workiz/contracts` | - | Shared TypeScript contracts |
+
+**.npmrc Configuration**:
+```
+@workiz:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${NPM_READONLY_TOKEN}
+```
 
 ---
 
