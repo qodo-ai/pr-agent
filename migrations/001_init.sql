@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS internal_packages (
     synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_internal_packages_repo ON internal_packages(repository_id);
+
 -- Custom review rules: configurable review rules
 CREATE TABLE IF NOT EXISTS review_rules (
     id SERIAL PRIMARY KEY,
