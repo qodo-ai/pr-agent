@@ -193,8 +193,8 @@ These rules are automatically enforced during PR reviews:
 
 ```toml
 [config]
-model = "gpt-4o"
-fallback_models = ["gpt-4o-mini"]
+model = "claude-sonnet-4-20250514"
+fallback_models = ["gpt-4o", "gemini-2.5-pro"]
 git_provider = "github"
 
 [workiz]

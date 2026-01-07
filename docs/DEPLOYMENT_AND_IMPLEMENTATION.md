@@ -567,11 +567,110 @@ CREATE INDEX IF NOT EXISTS code_chunks_embedding_idx
     ON code_chunks USING hnsw (embedding vector_cosine_ops)
     WITH (m=16, ef_construction=64);
 
+-- RepoSwarm analysis cache
+CREATE TABLE IF NOT EXISTS repo_analysis_cache (
+    id SERIAL PRIMARY KEY,
+    repo_url TEXT NOT NULL,
+    branch TEXT,
+    repo_type VARCHAR(100),
+    analysis_result JSONB NOT NULL,
+    commit_sha VARCHAR(40),
+    analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repo_url, branch)
+);
+
+CREATE INDEX IF NOT EXISTS idx_repo_analysis_repo_url 
+    ON repo_analysis_cache(repo_url);
+
+-- Jira tickets
+CREATE TABLE IF NOT EXISTS jira_tickets (
+    id SERIAL PRIMARY KEY,
+    ticket_key VARCHAR(50) UNIQUE NOT NULL,
+    project_key VARCHAR(20) NOT NULL,
+    summary TEXT,
+    description TEXT,
+    issue_type VARCHAR(50),
+    status VARCHAR(50),
+    priority VARCHAR(50),
+    assignee VARCHAR(255),
+    created_date TIMESTAMP,
+    updated_date TIMESTAMP,
+    embedding vector(1536),
+    metadata JSONB,
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Internal NPM packages registry
+CREATE TABLE IF NOT EXISTS internal_packages (
+    id SERIAL PRIMARY KEY,
+    package_name VARCHAR(255) UNIQUE NOT NULL,
+    latest_version VARCHAR(100),
+    repo_url TEXT,
+    deprecated BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Review history
+CREATE TABLE IF NOT EXISTS review_history (
+    id SERIAL PRIMARY KEY,
+    pr_url TEXT NOT NULL,
+    repository_id INT REFERENCES repositories(id),
+    review_type VARCHAR(50),
+    comments_count INT,
+    issues_found JSONB,
+    context_used JSONB,
+    model_used VARCHAR(100),
+    tokens_used INT,
+    duration_ms INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- API usage tracking
+CREATE TABLE IF NOT EXISTS api_usage (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    model VARCHAR(100) NOT NULL,
+    provider VARCHAR(50) NOT NULL,
+    input_tokens INT,
+    output_tokens INT,
+    cost_usd DECIMAL(10, 6),
+    pr_url VARCHAR(500),
+    operation VARCHAR(50)
+);
+
 -- Schema migrations tracking
 CREATE TABLE IF NOT EXISTS schema_migrations (
     filename VARCHAR(255) PRIMARY KEY,
     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+```
+
+### Database Connection Pool
+
+Create `pr_agent/db/conn.py`:
+
+```python
+"""
+PostgreSQL connection pool using psycopg.
+Pattern matches spam-detect service.
+"""
+import os
+from psycopg_pool import ConnectionPool
+
+# Initialize pool from DATABASE_URL
+_dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/pr_agent_db")
+_pool = ConnectionPool(_dsn, min_size=1, max_size=10)
+
+
+def get_conn():
+    """Get a connection from the pool."""
+    conn = _pool.getconn()
+    return conn
+
+
+def put_conn(conn):
+    """Return a connection to the pool."""
+    _pool.putconn(conn)
 ```
 
 ### Migration Runner Script
@@ -975,7 +1074,9 @@ if __name__ == '__main__':
     cli()
 ```
 
-### Initial Population Commands
+### Initial Bootstrap (First Deployment)
+
+On first deployment, there's no data in the database. Run these commands **once** to populate initial data:
 
 ```bash
 # Load environment and run commands
@@ -987,18 +1088,33 @@ python scripts/run_migrations.py
 # 2. Discover all repos (auto-detects frameworks)
 python scripts/cli_admin.py discover --orgs Workiz
 
-# 3. Index all repos for RAG
+# 3. Run RepoSwarm analysis on all repos (this takes time!)
+python scripts/cli_admin.py analyze-repos --all
+
+# 4. Index all repos for RAG (code chunks)
 python scripts/cli_admin.py index-repos --all
 
-# 4. Sync Jira tickets
+# 5. Sync Jira tickets
 python scripts/cli_admin.py sync-jira --full
 
-# 5. Sync internal @workiz packages from GitHub Packages
+# 6. Sync internal @workiz packages from GitHub Packages
 python scripts/cli_admin.py sync-npm
 
-# 6. Check status
+# 7. Check status
 python scripts/cli_admin.py status
 ```
+
+**Expected output after bootstrap:**
+```
+PR Agent Status
+========================================
+Repositories: 50+
+Code Chunks: 10000+
+Jira Tickets: 500+
+Reviews: 0  (none yet, webhooks will populate)
+```
+
+**After bootstrap, webhooks take over!** All future updates happen automatically via real-time webhooks.
 
 ---
 
@@ -1231,6 +1347,64 @@ async def sync_npm_package(package_name: str, version: str):
         conn.commit()
     finally:
         put_conn(conn)
+
+
+async def index_repository_incremental(repo_url: str, branch: str):
+    """Incrementally index code chunks for a repository after push."""
+    from pr_agent.db.conn import get_conn, put_conn
+    from pr_agent.services.indexing_service import RepositoryIndexingService
+    
+    conn = get_conn()
+    try:
+        indexing = RepositoryIndexingService(conn)
+        indexing.index_repository(repo_url, branch, incremental=True)
+    finally:
+        put_conn(conn)
+
+
+async def sync_single_jira_ticket(issue_key: str):
+    """Sync a single Jira ticket to database."""
+    from pr_agent.db.conn import get_conn, put_conn
+    from pr_agent.integrations.jira_client import JiraClient
+    
+    jira = JiraClient(
+        base_url=os.environ.get('JIRA_BASE_URL'),
+        email=os.environ.get('JIRA_EMAIL'),
+        api_token=os.environ.get('JIRA_API_TOKEN')
+    )
+    
+    ticket = jira.get_ticket(issue_key)
+    if not ticket:
+        return
+    
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO jira_tickets 
+                (ticket_key, project_key, summary, description, issue_type, 
+                 status, priority, assignee, synced_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (ticket_key) DO UPDATE SET
+                    summary = EXCLUDED.summary,
+                    description = EXCLUDED.description,
+                    status = EXCLUDED.status,
+                    priority = EXCLUDED.priority,
+                    assignee = EXCLUDED.assignee,
+                    synced_at = EXCLUDED.synced_at
+            """, (
+                ticket.key,
+                ticket.key.split('-')[0],
+                ticket.summary,
+                ticket.description,
+                ticket.issue_type,
+                ticket.status,
+                ticket.priority,
+                ticket.assignee
+            ))
+        conn.commit()
+    finally:
+        put_conn(conn)
 ```
 
 ---
@@ -1392,10 +1566,7 @@ workiz-pr-agent/
 │       ├── staging.yaml                   # Helm values for staging
 │       └── prod.yaml                      # Helm values for production
 ├── migrations/
-│   ├── 001_init.sql                       # Initial schema with pgvector
-│   ├── 002_reposwarm.sql                  # RepoSwarm analysis cache
-│   ├── 003_jira_tickets.sql               # Jira tables
-│   └── 004_review_history.sql             # Review tracking tables
+│   └── 001_init.sql                       # Complete schema with all tables
 ├── scripts/
 │   └── run_migrations.py                  # Migration runner script
 ├── pr_agent/
