@@ -5,7 +5,6 @@ Following the same pattern as spam-detect service.
 import logging
 import os
 import threading
-import time
 from contextlib import contextmanager
 
 from pgvector.psycopg import register_vector
@@ -18,68 +17,52 @@ dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5
 pool = ConnectionPool(dsn, min_size=1, max_size=10)
 
 
-class _VectorRegistration:
-    """Thread-safe pgvector registration with retry and backoff.
+class _VectorRegistrationTracker:
+    """Tracks pgvector registration failures to avoid log spam.
+    
+    Note: register_vector() must be called on EACH connection since it
+    registers type adapters on the connection object. This class only
+    tracks whether we've logged errors to avoid spam.
     
     Config via env vars:
-        PGVECTOR_MAX_RETRIES: Max attempts before giving up (default: 5)
-        PGVECTOR_RETRY_BACKOFF: Base backoff seconds (default: 60)
+        PGVECTOR_LOG_ERRORS: Set to "false" to suppress pgvector errors (default: true)
     """
     
     def __init__(self):
         self._lock = threading.Lock()
-        self._registered = False
-        self._permanently_failed = False
-        self._retry_count = 0
-        self._next_retry_time = 0.0
-        self._max_retries = int(os.environ.get("PGVECTOR_MAX_RETRIES", "5"))
-        self._backoff_base = float(os.environ.get("PGVECTOR_RETRY_BACKOFF", "60"))
+        self._error_logged = False
+        self._success_logged = False
+        self._log_errors = os.environ.get("PGVECTOR_LOG_ERRORS", "true").lower() != "false"
     
-    def try_register(self, conn) -> None:
-        """Attempt to register pgvector on connection.
+    def register_on_connection(self, conn) -> bool:
+        """Register pgvector adapter on a specific connection.
         
-        All state checks and modifications happen inside the lock
-        to prevent race conditions.
+        Must be called on each connection from the pool.
+        Returns True if registration succeeded, False otherwise.
         """
-        if self._registered or self._permanently_failed:
-            return
-        
-        with self._lock:
-            if self._registered or self._permanently_failed:
-                return
+        try:
+            register_vector(conn)
             
-            current_time = time.time()
-            if current_time < self._next_retry_time:
-                return
+            if not self._success_logged:
+                with self._lock:
+                    if not self._success_logged:
+                        self._success_logged = True
+                        logger.debug("pgvector extension registered on connection")
+            return True
             
-            try:
-                register_vector(conn)
-                self._registered = True
-                logger.debug("pgvector extension registered successfully")
-            except Exception as e:
-                self._retry_count += 1
-                
-                if self._retry_count >= self._max_retries:
-                    self._permanently_failed = True
-                    logger.error(
-                        "Failed to register pgvector extension after max retries - vector operations disabled",
-                        extra={"context": {"error": str(e), "attempts": self._retry_count}}
-                    )
-                else:
-                    backoff = self._backoff_base * (2 ** (self._retry_count - 1))
-                    self._next_retry_time = current_time + backoff
-                    logger.warning(
-                        "Failed to register pgvector extension - will retry after backoff",
-                        extra={"context": {
-                            "error": str(e),
-                            "attempt": self._retry_count,
-                            "max_retries": self._max_retries,
-                            "next_retry_in_seconds": backoff
-                        }}
-                    )
+        except Exception as e:
+            if self._log_errors and not self._error_logged:
+                with self._lock:
+                    if not self._error_logged:
+                        self._error_logged = True
+                        logger.warning(
+                            "Failed to register pgvector on connection - vector operations may not work",
+                            extra={"context": {"error": str(e)}}
+                        )
+            return False
 
 
-_vector_registration = _VectorRegistration()
+_vector_tracker = _VectorRegistrationTracker()
 
 
 def get_conn():
@@ -90,7 +73,7 @@ def get_conn():
     Prefer using get_db_connection() context manager instead.
     """
     conn = pool.getconn()
-    _vector_registration.try_register(conn)
+    _vector_tracker.register_on_connection(conn)
     return conn
 
 
@@ -113,7 +96,7 @@ def get_db_connection():
                 rows = cur.fetchall()
     """
     conn = pool.getconn()
-    _vector_registration.try_register(conn)
+    _vector_tracker.register_on_connection(conn)
     try:
         yield conn
     finally:
