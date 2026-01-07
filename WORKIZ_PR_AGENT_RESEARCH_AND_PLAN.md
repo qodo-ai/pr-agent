@@ -2692,366 +2692,73 @@ settings:
 
 ---
 
-## Cursor Team Rules (From Cursor Dashboard)
+## Cursor Team Rules - Extracted for Code Review
 
-These are the actual Cursor Team Rules configured in the Workiz Cursor dashboard. These rules are enforced across all team members and projects. Reference: [Cursor Team Rules Documentation](https://cursor.com/docs/context/rules#team-rules)
+These rules are derived from the Workiz Cursor Team Rules. Only **actionable rules that the review agent can verify by analyzing code** are included.
 
----
-
-### Rule 1: Verify Actual Implementation
-
-> Whenever you work on, review, or refactor code, you must always inspect the actual implementation in the codebase rather than relying on assumptions, undocumented mental models, or vague recollections of how things "should" work.
-
-**What you must do:**
-- Locate the actual implementation relevant to the work
-- Read the code to understand how it behaves now
-- Cross-check documentation with what the code actually does
-- If behavior is unclear, seek clarification or write a test
-- Document deviations from expected architecture
-
-**When this rule applies:**
-- Modifying existing code (bug-fix, refactor, enhancement)
-- Adding new modules that integrate with existing functionality
-- During code reviews
-- When planning architecture changes
+Reference: [Cursor Team Rules Documentation](https://cursor.com/docs/context/rules#team-rules)
 
 ---
 
-### Rule 2: Ask Ben for Clarification
+### Review Rules (What the Agent Should Check)
 
-> If an issue/bug or product definition is unclear at any point during development, the developer must pause work, ask Ben for clarification, and provide Ben's answer verbatim in the very next AI prompt before proceeding.
-
----
-
-### Rule 3: Reuse Existing Code
-
-> When writing code, always check if there is an already implemented method or utility that can be used, not only in the current file but across the project. Do not duplicate code; reuse existing implementations whenever possible.
-
----
-
-### Rule 4: No Inline Comments
-
-> Avoid writing inline comments. Code should be self-documenting.
-
----
-
-### Rule 5: Structured Logging with Context
-
-> All logger calls MUST include a context object as the second parameter for structured logging and better debugging.
-
-**Required format:**
-```typescript
-this.logger.log('message', { contextData });
-this.logger.warn('message', { contextData });
-this.logger.error('message', { contextData });
-this.logger.debug('message', { contextData });
-```
-
-**Context Object Requirements:**
-- **Identifiers**: accountId, userId, messageId, orderId, sqlId, transactionId, requestId
-- **Operation details**: Input parameters (sanitized), state information, business data
-- **Error information** (for warn/error): error.message, errorCode, stack
-- **Performance metrics**: duration, attempt, retryCount
-
-**Examples:**
-
-✅ **GOOD:**
-```typescript
-this.logger.log('Creating new message', {
-  accountId: dto.accountId,
-  messageType: dto.type,
-  recipientCount: dto.recipients.length,
-});
-
-this.logger.error('Failed to send message', {
-  messageId: message.id,
-  accountId: message.accountId,
-  provider: 'twilio',
-  error: error.message,
-  stack: error.stack,
-});
-```
-
-❌ **BAD:**
-```typescript
-this.logger.log('Creating new message');
-this.logger.log(`Creating message for account ${accountId}`);
-this.logger.error(`Error: ${error.message}`);
-```
-
-**Sensitive data:** NEVER log passwords, tokens, API keys, or credit card data.
+| # | Rule | What to Check | Review Comment |
+|---|------|---------------|----------------|
+| 1 | **Test Coverage** | New code should have corresponding tests | "New functionality added without tests. Please add unit tests for [function/class]." |
+| 2 | **No Inline Comments** | Detect `//` comments that aren't TODO/FIXME | "Inline comment detected. Code should be self-documenting. Consider renaming variables/functions instead." |
+| 3 | **Structured Logging** | Logger calls without context object | "Logger call missing context object. Use: `this.logger.log('message', { accountId, userId, ... })`" |
+| 4 | **No String Interpolation in Logs** | Template literals in logger | "Avoid string interpolation in logs. Use structured logging: `this.logger.log('message', { data })`" |
+| 5 | **Sensitive Data in Logs** | password, token, secret in log calls | "Possible sensitive data in log. Use `maskSensitive()` or remove." |
+| 6 | **Use const, Not let** | `let` or `var` usage | "Prefer `const` with immutable operations. If mutation is needed, consider refactoring." |
+| 7 | **Array Mutation** | `.push()`, `.pop()`, `.splice()` etc. | "Array mutation detected. Consider using `[...arr, item]`, `filter()`, or `map()` instead." |
+| 8 | **Object Mutation** | Direct property assignment | "Object mutation detected. Consider using `{ ...obj, prop: value }` instead." |
+| 9 | **Imperative Loops** | `for` loops where array methods work | "Consider using `map()`, `filter()`, or `reduce()` instead of a for loop." |
+| 10 | **Large Functions** | Functions > 30 lines | "Function is too long ({X} lines). Consider breaking into smaller, focused functions." |
+| 11 | **Deep Nesting** | > 3 levels of nesting | "Deep nesting detected. Consider early returns or extracting to separate functions." |
+| 12 | **Manual Instantiation** | `new ServiceName()` | "Avoid manual instantiation. Use NestJS dependency injection via constructor." |
+| 13 | **Try-Catch Blocks** | try-catch in services | "Avoid try-catch. Let `@workiz/all-exceptions-filter` handle errors. Only catch if absolutely necessary." |
+| 14 | **Controller with Business Logic** | Complex logic in controllers | "Controllers should be thin. Move this logic to a service." |
+| 15 | **PubSub Missing @PubSubAsyncAcknowledge** | PubSub handler without ack | "Missing `@PubSubAsyncAcknowledge` decorator. Required to prevent message loss." |
+| 16 | **PubSub Sync Handler** | Non-async PubSub handler | "PubSub handlers must be `async`. Change to `public async onEventName(...)`" |
+| 17 | **PubSub Without maskSensitive** | Logging PubSub payload directly | "Use `maskSensitive(eventData)` when logging payloads that may contain sensitive data." |
+| 18 | **TypeORM Table Builder** | `createTable()`, `dropTable()` | "Use raw SQL in migrations: `queryRunner.query('CREATE TABLE...')`" |
+| 19 | **Controller Singular Route** | `/user` instead of `/users` | "Use plural nouns for REST routes: `/users` not `/user`" |
+| 20 | **Missing DTO Validation** | `@Body()` without DTO type | "Request body should use a DTO with `class-validator` decorators." |
+| 21 | **Missing Swagger Decorator** | New controller without swagger file | "New controller should have a corresponding `.swagger.decorator.ts` file." |
+| 22 | **SQL Injection Risk** | Template literals in SQL | "Possible SQL injection. Use parameterized queries." |
+| 23 | **N+1 Query Pattern** | DB query inside a loop | "Possible N+1 query. Consider using eager loading or batch queries." |
 
 ---
 
-### Rule 6: Controller Structure (REST Standards)
+### Implied Quality Checks
 
-> When creating a new controller, follow this mandatory structure:
+These are implied from the team rules but stated as actionable review items:
 
-**HTTP Routes and REST Standards:**
-- Use **plural nouns** for resource names: `/users`, `/products`, `/videos`
-- `GET /resource/:id` → 200 OK, single DTO
-- `GET /resource` → 200 OK, paginated response
-- `POST /resource` → 201 Created, created resource with id
-- `PUT /resource/:id` → 200 OK, updated resource
-- `DELETE /resource/:id` → 204 No Content
-
-**Directory Structure:**
-```
-src/resources/videos/
-├── entities/
-│   └── video.entity.ts      ✅ Entity files singular
-├── dto/
-│   └── *.dto.ts             ✅ All DTOs end with .dto.ts
-├── enum/
-│   └── *.enum.ts
-├── interfaces/
-│   └── *.interfaces.ts
-├── videos.controller.ts
-├── videos.module.ts
-├── videos.service.ts
-└── videos.swagger.decorator.ts ✅ Required for every controller
-```
+| Check | Trigger | Review Comment |
+|-------|---------|----------------|
+| **Missing Tests for New Code** | New `.ts` file in `src/` without corresponding `.spec.ts` | "New code added without tests. Please add tests for `{filename}`." |
+| **Missing Tests for New Functions** | New public method without test coverage | "New public method `{methodName}` should have unit tests." |
+| **Console.log Statements** | `console.log`, `console.debug` | "Remove `console.log`. Use the structured logger instead." |
+| **Hardcoded Secrets** | Strings that look like API keys/tokens | "Possible hardcoded secret. Use environment variables or config." |
+| **TODO Without Ticket** | `// TODO` without JIRA reference | "TODO comment should reference a Jira ticket: `// TODO [WORK-123]: ...`" |
+| **Empty Catch Block** | `catch (e) { }` | "Empty catch block silently swallows errors. Log or rethrow." |
+| **Any Type Usage** | `: any` in TypeScript | "Avoid `any` type. Use specific types or `unknown`." |
 
 ---
 
-### Rule 7: Don't Call Non-Existing Methods
-
-> Do not call non-existing methods; always check that what you write and call really exists in the codebase. If using a library, always check the correct way to use it. Search the web and use context7 MCP.
-
----
-
-### Rule 8: Use NestJS Dependency Injection
-
-> Use NestJS's built-in DI system (`@Injectable()`, constructor injection) everywhere. This ensures loose coupling and testability.
-
-- Avoid manually `new`-ing dependencies inside classes
-- For multiple implementations of an interface, use the provider pattern + token/abstract class
-
----
-
-### Rule 9: Global Exception Filter
-
-> Use global exception filters to standardize API error responses. Use `@workiz/all-exceptions-filter` package. Do not catch exceptions in the code, but let the main catcher do so. Use try-catch only if there is no other choice.
-
-- Use structured logging (Winston via `WorkizLogger`)
-- Ensure sufficient logging in critical paths
-
----
-
-### Rule 10: Functional Programming Style
-
-> Follow functional programming patterns in NestJS/TypeScript.
-
-**Immutability:**
-- Use only `const` variables, never `let` or `var`
-- Array operations: use `map()`, `filter()`, `reduce()`, `concat()`, spread `[...arr]`
-- Object operations: use spread `{...obj}` instead of direct mutation
-
-**Pure Functions:**
-- Same input always produces same output, no side effects
-- Separate pure business logic from side effects
-
-**Function Size:**
-- Create small, single-purpose functions (ideally < 10 lines)
-- Compose complex operations from smaller functions
-
-**Declarative Over Imperative:**
-- Use array methods over `for` loops
-- Use ternary operators or object lookups over `if/else` chains
-
-**Examples:**
-
-❌ **BAD (imperative):**
-```typescript
-let total = 0;
-for (let i = 0; i < items.length; i++) {
-  if (items[i].active) {
-    total += items[i].price;
-  }
-}
-```
-
-✅ **GOOD (declarative):**
-```typescript
-const total = items
-  .filter(item => item.active)
-  .reduce((sum, item) => sum + item.price, 0);
-```
-
-❌ **BAD (mutation):**
-```typescript
-const user = await this.findUser(id);
-user.lastLogin = new Date();
-```
-
-✅ **GOOD (immutable):**
-```typescript
-const user = await this.findUser(id);
-const updatedUser = { ...user, lastLogin: new Date() };
-```
-
----
-
-### Rule 11: Run Linting
-
-> Always run `npm run lint` after you finish any changes in NestJS projects.
-
----
-
-### Rule 12: TypeORM Migrations (Raw SQL Only)
-
-> Always use **raw SQL queries** instead of TypeORM's table builder API in migrations.
-
-**Migration File Naming:**
-```
-{timestamp}-{descriptive-name}.ts
-```
-Example: `1752315994000-create-zapier-webhooks-table.ts`
-
-**Template:**
-```typescript
-import { MigrationInterface, QueryRunner } from 'typeorm';
-
-export class YourMigrationName{timestamp} implements MigrationInterface {
-  public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      CREATE TABLE table_name (
-        id INT(11) NOT NULL AUTO_INCREMENT,
-        column_name VARCHAR(255) NOT NULL,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id)
-      );
-    `);
-
-    await queryRunner.query(`
-      CREATE INDEX IDX_table_name_column_name ON table_name (column_name);
-    `);
-  }
-
-  public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IDX_table_name_column_name ON table_name;`);
-    await queryRunner.query(`DROP TABLE table_name;`);
-  }
-}
-```
-
-**Index Naming Convention:**
-- Single-column: `IDX_{table_name}_{column_name}`
-- Composite: `IDX_{table_name}_{column1}_{column2}`
-
----
-
-### Rule 13: Async Best Practices
-
-> Be mindful of asynchronous operations: use async/await, Promises, or RxJS Observables. Ensure you don't block the event loop.
-
-- Implement caching for frequently accessed data (Redis, in-memory)
-- Think about service decomposition for growth
-- Use proper indexes, pagination, and limit query sizes
-
----
-
-### Rule 14: Feature-Based Modular Architecture
-
-> Use a feature-based modular architecture — each major domain lives in its own module folder.
-
-- Within each module: separate controllers, services, repositories, dto/validators, entities
-- Modules should be loosely coupled via well-defined interfaces
-- Name files consistently: `users.controller.ts`, `users.service.ts`, `users.module.ts`
-- Have a "common" or "core" module for shared logic
-
----
-
-### Rule 15: PubSub Event Handlers
-
-> When implementing Google Cloud Pub/Sub event handlers in NestJS, follow this pattern exactly:
-
-1. **Metadata constants** in `src/constants/pubsub-metadata.ts`:
-   ```typescript
-   RESOURCE_TOPIC_METADATA = '__resource-topic-candidate'
-   RESOURCE_EVENT_METADATA = '__resource-event-candidate'
-   ```
-
-2. **Decorators in order**: `@PubSubTopic`, `@PubSubEvent`, `@PubSubAsyncAcknowledge`
-
-3. **Method signature**:
-   ```typescript
-   public async onResourceAction(
-     @PubSubPayload() _originalMessage: EmittedMessage<any>,
-     @PubSubPayload(EventDto) eventData: EventDto
-   ): Promise<void>
-   ```
-
-4. **Always log**: `this.logger.log('Received resource event', eventData)`
-
-5. **Delegate with log details**:
-   ```typescript
-   await this.service.method(eventData, { 
-     transport: 'pubsub', 
-     payload: maskSensitive(eventData) 
-   });
-   ```
-
-6. **Register in main.ts**:
-   ```typescript
-   app.get(ReflectDecoratorService)
-     .reflectDecorators([ResourceController], RESOURCE_TOPIC_METADATA)
-     .reflectDecorators([ResourceController], RESOURCE_EVENT_METADATA, 'event', process.env.RESOURCE_EVENT_NAME);
-   ```
-
-7. **Naming**: `onResourceAction` format (onUserCreated, onOrderUpdated)
-
-8. **Transport types**: `'pubsub'`, `'internal'`, `'http'`
-
-**NEVER:**
-- Implement business logic in controllers
-- Forget to register in main.ts
-- Use synchronous method signatures
-- Log sensitive data without `maskSensitive()`
-
----
-
-### Rule 16: Single Responsibility
-
-> Every class or function should have one and only one responsibility.
-
-- Controllers handle HTTP/request routing
-- Services implement business logic
-- Repositories/ORM layers handle data access
-- Methods should do one logical thing
-
----
-
-### Rule 17: Test File Modifications
-
-> When writing, fixing, or maintaining tests, only modify test files. Do not change implementation files unless explicitly discussed and approved.
-
-- If a test fails and cause is unclear, add debug logs
-- Always check implementation to understand if the issue is in test or code
-
----
-
-### Rule 18: Run Tests
-
-> All tests must be run using: `npm run test`
-
-Always grep for "fail" and "error" in test output to quickly identify issues.
-
----
-
-### Rule 19: TypeScript Type Checking
-
-> Always run `npx tsc --noEmit` in TypeScript projects after finishing a change in the code.
-
----
-
-### Rule 20: DTOs with Validation
-
-> Use Data Transfer Objects (DTOs) for input into controllers. Validate them with `class-validator` and transform with `class-transformer`.
-
-- Always validate and sanitize incoming data as early as possible (in pipes)
-- Keep API model (DTO) and database model (Entity) clearly separated
+### NOT for Automated Review (Developer Process)
+
+These rules from the Cursor Team Rules are **not applicable** for automated code review:
+
+| Rule | Why Not Applicable |
+|------|-------------------|
+| "Run npm run test" | Agent can't execute commands |
+| "Run npm run lint" | Agent can't execute commands |
+| "Run npx tsc --noEmit" | Agent can't execute commands |
+| "Ask Ben for clarification" | Human process |
+| "Verify actual implementation" | This is for the developer writing code |
+| "Reuse existing code" | Agent can suggest but can't search entire codebase |
+| "Only modify test files" | Context-dependent, not code pattern |
 
 ---
 
@@ -7960,32 +7667,18 @@ Extra instructions:
 | **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps, react_class_component | Web app, Mobile web |
 | **Python** | `PythonAnalyzer` | py_no_print, pg_sql_injection, pg_n_plus_one, asyncio_blocking_call, fastapi_sync_endpoint | FastAPI + PostgreSQL |
 
-### ✅ Cursor Team Rules Integrated (20 Rules from Cursor Dashboard)
+### ✅ Actionable Review Rules (From Cursor Team Rules)
 
-| # | Rule | Key Checks |
-|---|------|------------|
-| 1 | **Verify Implementation** | Don't assume, check actual code |
-| 2 | **Ask Ben for Clarification** | Pause if requirements unclear |
-| 3 | **Reuse Existing Code** | Check for existing utilities across project |
-| 4 | **No Inline Comments** | Code should be self-documenting |
-| 5 | **Structured Logging** | Logger calls must include context object |
-| 6 | **Controller Structure** | REST standards, plural nouns, proper directory structure |
-| 7 | **Don't Call Non-Existing** | Verify methods exist before calling |
-| 8 | **NestJS DI** | Use @Injectable(), constructor injection |
-| 9 | **Global Exception Filter** | Use @workiz/all-exceptions-filter, avoid try-catch |
-| 10 | **Functional Programming** | const over let, immutable operations, small functions |
-| 11 | **Run Linting** | `npm run lint` after NestJS changes |
-| 12 | **TypeORM Migrations** | Raw SQL only, specific naming convention |
-| 13 | **Async Best Practices** | Don't block event loop, proper caching |
-| 14 | **Feature-Based Architecture** | Modular, loosely coupled modules |
-| 15 | **PubSub Patterns** | Exact decorator order, maskSensitive(), main.ts registration |
-| 16 | **Single Responsibility** | One purpose per class/function |
-| 17 | **Test File Modifications** | Only modify test files unless discussed |
-| 18 | **Run Tests** | `npm run test`, grep for errors |
-| 19 | **TypeScript Type Checking** | `npx tsc --noEmit` after changes |
-| 20 | **DTOs with Validation** | class-validator for all input |
-
-See full documentation in [Cursor Team Rules](#cursor-team-rules-from-cursor-dashboard) section above.
+| Category | Rules | Review Action |
+|----------|-------|---------------|
+| **Test Coverage** | New code needs tests | Comment if `.ts` file added without `.spec.ts` |
+| **Logging** | Structured logging with context, no sensitive data | Comment on logger calls without context object |
+| **Functional Style** | const over let, no mutations, array methods | Comment on `let`, `.push()`, imperative loops |
+| **Code Quality** | Small functions, no deep nesting, no inline comments | Comment if function > 30 lines or nesting > 3 |
+| **NestJS Patterns** | DI, no try-catch, thin controllers | Comment on `new Service()`, try-catch blocks |
+| **PubSub** | @PubSubAsyncAcknowledge, async handlers, maskSensitive | Comment if decorators missing or sync handler |
+| **TypeORM** | Raw SQL in migrations | Comment if using `createTable()` instead of raw SQL |
+| **Security** | No hardcoded secrets, SQL injection prevention | Comment on detected secrets or string SQL |
 
 ### ✅ Databases Covered
 
