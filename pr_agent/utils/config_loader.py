@@ -145,6 +145,12 @@ def load_config_sync(
         config = _get_secret_manager_config(project_id, service_name, env_name_override)
 
     if update_environ:
+        overwritten_keys = [k for k in config if k in os.environ and os.environ[k] != config[k]]
+        if overwritten_keys:
+            logger.warning(
+                "Config loading will overwrite existing environment variables",
+                extra={"context": {"overwritten_keys": overwritten_keys}}
+            )
         os.environ.update(config)
         logger.debug("Config loaded and applied to os.environ", extra={"context": {"keys_count": len(config)}})
     else:
