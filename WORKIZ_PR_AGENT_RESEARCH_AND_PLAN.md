@@ -946,7 +946,255 @@ class CustomRulesEngine:
         return results
 ```
 
-#### 4.2 Rules Loader (TOML + Database)
+#### 4.2 Cursor Rules Loader
+
+Create: `pr_agent/tools/cursor_rules_loader.py`
+
+```python
+import os
+import re
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from pathlib import Path
+from pr_agent.log import get_logger
+
+@dataclass
+class CursorRule:
+    """A rule extracted from cursor rules files."""
+    source_file: str
+    category: str
+    rule_text: str
+    applies_to: List[str]  # glob patterns
+
+class CursorRulesLoader:
+    """Load and parse cursor rules from .cursor directories in repositories."""
+    
+    RULES_PATTERNS = [
+        '.cursor/rules.mdc',
+        '.cursor/rules/*.mdc',
+        '.cursorrules',
+    ]
+    
+    def __init__(self):
+        self._cache: Dict[str, List[CursorRule]] = {}
+    
+    async def load_rules_from_repo(self, repo_path: str) -> List[CursorRule]:
+        """Load all cursor rules from a repository."""
+        if repo_path in self._cache:
+            return self._cache[repo_path]
+        
+        rules = []
+        
+        # Check for .cursor/rules.mdc
+        rules_mdc = Path(repo_path) / '.cursor' / 'rules.mdc'
+        if rules_mdc.exists():
+            rules.extend(self._parse_mdc_file(str(rules_mdc)))
+        
+        # Check for .cursor/rules/*.mdc
+        rules_dir = Path(repo_path) / '.cursor' / 'rules'
+        if rules_dir.exists():
+            for mdc_file in rules_dir.glob('*.mdc'):
+                rules.extend(self._parse_mdc_file(str(mdc_file)))
+        
+        # Check for .cursorrules (legacy format)
+        cursorrules = Path(repo_path) / '.cursorrules'
+        if cursorrules.exists():
+            rules.extend(self._parse_cursorrules_file(str(cursorrules)))
+        
+        self._cache[repo_path] = rules
+        return rules
+    
+    def _parse_mdc_file(self, file_path: str) -> List[CursorRule]:
+        """Parse a .mdc file and extract rules."""
+        rules = []
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Parse frontmatter
+            frontmatter = {}
+            if content.startswith('---'):
+                parts = content.split('---', 2)
+                if len(parts) >= 3:
+                    frontmatter = self._parse_frontmatter(parts[1])
+                    content = parts[2]
+            
+            # Extract glob patterns
+            globs = frontmatter.get('globs', ['**/*'])
+            if isinstance(globs, str):
+                globs = [globs]
+            
+            # Parse sections
+            sections = self._extract_sections(content)
+            
+            for section_name, section_content in sections.items():
+                # Extract individual rules from section
+                extracted_rules = self._extract_rules_from_section(section_content)
+                
+                for rule_text in extracted_rules:
+                    rules.append(CursorRule(
+                        source_file=file_path,
+                        category=section_name,
+                        rule_text=rule_text,
+                        applies_to=globs
+                    ))
+        
+        except Exception as e:
+            get_logger().warning(f"Failed to parse cursor rules file {file_path}: {e}")
+        
+        return rules
+    
+    def _parse_frontmatter(self, frontmatter_text: str) -> Dict:
+        """Parse YAML-like frontmatter."""
+        result = {}
+        for line in frontmatter_text.strip().split('\n'):
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip()
+                
+                # Handle arrays
+                if value.startswith('[') and value.endswith(']'):
+                    value = [v.strip().strip('"').strip("'") 
+                             for v in value[1:-1].split(',')]
+                elif value.startswith('-'):
+                    # Multi-line array
+                    continue
+                
+                result[key] = value
+        
+        return result
+    
+    def _extract_sections(self, content: str) -> Dict[str, str]:
+        """Extract sections from markdown content."""
+        sections = {}
+        current_section = "general"
+        current_content = []
+        
+        for line in content.split('\n'):
+            if line.startswith('## '):
+                if current_content:
+                    sections[current_section] = '\n'.join(current_content)
+                current_section = line[3:].strip().lower().replace(' ', '_')
+                current_content = []
+            else:
+                current_content.append(line)
+        
+        if current_content:
+            sections[current_section] = '\n'.join(current_content)
+        
+        return sections
+    
+    def _extract_rules_from_section(self, section_content: str) -> List[str]:
+        """Extract individual rules from a section."""
+        rules = []
+        
+        # Split by bullet points or numbered lists
+        lines = section_content.split('\n')
+        current_rule = []
+        
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('- ') or stripped.startswith('* ') or re.match(r'^\d+\.', stripped):
+                if current_rule:
+                    rules.append(' '.join(current_rule))
+                current_rule = [stripped.lstrip('- *0123456789.').strip()]
+            elif stripped and current_rule:
+                current_rule.append(stripped)
+        
+        if current_rule:
+            rules.append(' '.join(current_rule))
+        
+        return [r for r in rules if r]
+    
+    def _parse_cursorrules_file(self, file_path: str) -> List[CursorRule]:
+        """Parse legacy .cursorrules file."""
+        rules = []
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Treat entire file as rules
+            for line in content.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    rules.append(CursorRule(
+                        source_file=file_path,
+                        category='general',
+                        rule_text=line,
+                        applies_to=['**/*']
+                    ))
+        
+        except Exception as e:
+            get_logger().warning(f"Failed to parse cursorrules file {file_path}: {e}")
+        
+        return rules
+    
+    def rules_to_prompt_context(self, rules: List[CursorRule]) -> str:
+        """Convert cursor rules to prompt context for AI review."""
+        if not rules:
+            return ""
+        
+        context = "\n\n## Team Coding Standards (from .cursor rules)\n\n"
+        
+        # Group by category
+        by_category: Dict[str, List[str]] = {}
+        for rule in rules:
+            if rule.category not in by_category:
+                by_category[rule.category] = []
+            by_category[rule.category].append(rule.rule_text)
+        
+        for category, rule_texts in by_category.items():
+            context += f"### {category.replace('_', ' ').title()}\n"
+            for rule_text in rule_texts:
+                context += f"- {rule_text}\n"
+            context += "\n"
+        
+        return context
+```
+
+#### 4.3 Integration with PR Review
+
+Update: `pr_agent/tools/pr_reviewer.py`
+
+```python
+# Add to PRReviewer class
+
+async def _load_cursor_rules(self) -> str:
+    """Load cursor rules from the repository being reviewed."""
+    from pr_agent.tools.cursor_rules_loader import CursorRulesLoader
+    
+    loader = CursorRulesLoader()
+    
+    # Get repository path or clone URL
+    repo_url = self.git_provider.get_repo_url()
+    
+    # For local repos, load directly
+    # For remote repos, the rules should be indexed in DB
+    rules = await self._get_indexed_cursor_rules(repo_url)
+    
+    if rules:
+        return loader.rules_to_prompt_context(rules)
+    
+    return ""
+
+async def _get_indexed_cursor_rules(self, repo_url: str) -> List[Dict]:
+    """Get cursor rules from database for a repository."""
+    async with self.db.connection() as conn:
+        rows = await conn.fetch("""
+            SELECT category, rule_text, applies_to
+            FROM cursor_rules
+            WHERE repository_id = (
+                SELECT id FROM repositories WHERE github_url = $1
+            )
+        """, repo_url)
+    
+    return [dict(r) for r in rows]
+```
+
+#### 4.4 Rules Loader (TOML + Database)
 
 Create: `pr_agent/tools/custom_rules_loader.py`
 
@@ -2524,47 +2772,128 @@ Create `repos.yaml` configuration:
 
 ```yaml
 # repos.yaml - Repository configuration for indexing
+# Based on actual Workiz repositories
+
 repositories:
-  # PHP Services
-  - url: https://github.com/workiz/legacy-api.git
+  # =====================================================
+  # PHP Backend (Main Legacy Application)
+  # =====================================================
+  - url: https://github.com/Workiz/backend.git
     language: php
-    framework: laravel
+    framework: custom  # PHP with custom MVC, uses MySQL, MongoDB, Elasticsearch
+    databases:
+      - mysql
+      - mongodb
+      - elasticsearch
+    description: "Main PHP backend with legacy API, uses Traefik for routing"
     
-  - url: https://github.com/workiz/billing-service.git
-    language: php
-    framework: laravel
-  
-  # NodeJS Services (JavaScript)
-  - url: https://github.com/workiz/notification-service.git
-    language: javascript
-    framework: express
-    
-  # NodeJS Services (TypeScript)
-  - url: https://github.com/workiz/scheduling-service.git
-    language: typescript
-    framework: express
-  
-  # NestJS Services
-  - url: https://github.com/workiz/user-service.git
+  # =====================================================
+  # NestJS Microservices (TypeScript)
+  # =====================================================
+  - url: https://github.com/Workiz/auth.git
     language: typescript
     framework: nestjs
+    databases:
+      - mysql
+    internal_packages:
+      - "@workiz/all-exceptions-filter"
+      - "@workiz/config-loader"
+      - "@workiz/is-boolean-validation-pipe"
+      - "@workiz/jwt-headers-generator"
+      - "@workiz/node-logger"
+      - "@workiz/pubsub-decorator-reflector"
+      - "@workiz/pubsub-publish-client"
+      - "@workiz/redis-nestjs"
+      - "@workiz/socket-io-updater"
+    description: "Authentication service - handles sessions, 2FA, API keys"
     
-  - url: https://github.com/workiz/job-service.git
+  - url: https://github.com/Workiz/crm-service.git
     language: typescript
     framework: nestjs
+    databases:
+      - mysql
+    description: "CRM service for customer relationship management"
     
-  - url: https://github.com/workiz/messaging-service.git
+  - url: https://github.com/Workiz/ai-completion-service.git
     language: typescript
     framework: nestjs
-  
-  # React Frontend
-  - url: https://github.com/workiz/web-app.git
+    description: "AI completion service for text generation"
+    
+  - url: https://github.com/Workiz/csv-uploader.git
+    language: typescript
+    framework: nestjs
+    description: "CSV upload and processing service"
+    
+  - url: https://github.com/Workiz/core-service.git
+    language: typescript
+    framework: nestjs
+    databases:
+      - mysql
+    description: "Core business logic service"
+    
+  - url: https://github.com/Workiz/reporting-service.git
+    language: typescript
+    framework: nestjs
+    databases:
+      - mysql
+      - elasticsearch
+    description: "Reporting and analytics service"
+
+  # =====================================================
+  # Python Services
+  # =====================================================
+  - url: https://github.com/Workiz/python-service.git
+    language: python
+    framework: fastapi  # or django
+    databases:
+      - postgres
+    description: "Python microservice with PostgreSQL"
+
+  # =====================================================
+  # React Frontend (TypeScript)
+  # =====================================================
+  - url: https://github.com/Workiz/web-app.git
     language: typescript
     framework: react
+    description: "Main web application frontend"
     
-  - url: https://github.com/workiz/mobile-web.git
+  - url: https://github.com/Workiz/mobile-web.git
     language: typescript
     framework: react
+    description: "Mobile-optimized web frontend"
+
+  # =====================================================
+  # Internal NPM Packages
+  # =====================================================
+  - url: https://github.com/Workiz/all-exceptions-filter.git
+    language: typescript
+    framework: nestjs
+    is_internal_package: true
+    
+  - url: https://github.com/Workiz/config-loader.git
+    language: typescript
+    framework: nestjs
+    is_internal_package: true
+    
+  - url: https://github.com/Workiz/node-logger.git
+    language: typescript
+    framework: nestjs
+    is_internal_package: true
+    
+  - url: https://github.com/Workiz/pubsub-decorator-reflector.git
+    language: typescript
+    framework: nestjs
+    is_internal_package: true
+    
+  - url: https://github.com/Workiz/pubsub-publish-client.git
+    language: typescript
+    framework: nestjs
+    is_internal_package: true
+    
+  - url: https://github.com/Workiz/redis-nestjs.git
+    language: typescript
+    framework: nestjs
+    is_internal_package: true
 
 # Jira configuration
 jira:
@@ -2586,6 +2915,232 @@ settings:
     - test/
     - coverage/
     - .next/
+    - _assets/
+    - gCache/
+    - tmp/
+    
+  # Database patterns to detect
+  database_patterns:
+    mysql:
+      - "mysql2"
+      - "typeorm"
+      - "knex"
+    postgres:
+      - "asyncpg"
+      - "psycopg2"
+      - "sqlalchemy"
+    mongodb:
+      - "mongoose"
+      - "mongodb"
+      - "pymongo"
+    elasticsearch:
+      - "@elastic/elasticsearch"
+      - "elasticsearch"
+```
+
+---
+
+## Cursor Team Rules Reference
+
+The following cursor rules files define team coding standards. These should be parsed and integrated into the PR review:
+
+### `.cursor/rules.mdc` (Auth Service)
+
+```markdown
+# Auth Service Rules
+
+## Test Execution
+All tests in the auth service project must be run using: npm run test
+Always grep for "fail" and "error" in the test output.
+Always check the actual implementation - do not guess or make assumptions.
+
+## Code Style
+Avoid writing inline comments.
+
+## PubSub Pattern
+Follow the pattern in `.cursor/rules/pubsub-pattern.mdc`
+```
+
+### `.cursor/rules/pubsub-pattern.mdc` (Auth Service)
+
+```markdown
+When implementing Google Cloud Pub/Sub event handlers in NestJS:
+
+1. Define metadata constants in src/constants/pubsub-metadata.ts:
+   RESOURCE_TOPIC_METADATA = '__resource-topic-candidate'
+   RESOURCE_EVENT_METADATA = '__resource-event-candidate'
+
+2. Decorator order: @PubSubTopic, @PubSubEvent, @PubSubAsyncAcknowledge
+
+3. Method signature:
+   public async onResourceAction(
+     @PubSubPayload() _originalMessage: EmittedMessage<any>,
+     @PubSubPayload(EventDto) eventData: EventDto
+   ): Promise<void>
+
+4. Required imports:
+   - PubSubAsyncAcknowledge, PubSubEvent, PubSubPayload, PubSubTopic from @workiz/pubsub-decorator-reflector
+   - EmittedMessage from @algoan/pubsub
+
+5. Always log: this.logger.log('Received resource event', eventData)
+
+6. Delegate with log details:
+   await this.service.method(eventData, { transport: 'pubsub', payload: maskSensitive(eventData) })
+
+7. Register in main.ts:
+   app.get(ReflectDecoratorService).reflectDecorators([Controller], METADATA)
+
+8. Naming: onResourceAction format (onUserCreated, onOrderUpdated)
+
+9. Transport types: 'pubsub', 'internal', 'http'
+
+NEVER:
+- Implement business logic in controllers
+- Forget to register in main.ts
+- Use synchronous method signatures
+- Log sensitive data without maskSensitive()
+```
+
+### Workspace Rules (From Cursor Settings)
+
+The following rules are applied workspace-wide via Cursor settings:
+
+| Rule | Description |
+|------|-------------|
+| **Verify Implementation** | Always check actual code before making changes |
+| **Ask Ben for Clarification** | Pause and ask if requirements are unclear |
+| **Reuse Code** | Check for existing methods/utilities across project |
+| **No Inline Comments** | Code should be self-documenting |
+| **Structured Logging** | Logger calls must include context objects |
+| **Controller Structure** | Follow REST standards, plural nouns, proper responses |
+| **Don't Call Non-Existing** | Verify methods exist before calling |
+| **Use NestJS DI** | Use @Injectable() and constructor injection |
+| **Global Exception Filter** | Use @workiz/all-exceptions-filter, avoid try-catch |
+| **Functional Programming** | Prefer const, immutable operations, small functions |
+| **Run npm run lint** | After NestJS changes |
+| **TypeORM Raw SQL** | Use raw SQL in migrations, not table builder |
+| **Async Best Practices** | Proper async/await, don't block event loop |
+| **Feature-Based Architecture** | Modular, loosely coupled modules |
+| **PubSub Patterns** | Follow exact decorator and registration pattern |
+| **Single Responsibility** | One purpose per class/function |
+| **Test Files Only** | Only modify test files unless discussed |
+| **Run npm run test** | For NestJS projects |
+| **Run npx tsc --noEmit** | After TypeScript changes |
+| **DTOs with Validation** | Use class-validator for input |
+
+---
+
+## Authentication Architecture (Traefik + Auth Service)
+
+### Overview
+
+Workiz uses **Traefik** as a reverse proxy with **forwardAuth** middleware that delegates authentication to the **Auth Service**. This means:
+
+1. **No guards/middleware needed in services** - Traefik handles auth before requests reach services
+2. **X-WORKIZ headers are trustworthy** - Only when coming through Traefik
+3. **Security review should focus on** - Data validation, injection prevention, not auth logic
+
+### Traefik Configuration (from `traefik_dynamic.yml`)
+
+```yaml
+# Key auth middlewares
+middlewares:
+  auth:
+    forwardAuth:
+      address: "http://host.docker.internal:6717/proxy-sessions"
+      authResponseHeaders:
+        - "X-WORKIZ-AUTHENTICATED"
+        - "X-WORKIZ"
+        - "X-WORKIZ-ACCOUNT-ID"
+  
+  auth-crm:
+    forwardAuth:
+      address: "http://host.docker.internal:6717/proxy-sessions/throwable"
+      authResponseHeaders:
+        - "X-WORKIZ-AUTHENTICATED"
+        - "X-WORKIZ"
+        - "X-WORKIZ-ACCOUNT-ID"
+  
+  auth-api-crm:
+    forwardAuth:
+      address: "http://host.docker.internal:6717/api-keys/validate"
+      authResponseHeaders:
+        - "X-WORKIZ"
+```
+
+### Auth Flow
+
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Client    │────▶│   Traefik    │────▶│ Auth Service │────▶│  Service    │
+│  (Browser)  │     │  (Routing)   │     │ (Validation) │     │ (Business)  │
+└─────────────┘     └──────────────┘     └──────────────┘     └─────────────┘
+                           │                     │
+                           │  forwardAuth        │
+                           │─────────────────────│
+                           │                     │
+                           │  X-WORKIZ headers   │
+                           │◀────────────────────│
+                           │                     │
+                           │  Forward request    │
+                           │  with headers       │
+                           │─────────────────────────────────────▶
+```
+
+### Auth Service Endpoints
+
+| Endpoint | Purpose | Used By |
+|----------|---------|---------|
+| `/proxy-sessions` | Validate session, return false if invalid | Routes that allow guests |
+| `/proxy-sessions/throwable` | Validate session, throw 401 if invalid | Protected routes |
+| `/api-keys/validate` | Validate API key for external integrations | CRM API routes |
+
+### Security Review Implications
+
+**DO Review:**
+- Input validation (DTOs with class-validator)
+- SQL/NoSQL injection prevention
+- Sensitive data exposure in logs
+- CORS configuration
+- Cookie security settings
+- Path traversal vulnerabilities
+
+**DON'T Review (Handled by Traefik):**
+- Missing auth guards
+- JWT validation
+- Session management
+- Role-based access control (at route level)
+
+### X-WORKIZ Header Structure
+
+```typescript
+// Set by Auth Service, consumed by other services
+interface WorkizHeaders {
+  'X-WORKIZ-AUTHENTICATED': boolean;
+  'X-WORKIZ-ACCOUNT-ID': string;
+  'X-WORKIZ': {
+    accountId: string;
+    valid: boolean;
+    userId: string;
+    apiKeyValidated?: boolean;  // For API key auth
+  };
+}
+```
+
+### Services Reading Auth Headers
+
+```typescript
+// Example: Reading auth headers in NestJS service
+// These headers are ONLY trustworthy when coming through Traefik
+
+@Get('resource')
+async getResource(
+  @Headers('x-workiz') workizHeader: string,
+  @Headers('x-workiz-account-id') accountId: string,
+) {
+  const workiz = JSON.parse(workizHeader);
+  // workiz.userId, workiz.accountId are validated by Auth Service
+}
 ```
 
 Run initial population:
@@ -2754,7 +3309,30 @@ export JIRA_API_TOKEN="..."
 export JIRA_EMAIL="..."
 ```
 
-### 4. Custom Styling Rules Configuration
+### 4. Workiz Internal NPM Packages
+
+Based on the auth service, these are the internal packages used across services:
+
+```toml
+[workiz]
+# Internal package prefixes to track
+internal_package_prefixes = ["@workiz/"]
+
+# Known internal packages (update as needed)
+internal_packages = [
+    "@workiz/all-exceptions-filter",
+    "@workiz/config-loader", 
+    "@workiz/is-boolean-validation-pipe",
+    "@workiz/jwt-headers-generator",
+    "@workiz/node-logger",
+    "@workiz/pubsub-decorator-reflector",
+    "@workiz/pubsub-publish-client",
+    "@workiz/redis-nestjs",
+    "@workiz/socket-io-updater"
+]
+```
+
+### 5. Custom Styling Rules Configuration (From Cursor Rules)
 
 Create `pr_agent/settings/workiz_rules.toml`:
 
@@ -2871,11 +3449,13 @@ severity = "info"
 suggestion = "Consider using string enums for better debugging and serialization"
 
 # =============================================================================
-# NestJS Rules
+# =============================================================================
+# NestJS Rules (From Cursor Rules)
 # =============================================================================
 
 [workiz_rules.nestjs]
 
+# Dependency Injection
 [[workiz_rules.nestjs.patterns]]
 name = "manual_instantiation"
 pattern = 'new\s+\w+(Service|Repository|Provider|Guard|Interceptor)\('
@@ -2883,6 +3463,7 @@ message = "Manual class instantiation instead of dependency injection"
 severity = "warning"
 suggestion = "Inject dependencies via constructor - let NestJS IoC container manage instances"
 
+# Controller architecture
 [[workiz_rules.nestjs.patterns]]
 name = "controller_business_logic"
 pattern = '@Controller[^}]*\{[^}]*(\.save\(|\.create\(|\.update\(|\.delete\(|\.findOne\()'
@@ -2891,19 +3472,28 @@ severity = "warning"
 suggestion = "Controllers should delegate to services - move business logic to service layer"
 
 [[workiz_rules.nestjs.patterns]]
-name = "missing_async"
-pattern = '@(Get|Post|Put|Patch|Delete)\([^)]*\)\s*\n\s*\w+\([^)]*\):\s*(?!Promise)'
-message = "Handler appears to be synchronous"
+name = "controller_complex_logic"
+pattern = '@Controller[^}]*\{[^}]*(if\s*\(|for\s*\(|while\s*\(|switch\s*\()'
+message = "Complex logic in controller - controllers should be thin"
 severity = "info"
-suggestion = "Most handlers should be async and return Promise"
+suggestion = "Move business logic to service layer"
 
+# Structured Logging (From Cursor Rules)
 [[workiz_rules.nestjs.patterns]]
 name = "no_logger_context"
-pattern = 'this\.logger\.(log|warn|error|debug)\([^,)]+\)'
+pattern = 'this\.logger\.(log|warn|error|debug)\s*\(\s*[''"`][^,]+\s*\)'
 message = "Logger call without context object"
 severity = "warning"
-suggestion = "Always include context object: this.logger.log('message', { accountId, ... })"
+suggestion = "Always include context object: this.logger.log('message', { accountId, userId, ... })"
 
+[[workiz_rules.nestjs.patterns]]
+name = "logger_string_concat"
+pattern = 'this\.logger\.(log|warn|error|debug)\s*\(\s*`[^`]*\$\{'
+message = "String interpolation in logger - use structured logging instead"
+severity = "warning"
+suggestion = "Use: this.logger.log('message', { variable }) instead of template literals"
+
+# Functional Programming (From Cursor Rules)
 [[workiz_rules.nestjs.patterns]]
 name = "let_usage"
 pattern = '\blet\s+\w+\s*[:=]'
@@ -2912,12 +3502,34 @@ severity = "info"
 suggestion = "Use const with immutable operations (map, filter, spread) instead of let with mutation"
 
 [[workiz_rules.nestjs.patterns]]
+name = "var_usage"
+pattern = '\bvar\s+\w+'
+message = "var keyword is deprecated"
+severity = "error"
+suggestion = "Use const or let instead of var"
+
+[[workiz_rules.nestjs.patterns]]
 name = "array_mutation"
-pattern = '\.(push|pop|shift|unshift|splice|sort|reverse)\('
+pattern = '\.(push|pop|shift|unshift|splice)\('
 message = "Array mutation method used"
 severity = "info"
-suggestion = "Use immutable methods: [...arr, item], arr.filter(), arr.map(), [...arr].sort()"
+suggestion = "Use immutable methods: [...arr, item], arr.filter(), arr.map()"
 
+[[workiz_rules.nestjs.patterns]]
+name = "object_mutation"
+pattern = '\w+\.\w+\s*=\s*[^=]'
+message = "Object mutation detected"
+severity = "info"
+suggestion = "Use spread operator: { ...obj, prop: newValue }"
+
+[[workiz_rules.nestjs.patterns]]
+name = "imperative_loop"
+pattern = '\bfor\s*\([^)]+\)\s*\{'
+message = "Imperative for loop"
+severity = "info"
+suggestion = "Consider using map, filter, reduce for declarative iteration"
+
+# PubSub Patterns (From Cursor Rules - pubsub-pattern.mdc)
 [[workiz_rules.nestjs.patterns]]
 name = "pubsub_no_ack"
 pattern = '@PubSubTopic[^@]*@PubSubEvent(?![^@]*@PubSubAsyncAcknowledge)'
@@ -2926,11 +3538,92 @@ severity = "error"
 suggestion = "Always use @PubSubAsyncAcknowledge to prevent message loss"
 
 [[workiz_rules.nestjs.patterns]]
+name = "pubsub_sync_handler"
+pattern = '@PubSub(Topic|Event)[^}]*public\s+(?!async)\w+\('
+message = "PubSub handler is not async"
+severity = "error"
+suggestion = "PubSub handlers must be async: public async onEventName(...)"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_handler_naming"
+pattern = '@PubSubEvent[^}]*public\s+async\s+(?!on[A-Z])\w+\('
+message = "PubSub handler should use onResourceAction naming format"
+severity = "warning"
+suggestion = "Use naming like: onUserCreated, onOrderUpdated"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_missing_original_message"
+pattern = '@PubSubPayload\(\)\s+(?!_)\w+:\s+EmittedMessage'
+message = "Unused original message should be prefixed with underscore"
+severity = "info"
+suggestion = "Use: @PubSubPayload() _originalMessage: EmittedMessage<any>"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_no_mask_sensitive"
+pattern = 'transport:\s*[''"]pubsub[''"][^}]*payload:\s*(?!maskSensitive)\w+'
+message = "PubSub payload logged without maskSensitive()"
+severity = "error"
+suggestion = "Use maskSensitive(eventData) when logging payloads with passwords/tokens"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_business_in_controller"
+pattern = '@PubSub(Topic|Event)[^}]*\.(save|create|update|delete|findOne)\('
+message = "Business logic in PubSub controller handler"
+severity = "error"
+suggestion = "Delegate to service: await this.service.method(eventData, logDetails)"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_missing_log"
+pattern = '@PubSubEvent[^}]*public\s+async\s+on\w+\([^)]*\)[^}]*(?!this\.logger\.log)'
+message = "PubSub handler without event reception logging"
+severity = "warning"
+suggestion = "Add: this.logger.log('Received resource event', eventData)"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_wrong_decorator_order"
+pattern = '@PubSubEvent[^@]*@PubSubTopic'
+message = "PubSub decorators in wrong order"
+severity = "error"
+suggestion = "Correct order: @PubSubTopic, @PubSubEvent, @PubSubAsyncAcknowledge"
+
+# Exception Handling (From Cursor Rules)
+[[workiz_rules.nestjs.patterns]]
 name = "catch_without_rethrow"
 pattern = 'catch\s*\([^)]*\)\s*\{[^}]*(?!throw)'
 message = "Exception caught but not rethrown"
 severity = "warning"
-suggestion = "Let exceptions propagate to global filter, or rethrow after logging"
+suggestion = "Let exceptions propagate to @workiz/all-exceptions-filter, or rethrow after logging"
+
+[[workiz_rules.nestjs.patterns]]
+name = "try_catch_in_service"
+pattern = 'try\s*\{[^}]+\}\s*catch'
+message = "try-catch block in service"
+severity = "info"
+suggestion = "Avoid try-catch unless absolutely necessary - let global exception filter handle errors"
+
+# Controller REST Standards (From Cursor Rules)
+[[workiz_rules.nestjs.patterns]]
+name = "singular_route"
+pattern = "@Controller\\(['\"](?!.*s['\"])\\w+['\"]\\)"
+message = "Controller route should use plural nouns"
+severity = "info"
+suggestion = "Use plural nouns for routes: /users, /products, /videos"
+
+# TypeORM Migrations (From Cursor Rules)
+[[workiz_rules.nestjs.patterns]]
+name = "typeorm_table_builder"
+pattern = 'createTable\s*\(|dropTable\s*\('
+message = "Using TypeORM table builder instead of raw SQL"
+severity = "warning"
+suggestion = "Use raw SQL queries in migrations: queryRunner.query(`CREATE TABLE...`)"
+
+# Inline Comments (From Cursor Rules)
+[[workiz_rules.nestjs.patterns]]
+name = "inline_comment"
+pattern = '^\s*//(?!\s*(TODO|FIXME|NOTE|HACK|XXX):)'
+message = "Inline comment detected - avoid unless necessary"
+severity = "info"
+suggestion = "Avoid inline comments - code should be self-documenting"
 
 # =============================================================================
 # React Rules
@@ -2981,17 +3674,18 @@ severity = "info"
 suggestion = "Consider using Context or state management for deeply nested props"
 
 # =============================================================================
-# Python Rules
+# Python Rules (With PostgreSQL/SQLAlchemy Support)
 # =============================================================================
 
 [workiz_rules.python]
 
+# Basic Python
 [[workiz_rules.python.patterns]]
 name = "py_no_print"
 pattern = '\bprint\s*\('
 message = "print() statement found"
 severity = "warning"
-suggestion = "Use proper logging instead of print statements"
+suggestion = "Use proper logging (structlog, loguru) instead of print statements"
 
 [[workiz_rules.python.patterns]]
 name = "py_bare_except"
@@ -3050,6 +3744,71 @@ message = "Synchronous FastAPI endpoint may block event loop"
 severity = "warning"
 suggestion = "Use async def for FastAPI endpoints"
 
+[[workiz_rules.python.patterns]]
+name = "fastapi_missing_response_model"
+pattern = '@(app|router)\.(get|post|put|patch|delete)\([^)]*(?!response_model)'
+message = "FastAPI endpoint without response_model"
+severity = "info"
+suggestion = "Add response_model for OpenAPI documentation and validation"
+
+# PostgreSQL / SQLAlchemy
+[[workiz_rules.python.patterns]]
+name = "pg_raw_sql"
+pattern = 'execute\s*\(\s*[''"](?:SELECT|INSERT|UPDATE|DELETE)'
+message = "Raw SQL query - consider using SQLAlchemy ORM"
+severity = "info"
+suggestion = "Use SQLAlchemy ORM methods or Core for type safety"
+
+[[workiz_rules.python.patterns]]
+name = "pg_sql_injection"
+pattern = 'execute\s*\(\s*f[''"]|execute\s*\(\s*[''"].*%s.*[''"].*%'
+message = "Possible SQL injection - string formatting in query"
+severity = "error"
+suggestion = "Use parameterized queries: execute(query, (param,))"
+
+[[workiz_rules.python.patterns]]
+name = "pg_missing_index_hint"
+pattern = '\.filter\([^)]+\)\.all\(\)'
+message = "Query without pagination or limit"
+severity = "info"
+suggestion = "Consider adding .limit() to prevent large result sets"
+
+[[workiz_rules.python.patterns]]
+name = "pg_n_plus_one"
+pattern = 'for\s+\w+\s+in\s+\w+:\s*\n[^#]*\.(query|filter)\('
+message = "Possible N+1 query in loop"
+severity = "warning"
+suggestion = "Use eager loading with joinedload() or subqueryload()"
+
+[[workiz_rules.python.patterns]]
+name = "pg_no_connection_pool"
+pattern = 'create_engine\([^)]*(?!pool_size)'
+message = "Database engine without pool configuration"
+severity = "info"
+suggestion = "Configure pool_size and max_overflow for production"
+
+[[workiz_rules.python.patterns]]
+name = "pg_commit_in_loop"
+pattern = 'for\s+\w+\s+in\s+\w+:\s*\n[^#]*\.commit\(\)'
+message = "Database commit inside loop"
+severity = "warning"
+suggestion = "Batch commits outside the loop for better performance"
+
+# Async Python
+[[workiz_rules.python.patterns]]
+name = "asyncio_blocking_call"
+pattern = 'async\s+def[^:]+:\s*\n[^#]*(time\.sleep|requests\.(get|post))'
+message = "Blocking call in async function"
+severity = "error"
+suggestion = "Use asyncio.sleep() and httpx/aiohttp for async code"
+
+[[workiz_rules.python.patterns]]
+name = "asyncpg_not_used"
+pattern = 'import\s+psycopg2'
+message = "Using psycopg2 - consider asyncpg for async applications"
+severity = "info"
+suggestion = "Use asyncpg or databases library for async PostgreSQL"
+
 # =============================================================================
 # Functional Programming Style Rules
 # =============================================================================
@@ -3085,45 +3844,156 @@ severity = "info"
 suggestion = "Consider using map, filter, reduce, or forEach for declarative iteration"
 
 # =============================================================================
-# Security Rules
+# Security Rules (General - Auth handled by Traefik + Auth Service)
+# Note: Guards/auth middleware not needed - Traefik's forwardAuth handles authentication
+# Focus on: data validation, injection prevention, sensitive data exposure
 # =============================================================================
 
 [workiz_rules.security]
 
+# Hardcoded Secrets
 [[workiz_rules.security.patterns]]
 name = "hardcoded_secret"
-pattern = '(password|secret|api_key|apikey|token|private_key)\s*[:=]\s*[''"][^''"]{8,}[''"]'
+pattern = '(password|secret|api_key|apikey|token|private_key|auth_token|bearer)\s*[:=]\s*[''"][^''"]{8,}[''"]'
 message = "Possible hardcoded secret detected"
 severity = "error"
-suggestion = "Use environment variables or secret management service"
+suggestion = "Use @workiz/config-loader with GCloud Secret Manager"
 
+[[workiz_rules.security.patterns]]
+name = "hardcoded_connection_string"
+pattern = '(mysql|postgres|mongodb|redis)://[^$]+'
+message = "Hardcoded database connection string"
+severity = "error"
+suggestion = "Use environment variables for connection strings"
+
+# SQL/NoSQL Injection
 [[workiz_rules.security.patterns]]
 name = "sql_injection"
 pattern = '(\$\{|\+\s*\w+\s*\+).*?(SELECT|INSERT|UPDATE|DELETE|WHERE)'
 message = "Possible SQL injection vulnerability"
 severity = "error"
-suggestion = "Use parameterized queries or ORM methods"
+suggestion = "Use TypeORM query builder or parameterized queries"
 
 [[workiz_rules.security.patterns]]
-name = "eval_usage"
-pattern = '\beval\s*\('
-message = "eval() usage detected - security risk"
+name = "raw_sql_with_params"
+pattern = 'query\s*\(\s*`[^`]*\$\{'
+message = "Template literal in raw SQL query"
 severity = "error"
-suggestion = "Never use eval() - find alternative approaches"
+suggestion = "Use parameterized queries: query('SELECT * FROM x WHERE id = ?', [id])"
 
+[[workiz_rules.security.patterns]]
+name = "mongo_injection"
+pattern = '\{\s*\$where\s*:'
+message = "MongoDB $where operator is vulnerable to injection"
+severity = "error"
+suggestion = "Avoid $where - use standard query operators"
+
+# XSS Prevention
 [[workiz_rules.security.patterns]]
 name = "innerHTML"
 pattern = '\.innerHTML\s*=|dangerouslySetInnerHTML'
 message = "Direct HTML insertion - XSS risk"
 severity = "warning"
-suggestion = "Sanitize content or use safer alternatives"
+suggestion = "Sanitize content or use React's JSX"
 
 [[workiz_rules.security.patterns]]
+name = "eval_usage"
+pattern = '\beval\s*\('
+message = "eval() usage detected - code injection risk"
+severity = "error"
+suggestion = "Never use eval() - find alternative approaches"
+
+[[workiz_rules.security.patterns]]
+name = "function_constructor"
+pattern = 'new\s+Function\s*\('
+message = "Function constructor is similar to eval()"
+severity = "error"
+suggestion = "Avoid dynamic code execution"
+
+# Sensitive Data Logging
+[[workiz_rules.security.patterns]]
+name = "logging_password"
+pattern = 'logger\.(log|info|debug|warn|error)\s*\([^)]*password'
+message = "Possible password logging"
+severity = "error"
+suggestion = "Never log passwords or sensitive data - use maskSensitive()"
+
+[[workiz_rules.security.patterns]]
+name = "logging_token"
+pattern = 'logger\.(log|info|debug|warn|error)\s*\([^)]*(token|apiKey|secret)'
+message = "Possible token/secret logging"
+severity = "error"
+suggestion = "Never log tokens or secrets - use maskSensitive()"
+
+[[workiz_rules.security.patterns]]
+name = "console_log_sensitive"
+pattern = 'console\.(log|debug)\s*\([^)]*(password|token|secret|apiKey)'
+message = "Sensitive data in console.log"
+severity = "error"
+suggestion = "Remove console statements and never log sensitive data"
+
+# HTTP Security
+[[workiz_rules.security.patterns]]
 name = "http_without_https"
-pattern = '[''"]http://(?!localhost|127\.0\.0\.1)'
+pattern = '[''"]http://(?!localhost|127\.0\.0\.1|host\.docker\.internal)'
 message = "HTTP URL used instead of HTTPS"
 severity = "warning"
 suggestion = "Use HTTPS for secure communication"
+
+# Path Traversal
+[[workiz_rules.security.patterns]]
+name = "path_traversal"
+pattern = '(readFile|writeFile|unlink|readdir)\s*\([^)]*(\+|concat|\$\{)'
+message = "Dynamic file path - possible path traversal"
+severity = "warning"
+suggestion = "Validate and sanitize file paths"
+
+# Cookie Security
+[[workiz_rules.security.patterns]]
+name = "insecure_cookie"
+pattern = 'cookie\s*\([^)]*(?!.*httpOnly)(?!.*secure)'
+message = "Cookie may not have httpOnly or secure flags"
+severity = "info"
+suggestion = "Set httpOnly: true, secure: true for sensitive cookies"
+
+# Auth Headers - Traefik Integration
+[[workiz_rules.security.patterns]]
+name = "manipulating_workiz_headers"
+pattern = 'set\s*\(\s*[''"]X-WORKIZ'
+message = "Manually setting X-WORKIZ headers"
+severity = "warning"
+suggestion = "X-WORKIZ headers should only be set by auth service via Traefik forwardAuth"
+
+[[workiz_rules.security.patterns]]
+name = "trusting_workiz_header_without_traefik"
+pattern = 'headers\[[''"]X-WORKIZ[''"]'
+message = "Reading X-WORKIZ headers - ensure request comes through Traefik"
+severity = "info"
+suggestion = "X-WORKIZ headers are only trustworthy when coming through Traefik"
+
+# CORS
+[[workiz_rules.security.patterns]]
+name = "cors_wildcard"
+pattern = 'origin\s*:\s*[''"]\\*[''"]|Access-Control-Allow-Origin.*\\*'
+message = "CORS allows all origins"
+severity = "warning"
+suggestion = "Restrict CORS to specific trusted domains"
+
+# JWT/Session
+[[workiz_rules.security.patterns]]
+name = "jwt_secret_hardcoded"
+pattern = 'jwt\.sign\s*\([^)]*[''"][A-Za-z0-9]{10,}[''"]'
+message = "Hardcoded JWT secret"
+severity = "error"
+suggestion = "Use environment variable for JWT secret"
+
+# Input Validation (NestJS DTOs)
+[[workiz_rules.security.patterns]]
+name = "missing_dto_validation"
+pattern = '@Body\(\)\s+\w+:\s+(?!.*Dto)'
+message = "Request body without DTO validation"
+severity = "warning"
+suggestion = "Use DTOs with class-validator decorators for input validation"
 
 # =============================================================================
 # Database Query Rules (MySQL, MongoDB, Elasticsearch)
@@ -4952,6 +5822,36 @@ class RepositoryIndexingService:
         if elements_batch:
             await self._store_elements_batch(elements_batch)
         
+        # Extract and store cursor rules
+        await self._process_cursor_rules(repo_path, repo_id)
+    
+    async def _process_cursor_rules(self, repo_path: str, repo_id: int) -> None:
+        """Extract and store cursor rules from repository."""
+        from pr_agent.tools.cursor_rules_loader import CursorRulesLoader
+        
+        loader = CursorRulesLoader()
+        rules = await loader.load_rules_from_repo(repo_path)
+        
+        if not rules:
+            return
+        
+        async with self.db.connection() as conn:
+            # Clear existing rules for this repo
+            await conn.execute(
+                "DELETE FROM cursor_rules WHERE repository_id = $1",
+                repo_id
+            )
+            
+            # Insert new rules
+            for rule in rules:
+                await conn.execute("""
+                    INSERT INTO cursor_rules 
+                    (repository_id, source_file, category, rule_text, applies_to)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT DO NOTHING
+                """, repo_id, rule.source_file, rule.category, 
+                    rule.rule_text, rule.applies_to)
+        
         return stats
     
     async def _store_elements_batch(self, elements_batch: List[Dict]) -> None:
@@ -6286,10 +7186,23 @@ CREATE TABLE package_updates (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Cursor rules extracted from repositories
+CREATE TABLE cursor_rules (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    source_file VARCHAR(255) NOT NULL,
+    category VARCHAR(100),
+    rule_text TEXT NOT NULL,
+    applies_to TEXT[],  -- glob patterns
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repository_id, source_file, rule_text)
+);
+
 -- Create indexes
 CREATE INDEX idx_package_deps_pkg ON package_dependencies(package_name);
 CREATE INDEX idx_package_deps_repo ON package_dependencies(repository_id);
 CREATE INDEX idx_internal_packages_name ON internal_packages(package_name);
+CREATE INDEX idx_cursor_rules_repo ON cursor_rules(repository_id);
 ```
 
 ### Integration with PR Review
@@ -7058,20 +7971,71 @@ Extra instructions:
 
 | Stack | Analyzer | Rules | Notes |
 |-------|----------|-------|-------|
-| **PHP** | `PHPAnalyzer` | php_avoid_raw_sql, php_no_dd, eloquent_n_plus_one, mass_assignment, env_in_code | Laravel patterns, routes, event handlers |
+| **PHP** | `PHPAnalyzer` | php_avoid_raw_sql, php_no_dd, eloquent_n_plus_one, mass_assignment, env_in_code | Main backend, MySQL, MongoDB, Elasticsearch |
 | **NodeJS (JS)** | `JavaScriptAnalyzer` | js_no_console, callback_hell, no_var, mutation_in_reduce | Express routes, EventEmitter patterns |
 | **NodeJS (TS)** | `TypeScriptAnalyzer` | ts_no_any, ts_no_ignore, prefer_readonly | Extends JS analyzer, adds interfaces/types |
-| **NestJS (TS)** | `NestJSAnalyzer` | nestjs_di_injection, nestjs_controller_logic, nestjs_async_handler, nestjs_no_logger_context, nestjs_pubsub_no_ack | Controllers, Services, Modules, DTOs, PubSub handlers |
-| **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps, react_class_component | Components, Hooks, Context, Redux |
-| **Python** | `PythonAnalyzer` | py_no_print, py_type_hints, py_docstrings, py_exception_handling | FastAPI, Django, Flask patterns |
+| **NestJS (TS)** | `NestJSAnalyzer` | 20+ rules from Cursor Rules (structured logging, DI, PubSub, functional style, etc.) | Auth, CRM, Core, Reporting services |
+| **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps, react_class_component | Web app, Mobile web |
+| **Python** | `PythonAnalyzer` | py_no_print, pg_sql_injection, pg_n_plus_one, asyncio_blocking_call, fastapi_sync_endpoint | FastAPI + PostgreSQL |
+
+### ✅ Cursor Team Rules Integrated (From `.cursor/rules.mdc`)
+
+| Category | Rules Added | Source File |
+|----------|-------------|-------------|
+| **Structured Logging** | no_logger_context, logger_string_concat, maskSensitive required | `rules.mdc` |
+| **Functional Style** | let_usage, var_usage, array_mutation, object_mutation, imperative_loop | Workspace Rules |
+| **PubSub Patterns** | pubsub_no_ack, pubsub_sync_handler, pubsub_metadata, pubsub_registration | `pubsub-pattern.mdc` |
+| **Exception Handling** | catch_without_rethrow, try_catch_in_service, use @workiz/all-exceptions-filter | Workspace Rules |
+| **TypeORM Migrations** | typeorm_table_builder (use raw SQL only) | Workspace Rules |
+| **Controller Standards** | singular_route, controller_complex_logic, no business logic in controllers | Workspace Rules |
+| **No Inline Comments** | inline_comment detection | `rules.mdc` |
+| **Test Execution** | Use `npm run test`, grep for "fail" and "error" | `rules.mdc` |
+| **Code Verification** | Always check actual implementation, don't assume | `rules.mdc` |
+| **DI Pattern** | Use NestJS IoC, no manual instantiation | Workspace Rules |
+
+### ✅ PubSub Pattern Requirements (From `pubsub-pattern.mdc`)
+
+| Requirement | Rule Check |
+|-------------|------------|
+| Metadata constants in `src/constants/pubsub-metadata.ts` | `pubsub_metadata_location` |
+| Decorators: @PubSubTopic, @PubSubEvent, @PubSubAsyncAcknowledge | `pubsub_missing_decorators` |
+| Method signature with EmittedMessage and typed DTO | `pubsub_method_signature` |
+| Register in main.ts with ReflectDecoratorService | `pubsub_registration_missing` |
+| Use maskSensitive() for logging payloads | `pubsub_sensitive_logging` |
+| No business logic in controller handlers | `pubsub_controller_logic` |
+| Handler naming: onResourceAction format | `pubsub_handler_naming` |
 
 ### ✅ Databases Covered
 
-| Database | Analyzer | Key Checks |
-|----------|----------|------------|
-| **MySQL** | `MySQLAnalyzer` in `sql_analyzer.py` | SELECT *, LIMIT without ORDER BY, missing indexes, N+1 queries, SQL injection |
-| **MongoDB** | `MongoDBAnalyzer` | Queries without indexes, $regex without anchor, large $in arrays, updates without operators |
-| **Elasticsearch** | `ElasticsearchAnalyzer` | Wildcard queries, script queries, deep pagination |
+| Database | Analyzer | Key Checks | Used By |
+|----------|----------|------------|---------|
+| **MySQL** | `MySQLAnalyzer` | SELECT *, LIMIT without ORDER BY, N+1 queries, SQL injection | PHP backend, NestJS services |
+| **PostgreSQL** | `PostgreSQLAnalyzer` | pg_sql_injection, pg_n_plus_one, pg_commit_in_loop, asyncpg patterns | Python service |
+| **MongoDB** | `MongoDBAnalyzer` | Queries without indexes, $regex without anchor, large $in arrays | PHP backend |
+| **Elasticsearch** | `ElasticsearchAnalyzer` | Wildcard queries, script queries, deep pagination | PHP backend, Reporting service |
+
+### ✅ Security Review (Traefik-Aware)
+
+| Focus Area | What We Check | What We Don't Check |
+|------------|---------------|---------------------|
+| **Input Validation** | DTOs with class-validator, missing validation | Auth guards (Traefik handles) |
+| **Injection** | SQL, NoSQL, command injection | Session validation |
+| **Data Exposure** | Sensitive data in logs, passwords logged | JWT validation |
+| **Headers** | Manipulating X-WORKIZ headers incorrectly | Role-based access |
+| **CORS/Cookies** | Wildcard CORS, insecure cookies | - |
+
+### ✅ Workiz Internal NPM Packages
+
+| Package | Purpose | Track Updates |
+|---------|---------|---------------|
+| `@workiz/all-exceptions-filter` | Global exception handling | ✅ |
+| `@workiz/config-loader` | Configuration with GCloud Secrets | ✅ |
+| `@workiz/node-logger` | Structured logging (Winston) | ✅ |
+| `@workiz/pubsub-decorator-reflector` | PubSub decorators | ✅ |
+| `@workiz/pubsub-publish-client` | PubSub publishing | ✅ |
+| `@workiz/redis-nestjs` | Redis integration | ✅ |
+| `@workiz/jwt-headers-generator` | JWT header utilities | ✅ |
+| `@workiz/socket-io-updater` | Socket.io updates | ✅ |
 
 ### ✅ NPM Package Management
 
@@ -7144,6 +8108,7 @@ pr_agent/
 │   ├── jira_context_provider.py         # RAG for Jira tickets
 │   ├── custom_rules_engine.py           # Custom review rules
 │   ├── custom_rules_loader.py           # Load rules from TOML/DB
+│   ├── cursor_rules_loader.py           # Load .cursor/rules.mdc files
 │   ├── sql_analyzer.py                  # MySQL/MongoDB/ES analyzer
 │   ├── pubsub_analyzer.py               # PubSub topology analyzer
 │   ├── security_analyzer.py             # Deep security checks
