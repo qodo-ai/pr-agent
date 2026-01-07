@@ -14,7 +14,7 @@ A customized fork of [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) tai
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.12+
+- Python 3.11+
 - Docker Desktop
 - GitHub Personal Access Token
 - OpenAI API Key
@@ -29,23 +29,22 @@ git clone https://github.com/Workiz/workiz-pr-agent.git
 cd workiz-pr-agent
 
 # Create virtual environment
-python3.12 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install asyncpg jira pgvector aiohttp gitpython pyyaml packaging
 
-# Start database
-docker-compose -f docker-compose.local.yml up -d
+# Start database (PostgreSQL with pgvector)
+docker-compose --profile with-db up -d db
 
-# Configure secrets
-cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
-# Edit .secrets.toml with your credentials
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials
 
-# Discover and index repositories
-python -m pr_agent.cli_admin discover --orgs workiz
+# Run database migrations
+python scripts/run_migrations.py
 
 # Start server
-python -m uvicorn pr_agent.servers.github_app:app --port 3000 --reload
+python -m uvicorn pr_agent.servers.github_app:app --port 8000 --reload
 ```
 
 See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detailed setup instructions.
@@ -227,12 +226,13 @@ npm_org = "@workiz"
 │                                                                                       │
 │   External Systems                                                                    │
 │   ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│   │  GitHub  │  │   Jira   │  │  Figma   │  │ NPM Reg  │  │  RepoSwarm Hub       │  │
+│   │  GitHub  │  │   Jira   │  │  Figma   │  │ GitHub   │  │  RepoSwarm Hub       │  │
+│   │  (PRs)   │  │ (Tickets)│  │ (Designs)│  │ Packages │  │  (.arch.md files)    │  │
 │   └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┬───────────┘  │
 │        │             │             │             │                    │              │
 │        ▼             ▼             ▼             ▼                    ▼              │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                      PR Agent Core (FastAPI)                                  │   │
+│   │                      PR Agent Core (FastAPI on GKE)                           │   │
 │   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │   │
 │   │  │   Context   │  │ Specialized │  │   Custom    │  │    Output           │ │   │
 │   │  │   Loaders   │  │   Agents    │  │   Rules     │  │    Handlers         │ │   │
@@ -247,12 +247,23 @@ npm_org = "@workiz"
 │                                        │                                             │
 │                                        ▼                                             │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
-│   │                     PostgreSQL + pgvector                                     │   │
+│   │                     Cloud SQL PostgreSQL + pgvector                           │   │
 │   │  repositories │ code_chunks │ jira_tickets │ custom_rules │ api_usage        │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                                                                       │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Deployment Infrastructure
+
+| Component | Technology |
+|-----------|------------|
+| **Container Registry** | Google Container Registry (GCR) |
+| **Orchestration** | Google Kubernetes Engine (GKE) |
+| **Deployment** | Helm charts + GitHub Actions (`Workiz/workiz-actions/deploy-microservice`) |
+| **Secrets** | Google Cloud Secret Manager (naming: `<env>-pr-agent`) |
+| **Database** | Cloud SQL PostgreSQL with pgvector |
+| **Domains** | `pr-agent-staging.workiz.dev`, `pr-agent.workiz.dev` |
 
 ---
 

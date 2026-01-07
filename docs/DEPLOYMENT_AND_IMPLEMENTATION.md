@@ -5,7 +5,7 @@ This document covers local setup, production deployment, data initialization, an
 ## Table of Contents
 
 1. [Local Development Setup](#1-local-development-setup)
-2. [Production Deployment (GCloud)](#2-production-deployment-gcloud)
+2. [Production Deployment (GKE + Helm)](#2-production-deployment-gke--helm)
 3. [Data Initialization](#3-data-initialization)
 4. [Continuous Updates](#4-continuous-updates)
 5. [Monitoring & Logging](#5-monitoring--logging)
@@ -21,8 +21,8 @@ This document covers local setup, production deployment, data initialization, an
 ### Prerequisites
 
 ```bash
-# 1. Install Python 3.12+
-brew install python@3.12
+# 1. Install Python 3.11+
+brew install python@3.11
 
 # 2. Install Docker Desktop
 brew install --cask docker
@@ -46,171 +46,102 @@ git clone https://github.com/Workiz/workiz-pr-agent.git
 cd workiz-pr-agent
 
 # Create virtual environment
-python3.12 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Install additional Workiz dependencies
-pip install asyncpg jira pgvector aiohttp gitpython pyyaml packaging
 ```
 
 ### Start Local Database
 
-Create `docker-compose.local.yml`:
+Create `docker-compose.yml`:
 
 ```yaml
-version: '3.8'
 services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: pr-agent-db
+  db:
+    image: ankane/pgvector:latest
     environment:
-      POSTGRES_DB: pr_agent
-      POSTGRES_USER: pr_agent
-      POSTGRES_PASSWORD: pr_agent_dev
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: pr_agent_db
     ports:
       - "5432:5432"
-    volumes:
-      - pr_agent_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pr_agent_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - with-db  # Only start if explicitly requested
 
-volumes:
-  pr_agent_data:
+  api:
+    build: .
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@db:5432/pr_agent_db}
+      - GITHUB_USER_TOKEN=${GITHUB_USER_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JIRA_BASE_URL=${JIRA_BASE_URL}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - JIRA_EMAIL=${JIRA_EMAIL}
+    ports:
+      - "8000:8000"
 ```
 
 ```bash
-# Create database init directory
-mkdir -p db/init
-
-# Create schema file (copy from ARCHITECTURE_AND_FEATURES.md)
-# Then start database
-docker-compose -f docker-compose.local.yml up -d
+# Start database
+docker-compose --profile with-db up -d db
 
 # Verify database is running
-docker logs pr-agent-db
+docker logs workiz-pr-agent-db-1
+
+# Run migrations
+python scripts/run_migrations.py
 ```
 
-### Configure Secrets
+### Configure Local Environment
+
+Create `.env` file for local development:
 
 ```bash
-# Create secrets file
-cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
-
-# Edit with your credentials
-nano pr_agent/settings/.secrets.toml
+# .env (for local development)
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pr_agent_db
+GITHUB_USER_TOKEN=ghp_your-github-token
+OPENAI_API_KEY=sk-your-openai-key
+JIRA_BASE_URL=https://workiz.atlassian.net
+JIRA_API_TOKEN=your-jira-api-token
+JIRA_EMAIL=your-email@workiz.com
+GCP_PROJECT_ID=workiz-development
 ```
 
-Content of `.secrets.toml`:
+For staging/production environments, create `.env.staging` or `.env.production`.
 
-```toml
-[openai]
-key = "sk-your-openai-key"
-
-[github]
-user_token = "ghp_your-github-token"
-organization = "Workiz"
-main_branches = ["workiz.com", "main", "master"]
-
-[jira]
-api_token = "your-jira-api-token"
-email = "your-email@workiz.com"
-
-[workiz]
-database_url = "postgresql://pr_agent:pr_agent_dev@localhost:5432/pr_agent"
-internal_package_prefixes = ["@workiz/"]
-
-# GitHub Packages authentication (for @workiz packages)
-# The GITHUB_USER_TOKEN is also used for GitHub Packages API access
-# For services that install @workiz packages, use NPM_READONLY_TOKEN in .npmrc
-```
-
-**Note**: The `GITHUB_USER_TOKEN` is used for both GitHub API and GitHub Packages API access. Services that install `@workiz` packages need `.npmrc`:
-```
-@workiz:registry=https://npm.pkg.github.com/
-//npm.pkg.github.com/:_authToken=${NPM_READONLY_TOKEN}
-```
-
-### Configure Main Settings
-
-Edit `pr_agent/settings/configuration.toml`:
-
-```toml
-[config]
-model = "gpt-4o"
-fallback_models = ["gpt-4o-mini"]
-git_provider = "github"
-
-[workiz]
-enable_cross_repo_context = true
-enable_jira_integration = true
-enable_custom_rules = true
-enable_sql_review = true
-enable_enhanced_security = true
-enable_npm_analysis = true
-rag_similarity_threshold = 0.75
-rag_max_chunks = 10
-max_review_comments = 15
-auto_discovery_enabled = true
-github_orgs = ["Workiz"]
-
-[jira]
-base_url = "https://workiz.atlassian.net"
-
-[pr_reviewer]
-num_max_findings = 15
-require_security_review = true
-```
-
-### Initialize Database
+### Start Local Server
 
 ```bash
 # Activate virtual environment
 source venv/bin/activate
 
-# Set environment variables
-export WORKIZ_DATABASE_URL="postgresql://pr_agent:pr_agent_dev@localhost:5432/pr_agent"
-export GITHUB_USER_TOKEN="ghp_your_token"
-export OPENAI_KEY="sk-your_key"
-export JIRA_BASE_URL="https://workiz.atlassian.net"
-export JIRA_API_TOKEN="your_jira_token"
-export JIRA_EMAIL="your_email@workiz.com"
+# Load environment
+export $(cat .env | xargs)
 
-# Run auto-discovery
-python -m pr_agent.cli_admin discover --orgs Workiz
+# Run migrations
+python scripts/run_migrations.py
 
-# Index all repos
-python -m pr_agent.cli_admin index-repos
-
-# Sync Jira
-python -m pr_agent.cli_admin sync-jira --full
-
-# Check status
-python -m pr_agent.cli_admin status
+# Start the server
+python -m uvicorn pr_agent.servers.github_app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Start Local Server
+### Testing with ngrok
 
 ```bash
-# Terminal 1: Start the server
-source venv/bin/activate
-python -m uvicorn pr_agent.servers.github_app:app --host 0.0.0.0 --port 3000 --reload
-
 # Terminal 2: Start ngrok tunnel
-ngrok http 3000
+ngrok http 8000
 
 # Note the ngrok URL (e.g., https://abc123.ngrok.io)
 ```
 
-### Configure GitHub Webhook (Testing)
-
-1. Go to your test repository Settings → Webhooks
-2. Add webhook:
-   - **Payload URL**: `https://your-ngrok-url.ngrok.io/api/v1/github_webhooks`
-   - **Content type**: `application/json`
-   - **Secret**: (generate and save to `.secrets.toml`)
-   - **Events**: Pull requests, Pull request reviews, Issue comments, Push
+Configure GitHub webhook with ngrok URL for testing.
 
 ### Test PR Review
 
@@ -221,261 +152,564 @@ python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" rev
 
 ---
 
-## 2. Production Deployment (GCloud)
+## 2. Production Deployment (GKE + Helm)
 
-### GCloud Project Setup
+The PR Agent and RepoSwarm services are deployed to **GKE (Google Kubernetes Engine)** using **Helm charts** and **GitHub Actions**, following the same pattern as other Workiz Python services (e.g., `spam-detect`).
 
-```bash
-# Set your project
-export PROJECT_ID="workiz-pr-agent"
-export REGION="us-central1"
+### Architecture Overview
 
-# Login to GCloud
-gcloud auth login
-gcloud config set project $PROJECT_ID
-
-# Enable required APIs
-gcloud services enable \
-    run.googleapis.com \
-    secretmanager.googleapis.com \
-    sqladmin.googleapis.com \
-    cloudbuild.googleapis.com \
-    artifactregistry.googleapis.com
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           Workiz Deployment Architecture                         │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  GitHub Repository                                                               │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  workiz-pr-agent/                                                        │    │
+│  │  ├── .github/workflows/                                                  │    │
+│  │  │   ├── deploy-pr-agent-staging.yml                                     │    │
+│  │  │   └── deploy-pr-agent-prod.yml                                        │    │
+│  │  ├── infra/helm/                                                         │    │
+│  │  │   ├── staging.yaml                                                    │    │
+│  │  │   └── prod.yaml                                                       │    │
+│  │  ├── migrations/                                                         │    │
+│  │  │   └── *.sql                                                           │    │
+│  │  └── Dockerfile                                                          │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                               │                                                  │
+│                               │ GitHub Actions                                   │
+│                               ▼                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  Workiz/workiz-actions/deploy-microservice                               │    │
+│  │  • Builds Docker image                                                    │    │
+│  │  • Pushes to GCR                                                         │    │
+│  │  • Deploys to GKE via Helm                                               │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+│                               │                                                  │
+│                               ▼                                                  │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │  Google Cloud Platform                                                    │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────────┐   │    │
+│  │  │  GCR         │  │  GKE         │  │  Secret Manager              │   │    │
+│  │  │  (Images)    │  │  (K8s)       │  │  staging-pr-agent            │   │    │
+│  │  └──────────────┘  └──────────────┘  │  prod-pr-agent               │   │    │
+│  │                          │           └──────────────────────────────┘   │    │
+│  │                          ▼                                               │    │
+│  │  ┌──────────────────────────────────────────────────────────────────┐   │    │
+│  │  │  Cloud SQL (PostgreSQL + pgvector)                                │   │    │
+│  │  │  pr_agent_staging / pr_agent_prod                                 │   │    │
+│  │  └──────────────────────────────────────────────────────────────────┘   │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Create Cloud SQL Instance
+### Secrets Management (Google Cloud Secret Manager)
+
+Secrets are stored in Google Cloud Secret Manager using the naming convention:
+- **`<environment>-<service-name>`** (e.g., `staging-pr-agent`, `prod-pr-agent`)
+
+The secret content is in `.env` format:
 
 ```bash
-# Create PostgreSQL instance
-gcloud sql instances create pr-agent-db \
-    --database-version=POSTGRES_16 \
-    --tier=db-g1-small \
-    --region=$REGION \
-    --storage-auto-increase \
-    --backup-start-time=03:00
-
-# Create database
-gcloud sql databases create pr_agent --instance=pr-agent-db
-
-# Create user
-gcloud sql users create pr_agent \
-    --instance=pr-agent-db \
-    --password="$(openssl rand -base64 24)"
-
-# Enable pgvector extension
-gcloud sql connect pr-agent-db --user=postgres
-# In psql:
-# CREATE EXTENSION vector;
-# \q
+# Example: staging-pr-agent secret content
+DATABASE_URL=postgresql://pr_agent:password@10.x.x.x:5432/pr_agent_staging
+GITHUB_USER_TOKEN=ghp_xxx
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
+GITHUB_WEBHOOK_SECRET=xxx
+OPENAI_API_KEY=sk-xxx
+JIRA_BASE_URL=https://workiz.atlassian.net
+JIRA_API_TOKEN=xxx
+JIRA_EMAIL=pr-agent@workiz.com
 ```
 
-### Configure Secrets in GCloud Secret Manager
+### Config Loader (Python equivalent of @workiz/config-loader)
 
-```bash
-# Create secrets
-echo -n "sk-your-openai-key" | gcloud secrets create openai-key --data-file=-
-
-echo -n "ghp_your-github-token" | gcloud secrets create github-token --data-file=-
-
-# For GitHub App (store private key)
-gcloud secrets create github-app-private-key --data-file=private-key.pem
-
-echo -n "123456" | gcloud secrets create github-app-id --data-file=-
-
-echo -n "your-webhook-secret" | gcloud secrets create github-webhook-secret --data-file=-
-
-echo -n "your-jira-token" | gcloud secrets create jira-api-token --data-file=-
-
-echo -n "your-email@workiz.com" | gcloud secrets create jira-email --data-file=-
-
-# Database password
-echo -n "database-password" | gcloud secrets create db-password --data-file=-
-
-# List secrets to verify
-gcloud secrets list
-```
-
-### Create Service Account
-
-```bash
-# Create service account
-gcloud iam service-accounts create pr-agent-sa \
-    --display-name="PR Agent Service Account"
-
-# Grant Secret Manager access
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/secretmanager.secretAccessor"
-
-# Grant Cloud SQL access
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
-    --role="roles/cloudsql.client"
-```
-
-### GCloud Secret Manager Provider
-
-Create `pr_agent/secret_providers/gcloud_secret_manager.py`:
+Create `pr_agent/utils/config_loader.py`:
 
 ```python
-from google.cloud import secretmanager
-from pr_agent.secret_providers.secret_provider import SecretProvider
-from pr_agent.log import get_logger
+"""
+Configuration loader from .env files or Google Cloud Secret Manager.
+Python equivalent of @workiz/config-loader
 
-class GCloudSecretManagerProvider(SecretProvider):
-    """Secret provider using Google Cloud Secret Manager."""
+If .env.<environment> exists in the root directory, loads variables from that file.
+Otherwise, loads from Google Cloud Secret Manager.
+
+Secret naming convention: <environment>-<service-name>
+Examples: staging-pr-agent, prod-pr-agent
+"""
+
+import os
+from pathlib import Path
+
+
+def _parse_env_content(content: str) -> dict[str, str]:
+    """Parse .env file content into a dictionary."""
+    config = {}
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if '=' in line:
+            key, _, value = line.partition('=')
+            key = key.strip()
+            value = value.strip()
+            if value.startswith('"') and value.endswith('"'):
+                value = value[1:-1]
+            elif value.startswith("'") and value.endswith("'"):
+                value = value[1:-1]
+            config[key] = value
+    return config
+
+
+def _get_secret_manager_config(
+    project_id: str,
+    service_name: str,
+    env_name_override: str | None = None
+) -> dict[str, str]:
+    """Load configuration from Google Cloud Secret Manager."""
+    from google.cloud import secretmanager
+
+    client = secretmanager.SecretManagerServiceClient()
+
+    node_env = os.environ.get('NODE_ENV', 'development')
+    env_name = env_name_override if env_name_override else ('prod' if node_env == 'production' else node_env)
+
+    secrets_name = f'{env_name}-{service_name}'
+
+    staging_namespace = os.environ.get('STAGING_ENV_NAMESPACE')
+    temp_cloud_env_secret = f'{staging_namespace}-{service_name}' if staging_namespace else None
+
+    def fetch_secrets(name: str) -> dict[str, str]:
+        secret_path = f'projects/{project_id}/secrets/{name}/versions/latest'
+        response = client.access_secret_version(request={'name': secret_path})
+
+        if not response.payload or not response.payload.data:
+            raise ValueError(f'No data loaded from Google Secrets: {name}')
+
+        content = response.payload.data.decode('UTF-8')
+        return _parse_env_content(content)
+
+    config = fetch_secrets(secrets_name)
+
+    if temp_cloud_env_secret:
+        cloud_env_config = fetch_secrets(temp_cloud_env_secret)
+        config = {**config, **cloud_env_config}
+
+    return config
+
+
+def load_config_sync(
+    service_name: str,
+    project_id: str,
+    env_name_override: str | None = None,
+    service_root: Path | None = None
+) -> dict[str, str]:
+    """
+    Load configuration from .env file or Google Cloud Secret Manager.
     
-    def __init__(self, project_id: str):
-        self.project_id = project_id
-        self.client = secretmanager.SecretManagerServiceClient()
-        self._cache = {}
+    Args:
+        service_name: Name of the service (e.g., 'pr-agent')
+        project_id: Google Cloud project ID
+        env_name_override: Optional override for the environment name
+        service_root: Root directory of the service (defaults to project root)
     
-    def get_secret(self, secret_name: str, version: str = "latest") -> str:
-        cache_key = f"{secret_name}:{version}"
-        
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-        
-        try:
-            name = f"projects/{self.project_id}/secrets/{secret_name}/versions/{version}"
-            response = self.client.access_secret_version(name=name)
-            secret_value = response.payload.data.decode("UTF-8")
-            self._cache[cache_key] = secret_value
-            return secret_value
-        except Exception as e:
-            get_logger().error(f"Failed to get secret {secret_name}: {e}")
-            raise
-    
-    def get_all_secrets(self) -> dict:
-        return {
-            'openai_key': self.get_secret('openai-key'),
-            'github_token': self.get_secret('github-token'),
-            'github_app_private_key': self.get_secret('github-app-private-key'),
-            'github_app_id': self.get_secret('github-app-id'),
-            'github_webhook_secret': self.get_secret('github-webhook-secret'),
-            'jira_api_token': self.get_secret('jira-api-token'),
-            'jira_email': self.get_secret('jira-email'),
-            'db_password': self.get_secret('db-password'),
-        }
+    Returns:
+        Dictionary of configuration values
+    """
+    if service_root is None:
+        service_root = Path(__file__).parent.parent.parent
+
+    node_env = os.environ.get('NODE_ENV', 'development')
+    env_file_path = service_root / f'.env.{node_env}'
+
+    if env_file_path.exists():
+        print(f'Loading config from {env_file_path}')
+        content = env_file_path.read_text()
+        config = _parse_env_content(content)
+    else:
+        print(f'Loading config from Google Secret Manager: {node_env}-{service_name}')
+        config = _get_secret_manager_config(project_id, service_name, env_name_override)
+
+    os.environ.update(config)
+
+    return config
 ```
 
-### Production Dockerfile
+### Dockerfile
 
-Create `Dockerfile.production`:
+Create `Dockerfile`:
 
 ```dockerfile
-FROM python:3.12-slim
+FROM python:3.11-slim
+
+ENV PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git wget curl build-essential libpq-dev \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir asyncpg jira pgvector aiohttp gitpython pyyaml packaging google-cloud-secret-manager
+RUN pip install -r requirements.txt
 
-# Copy application
-COPY pr_agent/ ./pr_agent/
+COPY . .
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Run with gunicorn
-CMD exec gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 300 pr_agent.servers.github_app:app -k uvicorn.workers.UvicornWorker
+EXPOSE 8000
+CMD ["python", "-m", "pr_agent.servers.github_app"]
 ```
 
-### Deploy to Cloud Run
+### Helm Chart Configuration
+
+Create `infra/helm/staging.yaml`:
+
+```yaml
+# PR Agent Service - Staging Configuration
+replicaCount: 2
+
+namespace: staging
+
+environment: staging
+
+containerPort: 8000
+
+ingress:
+  host: pr-agent-staging.workiz.dev
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+env:
+  - name: GCP_PROJECT_ID
+    value: "workiz-development"
+  - name: SERVICE_NAME
+    value: "pr-agent"
+
+preUpgradeHook:
+  enabled: true
+  command: 
+    - "/bin/sh"
+    - "-c"
+    - "NODE_ENV=staging GCP_PROJECT_ID=workiz-development python scripts/run_migrations.py"
+```
+
+Create `infra/helm/prod.yaml`:
+
+```yaml
+# PR Agent Service - Production Configuration
+replicaCount: 3
+
+namespace: production
+
+environment: production
+
+containerPort: 8000
+
+ingress:
+  host: pr-agent.workiz.dev
+
+resources:
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+  requests:
+    cpu: 2000m
+    memory: 4Gi
+
+env:
+  - name: GCP_PROJECT_ID
+    value: "workiz-production"
+  - name: SERVICE_NAME
+    value: "pr-agent"
+
+preUpgradeHook:
+  enabled: true
+  command: 
+    - "/bin/sh"
+    - "-c"
+    - "NODE_ENV=production GCP_PROJECT_ID=workiz-production python scripts/run_migrations.py"
+```
+
+### GitHub Actions Workflow
+
+Create `.github/workflows/deploy-pr-agent-staging.yml`:
+
+```yaml
+name: "🚀 [staging] Deploy PR Agent"
+
+on:
+  workflow_dispatch:
+    inputs:
+      CHART_VERSION:
+        description: "Chart version to deploy"
+
+env:
+  DOCKER_FILE_PATH: ${{ github.workspace }}
+
+jobs:
+  deploy:
+    permissions:
+      contents: "read"
+      id-token: "write"
+    name: deploy
+    runs-on: ubuntu-latest
+    environment: staging
+
+    env:
+      IMAGE: pr-agent
+      ENV: staging
+      RELEASE_NAME: pr-agent
+      GKE_SA_HELM_DEPLOYER_KEY: ${{ secrets.GKE_SA_HELM_DEPLOYER_KEY }}
+      DOCKER_FILE_PATH: .
+      CHART_VERSION: ${{ inputs.CHART_VERSION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy microservice
+        uses: Workiz/workiz-actions/deploy-microservice@workiz.com
+        with:
+          IMAGE: ${{ env.IMAGE }}
+          ENV: ${{ env.ENV }}
+          RELEASE_NAME: ${{ env.RELEASE_NAME }}
+          GKE_SA_HELM_DEPLOYER_KEY: ${{ env.GKE_SA_HELM_DEPLOYER_KEY }}
+          DOCKER_FILE_PATH: ${{ env.DOCKER_FILE_PATH }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+```
+
+### Migrations
+
+Create `migrations/001_init.sql`:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Repositories table
+CREATE TABLE IF NOT EXISTS repositories (
+    id SERIAL PRIMARY KEY,
+    org_name VARCHAR(255) NOT NULL,
+    repo_name VARCHAR(255) NOT NULL,
+    github_url TEXT,
+    default_branch VARCHAR(100) DEFAULT 'workiz.com',
+    primary_language VARCHAR(50),
+    detected_frameworks JSONB,
+    detected_databases JSONB,
+    is_monorepo BOOLEAN DEFAULT FALSE,
+    excluded BOOLEAN DEFAULT FALSE,
+    last_indexed_at TIMESTAMP,
+    last_commit_sha VARCHAR(40),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(org_name, repo_name)
+);
+
+-- Code chunks for RAG
+CREATE TABLE IF NOT EXISTS code_chunks (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    file_path TEXT NOT NULL,
+    chunk_content TEXT NOT NULL,
+    chunk_type VARCHAR(50),
+    start_line INT,
+    end_line INT,
+    embedding vector(1536),
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create vector index
+CREATE INDEX IF NOT EXISTS code_chunks_embedding_idx 
+    ON code_chunks USING hnsw (embedding vector_cosine_ops)
+    WITH (m=16, ef_construction=64);
+
+-- Schema migrations tracking
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename VARCHAR(255) PRIMARY KEY,
+    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Migration Runner Script
+
+Create `scripts/run_migrations.py`:
+
+```python
+#!/usr/bin/env python3
+"""
+Run SQL migrations from migrations/ directory.
+"""
+import os
+import sys
+from pathlib import Path
+
+import psycopg
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+SERVICE_NAME = "pr-agent"
+
+
+def load_configuration():
+    """Load configuration from .env file or Google Cloud Secret Manager."""
+    from pr_agent.utils.config_loader import load_config_sync
+
+    node_env = os.environ.get("NODE_ENV")
+    gcp_project_id = os.environ.get("GCP_PROJECT_ID")
+    service_root = Path(__file__).parent.parent
+
+    if not node_env:
+        env_path = service_root / ".env"
+        if env_path.exists():
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+            print(f"✓ Loaded environment from {env_path}")
+            return
+        print("⚠ NODE_ENV not set and no .env file found. Using defaults.")
+        return
+
+    env_file_path = service_root / f".env.{node_env}"
+    
+    if env_file_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(env_file_path)
+        print(f"✓ Loaded environment from {env_file_path}")
+        return
+
+    if not gcp_project_id:
+        raise ValueError(
+            f"GCP_PROJECT_ID required when NODE_ENV={node_env} and no .env.{node_env} file exists"
+        )
+
+    config = load_config_sync(SERVICE_NAME, gcp_project_id)
+    print(f"✓ Loaded {len(config)} config values from Google Secret Manager ({node_env}-{SERVICE_NAME})")
+
+
+def run_migrations():
+    """Run all SQL migration files in order."""
+    migrations_dir = Path(__file__).parent.parent / "migrations"
+    migration_files = sorted(migrations_dir.glob("*.sql"))
+    
+    if not migration_files:
+        print("No migration files found")
+        return
+    
+    database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/pr_agent_db")
+    
+    print(f"\nConnecting to database...")
+    with psycopg.connect(database_url) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                filename VARCHAR(255) PRIMARY KEY,
+                executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        
+        result = conn.execute("SELECT filename FROM schema_migrations")
+        executed = {row[0] for row in result.fetchall()}
+        
+        new_migrations = 0
+        for migration_file in migration_files:
+            if migration_file.name in executed:
+                print(f"⏭️  Skipping {migration_file.name} (already executed)")
+                continue
+                
+            print(f"Running {migration_file.name}...")
+            try:
+                with open(migration_file) as f:
+                    sql = f.read()
+                
+                with conn.transaction():
+                    conn.execute(sql)
+                    conn.execute(
+                        "INSERT INTO schema_migrations (filename) VALUES (%s)",
+                        (migration_file.name,)
+                    )
+                
+                print(f"  ✓ {migration_file.name} completed")
+                new_migrations += 1
+            except Exception as e:
+                print(f"  ❌ {migration_file.name} failed: {e}")
+                raise
+    
+    if new_migrations == 0:
+        print("\n✅ No new migrations to run. Database is up to date!")
+    else:
+        print(f"\n✅ Successfully ran {new_migrations} new migration(s)!")
+
+
+if __name__ == "__main__":
+    try:
+        print("Loading configuration...")
+        load_configuration()
+        print()
+        run_migrations()
+    except Exception as e:
+        print(f"\n❌ Migration failed: {e}")
+        exit(1)
+```
+
+### Database Setup
+
+Create databases in Cloud SQL:
 
 ```bash
-# Build and push image
-gcloud builds submit \
-    --tag gcr.io/$PROJECT_ID/pr-agent:latest \
-    -f Dockerfile.production .
+# Connect to Cloud SQL
+gcloud sql connect pr-agent-db --user=postgres
 
-# Deploy to Cloud Run
-gcloud run deploy pr-agent \
-    --image gcr.io/$PROJECT_ID/pr-agent:latest \
-    --platform managed \
-    --region $REGION \
-    --service-account pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com \
-    --set-env-vars "GCLOUD_PROJECT=$PROJECT_ID" \
-    --set-env-vars "CLOUD_SQL_INSTANCE=$PROJECT_ID:$REGION:pr-agent-db" \
-    --set-env-vars "JIRA_BASE_URL=https://workiz.atlassian.net" \
-    --set-env-vars "GITHUB_ORGS=Workiz" \
-    --add-cloudsql-instances $PROJECT_ID:$REGION:pr-agent-db \
-    --memory 2Gi \
-    --cpu 2 \
-    --timeout 300 \
-    --max-instances 10 \
-    --allow-unauthenticated
-
-# Get the deployed URL
-gcloud run services describe pr-agent --region $REGION --format='value(status.url)'
+# In psql:
+CREATE DATABASE pr_agent_staging;
+CREATE DATABASE pr_agent_prod;
+\c pr_agent_staging
+CREATE EXTENSION vector;
+\c pr_agent_prod
+CREATE EXTENSION vector;
+\q
 ```
 
-### Configure GitHub App (Production)
+### Creating Secrets in GCloud Secret Manager
+
+```bash
+# Create staging secret with .env format content
+cat > /tmp/staging-pr-agent.env << 'EOF'
+DATABASE_URL=postgresql://pr_agent:password@10.x.x.x:5432/pr_agent_staging
+GITHUB_USER_TOKEN=ghp_xxx
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----
+...key content...
+-----END RSA PRIVATE KEY-----
+GITHUB_WEBHOOK_SECRET=xxx
+OPENAI_API_KEY=sk-xxx
+JIRA_BASE_URL=https://workiz.atlassian.net
+JIRA_API_TOKEN=xxx
+JIRA_EMAIL=pr-agent@workiz.com
+EOF
+
+gcloud secrets create staging-pr-agent --data-file=/tmp/staging-pr-agent.env
+rm /tmp/staging-pr-agent.env
+
+# Same for production
+gcloud secrets create prod-pr-agent --data-file=/tmp/prod-pr-agent.env
+```
+
+### Configure GitHub App
 
 1. Go to GitHub Organization Settings → Developer Settings → GitHub Apps
 2. Create new GitHub App:
    - **Name**: Workiz PR Agent
-   - **Homepage URL**: Your Cloud Run URL
-   - **Webhook URL**: `https://your-cloud-run-url/api/v1/github_webhooks`
-   - **Webhook secret**: (store in Secret Manager)
-   - **Permissions**:
-     - Repository:
-       - Contents: Read
-       - Issues: Read & Write
-       - Pull requests: Read & Write
-       - Commit statuses: Read & Write
-     - Organization:
-       - Members: Read
-   - **Events**:
-     - Issue comment
-     - Pull request
-     - Pull request review
-     - Push
+   - **Webhook URL**: `https://pr-agent-staging.workiz.dev/api/v1/github_webhooks`
+   - **Permissions**: Contents (Read), Issues (R&W), Pull requests (R&W), Commit statuses (R&W)
+   - **Events**: Issue comment, Pull request, Pull request review, Push
 
-3. Generate and download private key
-4. Store private key in Secret Manager:
-   ```bash
-   gcloud secrets versions add github-app-private-key --data-file=downloaded-key.pem
-   ```
-
-5. Install the GitHub App to your organization
-
-### Configure Jira Webhook (Production)
-
-1. Go to Jira Settings → System → Webhooks
-2. Create webhook:
-   - **URL**: `https://your-cloud-run-url/api/v1/webhooks/jira`
-   - **Events**: Issue: created, updated, deleted
-
-### Set Up Scheduled Jobs
-
-```bash
-# Create Cloud Scheduler for periodic sync
-gcloud scheduler jobs create http pr-agent-sync \
-    --location $REGION \
-    --schedule "0 */6 * * *" \
-    --uri "https://your-cloud-run-url/api/v1/admin/sync/all" \
-    --http-method POST \
-    --oidc-service-account-email pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com
-
-# Create job for Jira sync
-gcloud scheduler jobs create http jira-sync \
-    --location $REGION \
-    --schedule "0 */2 * * *" \
-    --uri "https://your-cloud-run-url/api/v1/admin/sync/jira" \
-    --http-method POST \
-    --oidc-service-account-email pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com
-```
+3. Install the GitHub App to your organization
 
 ---
 
@@ -483,117 +717,162 @@ gcloud scheduler jobs create http jira-sync \
 
 ### CLI Admin Tool
 
-Create `pr_agent/cli_admin.py`:
+Create `scripts/cli_admin.py`:
 
 ```python
-import asyncio
-import click
-from pr_agent.db.connection import DatabaseManager
-from pr_agent.services.discovery_service import GitHubDiscoveryService
-from pr_agent.services.indexing_service import RepositoryIndexingService
-from pr_agent.integrations.jira_client import JiraClient
+#!/usr/bin/env python3
+"""
+PR Agent Admin CLI for data management.
+"""
 import os
+import sys
+from pathlib import Path
 
-db = DatabaseManager(os.environ.get('WORKIZ_DATABASE_URL'))
+import click
+import psycopg
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+SERVICE_NAME = "pr-agent"
+
+
+def get_db_connection():
+    """Get database connection."""
+    dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/pr_agent_db")
+    return psycopg.connect(dsn)
+
+
+def load_configuration():
+    """Load configuration from .env or Secret Manager."""
+    node_env = os.environ.get("NODE_ENV")
+    service_root = Path(__file__).parent.parent
+
+    if not node_env:
+        env_path = service_root / ".env"
+        if env_path.exists():
+            from dotenv import load_dotenv
+            load_dotenv(env_path)
+            return
+
+    env_file_path = service_root / f".env.{node_env}"
+    if env_file_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(env_file_path)
+        return
+
+    gcp_project_id = os.environ.get("GCP_PROJECT_ID")
+    if gcp_project_id:
+        from pr_agent.utils.config_loader import load_config_sync
+        load_config_sync(SERVICE_NAME, gcp_project_id)
+
 
 @click.group()
 def cli():
     """PR Agent Admin CLI"""
-    pass
+    load_configuration()
+
 
 @cli.command()
 @click.option('--orgs', '-o', multiple=True, required=True, help='GitHub organizations')
 def discover(orgs):
     """Discover repositories from GitHub organizations."""
-    async def run():
-        discovery = GitHubDiscoveryService(
-            token=os.environ.get('GITHUB_USER_TOKEN'),
-            db=db
-        )
+    from pr_agent.services.discovery_service import GitHubDiscoveryService
+    
+    github_token = os.environ.get('GITHUB_USER_TOKEN')
+    
+    with get_db_connection() as conn:
+        discovery = GitHubDiscoveryService(github_token, conn)
         for org in orgs:
             click.echo(f"Discovering repos for {org}...")
-            result = await discovery.sync_repos_to_database(org)
+            result = discovery.sync_repos_to_database(org)
             click.echo(f"  Synced {result['synced']} repositories")
-    
-    asyncio.run(run())
+
 
 @cli.command('index-repos')
 @click.option('--repo', '-r', help='Specific repository to index')
 @click.option('--all', 'index_all', is_flag=True, help='Index all repositories')
 def index_repos(repo, index_all):
     """Index repositories for RAG."""
-    async def run():
-        indexing = RepositoryIndexingService(db)
+    from pr_agent.services.indexing_service import RepositoryIndexingService
+    
+    with get_db_connection() as conn:
+        indexing = RepositoryIndexingService(conn)
         
         if repo:
             click.echo(f"Indexing {repo}...")
-            await indexing.index_repository(repo)
+            indexing.index_repository(repo)
         elif index_all:
             click.echo("Indexing all repositories...")
-            async with db.connection() as conn:
-                repos = await conn.fetch("SELECT * FROM repositories WHERE NOT excluded")
-            for r in repos:
-                click.echo(f"  Indexing {r['repo_name']}...")
-                await indexing.index_repository(r['github_url'])
-    
-    asyncio.run(run())
+            with conn.cursor() as cur:
+                cur.execute("SELECT repo_name, github_url FROM repositories WHERE NOT excluded")
+                repos = cur.fetchall()
+            for repo_name, github_url in repos:
+                click.echo(f"  Indexing {repo_name}...")
+                indexing.index_repository(github_url)
+
 
 @cli.command('sync-jira')
 @click.option('--projects', '-p', multiple=True, help='Specific Jira projects')
 @click.option('--full', is_flag=True, help='Full sync (not incremental)')
 def sync_jira(projects, full):
     """Sync Jira tickets."""
-    async def run():
-        jira = JiraClient(
-            base_url=os.environ.get('JIRA_BASE_URL'),
-            email=os.environ.get('JIRA_EMAIL'),
-            api_token=os.environ.get('JIRA_API_TOKEN')
-        )
-        
-        if projects:
-            for project in projects:
-                click.echo(f"Syncing Jira project {project}...")
-                # Implement sync logic
-        else:
-            click.echo("Syncing all Jira projects...")
-            # Implement full sync
+    from pr_agent.integrations.jira_client import JiraClient
     
-    asyncio.run(run())
+    jira = JiraClient(
+        base_url=os.environ.get('JIRA_BASE_URL'),
+        email=os.environ.get('JIRA_EMAIL'),
+        api_token=os.environ.get('JIRA_API_TOKEN')
+    )
+    
+    if projects:
+        for project in projects:
+            click.echo(f"Syncing Jira project {project}...")
+    else:
+        click.echo("Syncing all Jira projects...")
+
 
 @cli.command('sync-npm')
 def sync_npm():
     """Sync internal @workiz packages from GitHub Packages."""
-    async def run():
-        from pr_agent.tools.npm_package_analyzer import InternalPackageRegistry
-        github_token = os.environ.get('GITHUB_USER_TOKEN')
-        registry = InternalPackageRegistry(db, github_token)
+    from pr_agent.tools.npm_package_analyzer import InternalPackageRegistry
+    
+    github_token = os.environ.get('GITHUB_USER_TOKEN')
+    
+    with get_db_connection() as conn:
+        registry = InternalPackageRegistry(conn, github_token)
         click.echo("Syncing @workiz packages from GitHub Packages...")
-        result = await registry.sync_from_github_packages()
+        result = registry.sync_from_github_packages()
         if 'error' in result:
             click.echo(f"  Error: {result['error']}")
         else:
             click.echo(f"  Synced {result.get('synced', 0)} packages")
-    
-    asyncio.run(run())
+
 
 @cli.command()
 def status():
     """Show system status."""
-    async def run():
-        async with db.connection() as conn:
-            repos = await conn.fetchval("SELECT COUNT(*) FROM repositories")
-            chunks = await conn.fetchval("SELECT COUNT(*) FROM code_chunks")
-            tickets = await conn.fetchval("SELECT COUNT(*) FROM jira_tickets")
-            reviews = await conn.fetchval("SELECT COUNT(*) FROM review_history")
-        
-        click.echo("PR Agent Status")
-        click.echo("=" * 40)
-        click.echo(f"Repositories: {repos}")
-        click.echo(f"Code Chunks: {chunks}")
-        click.echo(f"Jira Tickets: {tickets}")
-        click.echo(f"Reviews: {reviews}")
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM repositories")
+            repos = cur.fetchone()[0]
+            
+            cur.execute("SELECT COUNT(*) FROM code_chunks")
+            chunks = cur.fetchone()[0]
+            
+            cur.execute("SELECT COUNT(*) FROM jira_tickets")
+            tickets = cur.fetchone()[0]
+            
+            cur.execute("SELECT COUNT(*) FROM review_history")
+            reviews = cur.fetchone()[0]
     
-    asyncio.run(run())
+    click.echo("PR Agent Status")
+    click.echo("=" * 40)
+    click.echo(f"Repositories: {repos}")
+    click.echo(f"Code Chunks: {chunks}")
+    click.echo(f"Jira Tickets: {tickets}")
+    click.echo(f"Reviews: {reviews}")
+
 
 if __name__ == '__main__':
     cli()
@@ -602,20 +881,26 @@ if __name__ == '__main__':
 ### Initial Population Commands
 
 ```bash
-# 1. Discover all repos (auto-detects frameworks)
-python -m pr_agent.cli_admin discover --orgs Workiz
+# Load environment and run commands
+source .env  # or export $(cat .env | xargs)
 
-# 2. Index all repos for RAG
-python -m pr_agent.cli_admin index-repos --all
+# 1. Run migrations first
+python scripts/run_migrations.py
 
-# 3. Sync Jira tickets
-python -m pr_agent.cli_admin sync-jira --full
+# 2. Discover all repos (auto-detects frameworks)
+python scripts/cli_admin.py discover --orgs Workiz
 
-# 4. Sync internal @workiz packages from GitHub Packages
-python -m pr_agent.cli_admin sync-npm
+# 3. Index all repos for RAG
+python scripts/cli_admin.py index-repos --all
 
-# 5. Check status
-python -m pr_agent.cli_admin status
+# 4. Sync Jira tickets
+python scripts/cli_admin.py sync-jira --full
+
+# 5. Sync internal @workiz packages from GitHub Packages
+python scripts/cli_admin.py sync-npm
+
+# 6. Check status
+python scripts/cli_admin.py status
 ```
 
 ---
@@ -821,62 +1106,75 @@ pytest tests/ --cov=pr_agent --cov-report=html
 ### Directory Structure
 
 ```
-pr_agent/
-├── db/
-│   ├── __init__.py
-│   └── connection.py                    # PostgreSQL connection manager
-├── integrations/
-│   ├── __init__.py
-│   └── jira_client.py                   # Jira API integration
-├── services/
-│   ├── __init__.py
-│   ├── indexing_service.py              # Repository indexing
-│   ├── jira_sync_service.py             # Jira synchronization
-│   └── discovery_service.py             # Auto-discovery for repos/Jira
-├── servers/
-│   └── admin_api.py                     # Admin endpoints (add to existing)
-├── secret_providers/
-│   └── gcloud_secret_manager.py         # GCloud Secrets Manager integration
-├── tools/
-│   ├── global_context_provider.py       # RAG for cross-repo context
-│   ├── jira_context_provider.py         # RAG for Jira tickets
-│   ├── custom_rules_engine.py           # Custom review rules
-│   ├── custom_rules_loader.py           # Load rules from TOML/DB
-│   ├── sql_analyzer.py                  # MySQL/MongoDB/ES analyzer
-│   ├── pubsub_analyzer.py               # PubSub topology analyzer
-│   ├── security_analyzer.py             # Deep security checks
-│   ├── npm_package_analyzer.py          # NPM package version management
-│   ├── autofix_agent.py                 # Auto-fix agent
-│   ├── reposwarm_context_loader.py      # RepoSwarm integration
-│   └── language_analyzers/
-│       ├── __init__.py
-│       ├── base_analyzer.py
-│       ├── php_analyzer.py
-│       ├── javascript_analyzer.py
-│       ├── typescript_analyzer.py
-│       ├── nestjs_analyzer.py
-│       ├── react_analyzer.py
-│       └── python_analyzer.py
-│   └── figma/
-│       ├── __init__.py
-│       ├── figma_mcp_client.py
-│       └── design_verification_agent.py
-├── middleware/
-│   ├── rate_limiter.py
-│   └── circuit_breaker.py
-├── settings/
-│   └── workiz_rules.toml                # Custom rules configuration
-├── cli_admin.py                         # Admin CLI for data management
-db/
-└── init/
-    └── 01_schema.sql                    # PostgreSQL schema
-docker-compose.local.yml                 # Local DB setup
-Dockerfile.production                    # Production Docker image
-repos_config.yaml                        # Exclusion patterns & overrides
-docs/
-├── README.md
-├── ARCHITECTURE_AND_FEATURES.md
-└── DEPLOYMENT_AND_IMPLEMENTATION.md
+workiz-pr-agent/
+├── .github/
+│   └── workflows/
+│       ├── deploy-pr-agent-staging.yml    # Staging deployment workflow
+│       └── deploy-pr-agent-prod.yml       # Production deployment workflow
+├── infra/
+│   └── helm/
+│       ├── staging.yaml                   # Helm values for staging
+│       └── prod.yaml                      # Helm values for production
+├── migrations/
+│   ├── 001_init.sql                       # Initial schema with pgvector
+│   ├── 002_jira_tickets.sql               # Jira tables
+│   └── 003_review_history.sql             # Review tracking tables
+├── scripts/
+│   └── run_migrations.py                  # Migration runner script
+├── pr_agent/
+│   ├── db/
+│   │   ├── __init__.py
+│   │   └── conn.py                        # PostgreSQL connection pool (psycopg)
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   └── config_loader.py               # Config from .env or Secret Manager
+│   ├── integrations/
+│   │   ├── __init__.py
+│   │   └── jira_client.py                 # Jira API integration
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── indexing_service.py            # Repository indexing
+│   │   ├── jira_sync_service.py           # Jira synchronization
+│   │   └── discovery_service.py           # Auto-discovery for repos/Jira
+│   ├── servers/
+│   │   └── admin_api.py                   # Admin endpoints (add to existing)
+│   ├── tools/
+│   │   ├── global_context_provider.py     # RAG for cross-repo context
+│   │   ├── jira_context_provider.py       # RAG for Jira tickets
+│   │   ├── custom_rules_engine.py         # Custom review rules
+│   │   ├── custom_rules_loader.py         # Load rules from TOML/DB
+│   │   ├── sql_analyzer.py                # MySQL/MongoDB/ES analyzer
+│   │   ├── pubsub_analyzer.py             # PubSub topology analyzer
+│   │   ├── security_analyzer.py           # Deep security checks
+│   │   ├── npm_package_analyzer.py        # NPM package version management
+│   │   ├── autofix_agent.py               # Auto-fix agent
+│   │   ├── reposwarm_context_loader.py    # RepoSwarm integration
+│   │   ├── language_analyzers/
+│   │   │   ├── __init__.py
+│   │   │   ├── base_analyzer.py
+│   │   │   ├── php_analyzer.py
+│   │   │   ├── javascript_analyzer.py
+│   │   │   ├── typescript_analyzer.py
+│   │   │   ├── nestjs_analyzer.py
+│   │   │   ├── react_analyzer.py
+│   │   │   └── python_analyzer.py
+│   │   └── figma/
+│   │       ├── __init__.py
+│   │       ├── figma_mcp_client.py
+│   │       └── design_verification_agent.py
+│   ├── middleware/
+│   │   ├── rate_limiter.py
+│   │   └── circuit_breaker.py
+│   └── settings/
+│       └── workiz_rules.toml              # Custom rules configuration
+├── Dockerfile                             # Production Docker image
+├── docker-compose.yml                     # Local development setup
+├── requirements.txt                       # Python dependencies
+├── .env.example                           # Example environment file
+└── docs/
+    ├── README.md
+    ├── ARCHITECTURE_AND_FEATURES.md
+    └── DEPLOYMENT_AND_IMPLEMENTATION.md
 ```
 
 ---
@@ -886,72 +1184,71 @@ docs/
 ### Local Development Checklist
 
 - [ ] Clone the repository
-- [ ] Set up Python 3.12 virtual environment
-- [ ] Install dependencies: `pip install -r requirements.txt asyncpg jira pgvector gitpython aiohttp packaging`
-- [ ] Start PostgreSQL: `docker-compose -f docker-compose.local.yml up -d`
-- [ ] Create `.secrets.toml` with credentials (GitHub, OpenAI, Jira)
-- [ ] Run auto-discovery: `python -m pr_agent.cli_admin discover --orgs Workiz`
-- [ ] Run Jira sync: `python -m pr_agent.cli_admin sync-jira --full`
-- [ ] Sync internal packages from GitHub Packages: `python -m pr_agent.cli_admin sync-npm`
-- [ ] Start server: `python -m uvicorn pr_agent.servers.github_app:app --port 3000`
-- [ ] Start ngrok: `ngrok http 3000`
+- [ ] Set up Python 3.11 virtual environment
+- [ ] Install dependencies: `pip install -r requirements.txt`
+- [ ] Start PostgreSQL: `docker-compose --profile with-db up -d db`
+- [ ] Create `.env` file with credentials (GitHub, OpenAI, Jira)
+- [ ] Run migrations: `python scripts/run_migrations.py`
+- [ ] Start server: `python -m uvicorn pr_agent.servers.github_app:app --port 8000 --reload`
+- [ ] Start ngrok: `ngrok http 8000`
 - [ ] Configure GitHub webhook with ngrok URL
 - [ ] Test with a PR review: `/review`
 
-### Production Deployment Checklist
+### Production Deployment Checklist (GKE + Helm)
 
-#### GCloud Setup
-- [ ] Set project: `gcloud config set project workiz-pr-agent`
-- [ ] Enable APIs: Cloud Run, Secret Manager, Cloud SQL, Cloud Build
-
-#### Database
-- [ ] Create Cloud SQL PostgreSQL instance
-- [ ] Enable pgvector extension
-- [ ] Run schema migration
+#### Database Setup
+- [ ] Create database in Cloud SQL: `pr_agent_staging`, `pr_agent_prod`
+- [ ] Enable pgvector extension in both databases
 
 #### Secrets (GCloud Secret Manager)
-- [ ] `openai-key` - OpenAI API key
-- [ ] `github-token` - GitHub personal access token
-- [ ] `github-app-private-key` - GitHub App private key
-- [ ] `github-app-id` - GitHub App ID
-- [ ] `github-webhook-secret` - Webhook secret
-- [ ] `jira-api-token` - Jira API token
-- [ ] `jira-email` - Jira email
-- [ ] `db-password` - Database password
+Create secrets with `.env` format content:
+- [ ] `staging-pr-agent` - Staging environment secrets
+- [ ] `prod-pr-agent` - Production environment secrets
 
-#### Service Account
-- [ ] Create service account: `pr-agent-sa`
-- [ ] Grant Secret Manager access
-- [ ] Grant Cloud SQL Client access
+Each secret should contain:
+```
+DATABASE_URL=postgresql://...
+GITHUB_USER_TOKEN=ghp_...
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
+GITHUB_WEBHOOK_SECRET=...
+OPENAI_API_KEY=sk-...
+JIRA_BASE_URL=https://workiz.atlassian.net
+JIRA_API_TOKEN=...
+JIRA_EMAIL=...
+```
 
-#### Deploy
-- [ ] Build container: `gcloud builds submit`
-- [ ] Deploy to Cloud Run
-- [ ] Note the service URL
+#### Infrastructure Files
+- [ ] Create `Dockerfile`
+- [ ] Create `infra/helm/staging.yaml`
+- [ ] Create `infra/helm/prod.yaml`
+- [ ] Create `.github/workflows/deploy-pr-agent-staging.yml`
+- [ ] Create `.github/workflows/deploy-pr-agent-prod.yml`
+- [ ] Create `scripts/run_migrations.py`
+- [ ] Create `migrations/001_init.sql`
 
 #### GitHub App Configuration
 - [ ] Create GitHub App in organization
-- [ ] Set webhook URL to Cloud Run service
+- [ ] Set webhook URL to `https://pr-agent-staging.workiz.dev/api/v1/github_webhooks`
 - [ ] Configure permissions (Contents, Issues, PRs, Commit statuses)
+- [ ] Add private key to Secret Manager
 - [ ] Install App to organization
+
+#### Deploy
+- [ ] Run staging workflow: `.github/workflows/deploy-pr-agent-staging.yml`
+- [ ] Verify deployment in GKE
+- [ ] Test webhook endpoints
+- [ ] Run production workflow
 
 #### Jira Webhook
 - [ ] Create webhook in Jira settings
-- [ ] Point to `{service-url}/api/v1/webhooks/jira`
+- [ ] Point to `https://pr-agent.workiz.dev/api/v1/webhooks/jira`
 
-#### Scheduled Jobs
-- [ ] Create Cloud Scheduler for discovery (every 6 hours)
-- [ ] Create Cloud Scheduler for Jira sync (every 2 hours)
-
-#### Monitoring
-- [ ] Set up Cloud Logging
-- [ ] Create error rate alerts
-- [ ] Set up uptime checks
-
-#### Initial Data
-- [ ] Run discovery job
-- [ ] Verify repos are indexed
-- [ ] Verify Jira projects synced
+#### Verification
+- [ ] Check pods are running: `kubectl get pods -n staging`
+- [ ] Check logs: `kubectl logs -n staging deployment/pr-agent`
+- [ ] Test a PR review
+- [ ] Verify migrations ran (pre-upgrade hook)
 
 ---
 
