@@ -105,16 +105,33 @@ Create `.env` file for local development:
 
 ```bash
 # .env (for local development)
+
+# Database
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pr_agent_db
+
+# GitHub
 GITHUB_USER_TOKEN=ghp_your-github-token
+GITHUB_ORG=Workiz
+GITHUB_MAIN_BRANCHES=workiz.com,main,master
+
+# LLM API Keys (Claude is default, others are fallbacks)
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
 OPENAI_API_KEY=sk-your-openai-key
+# GOOGLE_API_KEY=your-google-key  # Optional
+
+# Jira (optional for local dev)
 JIRA_BASE_URL=https://workiz.atlassian.net
 JIRA_API_TOKEN=your-jira-api-token
 JIRA_EMAIL=your-email@workiz.com
+
+# GCloud (for Secret Manager, not needed locally if using .env)
 GCP_PROJECT_ID=workiz-development
+
+# Figma (optional)
+# FIGMA_ACCESS_TOKEN=your-figma-token
 ```
 
-For staging/production environments, create `.env.staging` or `.env.production`.
+For staging/production environments, create `.env.staging` or `.env.production`, or use GCloud Secret Manager.
 
 ### Start Local Server
 
@@ -213,14 +230,25 @@ The secret content is in `.env` format:
 ```bash
 # Example: staging-pr-agent secret content
 DATABASE_URL=postgresql://pr_agent:password@10.x.x.x:5432/pr_agent_staging
+
+# GitHub
 GITHUB_USER_TOKEN=ghp_xxx
 GITHUB_APP_ID=123456
 GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
 GITHUB_WEBHOOK_SECRET=xxx
-OPENAI_API_KEY=sk-xxx
+
+# LLM API Keys (at least one required)
+ANTHROPIC_API_KEY=sk-ant-xxx         # For Claude models (default)
+OPENAI_API_KEY=sk-xxx                 # For GPT models and embeddings
+GOOGLE_API_KEY=xxx                    # For Gemini models (optional fallback)
+
+# Jira
 JIRA_BASE_URL=https://workiz.atlassian.net
 JIRA_API_TOKEN=xxx
 JIRA_EMAIL=pr-agent@workiz.com
+
+# Figma (optional, for design verification)
+FIGMA_ACCESS_TOKEN=xxx
 ```
 
 ### Config Loader (Python equivalent of @workiz/config-loader)
@@ -390,6 +418,8 @@ env:
     value: "workiz-development"
   - name: SERVICE_NAME
     value: "pr-agent"
+  - name: NODE_ENV
+    value: "staging"
 
 preUpgradeHook:
   enabled: true
@@ -397,6 +427,28 @@ preUpgradeHook:
     - "/bin/sh"
     - "-c"
     - "NODE_ENV=staging GCP_PROJECT_ID=workiz-development python scripts/run_migrations.py"
+
+# Scheduled jobs (CronJobs)
+cronjobs:
+  # Discovery - every 6 hours
+  - name: discovery
+    schedule: "0 */6 * * *"
+    command: ["python", "scripts/cli_admin.py", "discover", "--orgs", "Workiz"]
+  
+  # RepoSwarm analysis - every 12 hours
+  - name: reposwarm-analysis
+    schedule: "0 */12 * * *"
+    command: ["python", "scripts/cli_admin.py", "analyze-repos", "--all"]
+  
+  # Jira sync - every 2 hours
+  - name: jira-sync
+    schedule: "0 */2 * * *"
+    command: ["python", "scripts/cli_admin.py", "sync-jira"]
+  
+  # NPM packages sync - daily at 3 AM
+  - name: npm-sync
+    schedule: "0 3 * * *"
+    command: ["python", "scripts/cli_admin.py", "sync-npm"]
 ```
 
 Create `infra/helm/prod.yaml`:
@@ -849,6 +901,35 @@ def sync_npm():
             click.echo(f"  Synced {result.get('synced', 0)} packages")
 
 
+@cli.command('analyze-repos')
+@click.option('--repo', '-r', help='Specific repository to analyze')
+@click.option('--all', 'analyze_all', is_flag=True, help='Analyze all repositories')
+def analyze_repos(repo, analyze_all):
+    """Run RepoSwarm analysis on repositories."""
+    from pr_agent.tools.reposwarm.investigator import RepositoryInvestigator
+    from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+    
+    ai_handler = LiteLLMAIHandler()
+    
+    with get_db_connection() as conn:
+        investigator = RepositoryInvestigator(conn, ai_handler)
+        
+        if repo:
+            click.echo(f"Analyzing {repo}...")
+            result = investigator.investigate(repo)
+            click.echo(f"  Type: {result.get('repo_type')}")
+            click.echo(f"  Analysis complete")
+        elif analyze_all:
+            click.echo("Analyzing all repositories...")
+            with conn.cursor() as cur:
+                cur.execute("SELECT github_url FROM repositories WHERE NOT excluded")
+                repos = cur.fetchall()
+            for (github_url,) in repos:
+                click.echo(f"  Analyzing {github_url}...")
+                investigator.investigate(github_url)
+            click.echo(f"Analyzed {len(repos)} repositories")
+
+
 @cli.command()
 def status():
     """Show system status."""
@@ -907,41 +988,120 @@ python scripts/cli_admin.py status
 
 ## 4. Continuous Updates
 
+### Complete Automation Wiring
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                           Automation Flow Diagram                                     │
+├─────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                       │
+│  TRIGGERS                          ACTIONS                         STORAGE           │
+│  ────────                          ───────                         ───────           │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ GitHub PR    │────────────────► WorkizPRReviewer                                  │
+│  │ (webhook)    │                  ├─► Load RepoSwarm context ────► PostgreSQL       │
+│  └──────────────┘                  ├─► Load Jira context ─────────► PostgreSQL       │
+│                                    ├─► Apply custom rules                             │
+│                                    ├─► Run language analyzers                         │
+│                                    └─► Post review comments ──────► GitHub           │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ GitHub Push  │────────────────► index_repository_incremental                      │
+│  │ to main      │                  └─► Update code_chunks ────────► PostgreSQL       │
+│  │ (webhook)    │────────────────► run_reposwarm_analysis                            │
+│  └──────────────┘                  └─► Update repo_analysis_cache ► PostgreSQL       │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ Jira Update  │────────────────► sync_single_jira_ticket                           │
+│  │ (webhook)    │                  └─► Update jira_tickets ───────► PostgreSQL       │
+│  └──────────────┘                                                                    │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ CronJob      │────────────────► GitHubDiscoveryService                            │
+│  │ Every 6h     │                  └─► Discover new repos ────────► PostgreSQL       │
+│  └──────────────┘                                                                    │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ CronJob      │────────────────► RepositoryInvestigator                            │
+│  │ Every 12h    │                  └─► Analyze all repos ─────────► PostgreSQL       │
+│  └──────────────┘                                                                    │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ CronJob      │────────────────► JiraClient.sync_projects()                        │
+│  │ Every 2h     │                  └─► Sync all tickets ──────────► PostgreSQL       │
+│  └──────────────┘                                                                    │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ CronJob      │────────────────► InternalPackageRegistry                           │
+│  │ Daily 3AM    │                  └─► Sync @workiz packages ─────► PostgreSQL       │
+│  └──────────────┘                                                                    │
+│                                                                                       │
+│  ┌──────────────┐                                                                    │
+│  │ Admin API    │────────────────► Manual triggers for any action                    │
+│  │ /api/admin/* │                                                                    │
+│  └──────────────┘                                                                    │
+│                                                                                       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### Update Mechanisms
 
-| Method | Trigger | Action |
-|--------|---------|--------|
-| **GitHub Webhook** | Push to main branch | Incremental repo indexing |
-| **GitHub Webhook** | PR merged | Update code chunks |
-| **Jira Webhook** | Issue created/updated | Sync single ticket |
-| **Cloud Scheduler** | Every 6 hours | Full discovery cycle |
-| **Cloud Scheduler** | Every 2 hours | Jira incremental sync |
-| **Admin API** | Manual trigger | On-demand indexing |
+| Method | Trigger | Action | Target Table |
+|--------|---------|--------|--------------|
+| **GitHub Webhook** | Push to main branch | Code chunks indexing + RepoSwarm analysis | `code_chunks`, `repo_analysis_cache` |
+| **GitHub Webhook** | PR opened/updated | Review with context | `review_history`, `api_usage` |
+| **Jira Webhook** | Issue created/updated | Sync single ticket | `jira_tickets` |
+| **K8s CronJob** | Every 6 hours | Full repo discovery | `repositories` |
+| **K8s CronJob** | Every 12 hours | RepoSwarm analysis (all repos) | `repo_analysis_cache` |
+| **K8s CronJob** | Every 2 hours | Jira incremental sync | `jira_tickets` |
+| **K8s CronJob** | Daily at 3 AM | NPM packages sync | `internal_packages` |
+| **Admin API** | Manual trigger | On-demand any action | Any |
 
 ### Webhook Handler Updates
 
 Add to `pr_agent/servers/github_app.py`:
 
 ```python
+from pr_agent.tools.reposwarm.investigator import RepositoryInvestigator
+
 @router.post("/api/v1/webhooks/push")
 async def handle_push_webhook(request: Request):
-    """Handle push events for incremental indexing."""
+    """Handle push events for incremental indexing and RepoSwarm analysis."""
     payload = await request.json()
     
     # Only process pushes to main branches
     ref = payload.get('ref', '')
     branch = ref.replace('refs/heads/', '')
     
-    main_branches = get_settings().github.main_branches
+    main_branches = get_settings().github.main_branches  # ['workiz.com', 'main', 'master']
     if branch not in main_branches:
         return {"status": "skipped", "reason": "not a main branch"}
     
     repo_url = payload.get('repository', {}).get('html_url')
     
-    # Trigger incremental indexing
+    # Trigger incremental indexing for code chunks
     asyncio.create_task(index_repository_incremental(repo_url, branch))
     
+    # Trigger RepoSwarm analysis (runs in background)
+    asyncio.create_task(run_reposwarm_analysis(repo_url, branch))
+    
     return {"status": "indexing_started"}
+
+
+async def run_reposwarm_analysis(repo_url: str, branch: str):
+    """Run RepoSwarm analysis on repository."""
+    from pr_agent.db.conn import get_conn, put_conn
+    from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+    
+    conn = get_conn()
+    try:
+        ai_handler = LiteLLMAIHandler()
+        investigator = RepositoryInvestigator(conn, ai_handler)
+        investigator.investigate(repo_url, branch)
+    finally:
+        put_conn(conn)
+
 
 @router.post("/api/v1/webhooks/jira")
 async def handle_jira_webhook(request: Request):
@@ -955,6 +1115,29 @@ async def handle_jira_webhook(request: Request):
         asyncio.create_task(sync_single_jira_ticket(issue_key))
     
     return {"status": "synced"}
+
+
+@router.post("/api/v1/admin/analyze/{repo_name}")
+async def trigger_repo_analysis(repo_name: str):
+    """Manually trigger RepoSwarm analysis for a repository."""
+    from pr_agent.db.conn import get_conn, put_conn
+    
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT github_url FROM repositories WHERE repo_name = %s",
+                (repo_name,)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Repository not found")
+            repo_url = row[0]
+    finally:
+        put_conn(conn)
+    
+    asyncio.create_task(run_reposwarm_analysis(repo_url, None))
+    return {"status": "analysis_started", "repo": repo_name}
 ```
 
 ---
@@ -1265,6 +1448,23 @@ JIRA_EMAIL=...
 - [ ] Check logs: `kubectl logs -n staging deployment/pr-agent`
 - [ ] Test a PR review
 - [ ] Verify migrations ran (pre-upgrade hook)
+
+#### Automation Verification
+- [ ] Verify CronJobs are created: `kubectl get cronjobs -n staging`
+- [ ] Test push webhook: push to a repo, verify RepoSwarm analysis runs
+- [ ] Test Jira webhook: update a ticket, verify sync runs
+- [ ] Manually trigger discovery: `POST /api/v1/admin/discover`
+- [ ] Check CLI admin status: `python scripts/cli_admin.py status`
+- [ ] Verify API cost tracking is recording: check `api_usage` table
+
+#### End-to-End Test Checklist
+- [ ] Create a test PR with a NestJS change
+- [ ] Verify PR gets reviewed automatically
+- [ ] Verify cross-repo context is included (from RepoSwarm)
+- [ ] Verify Jira ticket context is included (if ticket linked)
+- [ ] Verify custom rules are applied (structured logging, etc.)
+- [ ] Test `/auto-fix` command (if enabled)
+- [ ] Check Admin UI dashboard shows activity
 
 ---
 

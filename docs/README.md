@@ -17,8 +17,10 @@ A customized fork of [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) tai
 - Python 3.11+
 - Docker Desktop
 - GitHub Personal Access Token
-- OpenAI API Key
+- Anthropic API Key (Claude - default model)
+- (Optional) OpenAI API Key (fallback and embeddings)
 - (Optional) Jira API Token
+- (Optional) Figma Access Token (for design verification)
 
 ### Local Development (5 minutes)
 
@@ -81,6 +83,17 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **Auto-Discovery** | Automatic repo/project detection | ✅ Planned |
 | **Admin UI** | Web dashboard for management | ✅ Planned |
 | **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
+
+### Automation Summary
+
+| Process | Trigger | Frequency |
+|---------|---------|-----------|
+| **PR Review** | GitHub webhook (PR opened) | Real-time |
+| **Code Indexing** | GitHub webhook (push to main) | Real-time |
+| **RepoSwarm Analysis** | GitHub webhook + CronJob | Real-time + every 12h |
+| **Jira Sync** | Jira webhook + CronJob | Real-time + every 2h |
+| **Repo Discovery** | CronJob | Every 6 hours |
+| **NPM Packages Sync** | CronJob | Daily at 3 AM |
 
 ---
 
