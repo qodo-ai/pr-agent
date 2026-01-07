@@ -946,255 +946,7 @@ class CustomRulesEngine:
         return results
 ```
 
-#### 4.2 Cursor Rules Loader
-
-Create: `pr_agent/tools/cursor_rules_loader.py`
-
-```python
-import os
-import re
-from typing import List, Dict, Optional
-from dataclasses import dataclass
-from pathlib import Path
-from pr_agent.log import get_logger
-
-@dataclass
-class CursorRule:
-    """A rule extracted from cursor rules files."""
-    source_file: str
-    category: str
-    rule_text: str
-    applies_to: List[str]  # glob patterns
-
-class CursorRulesLoader:
-    """Load and parse cursor rules from .cursor directories in repositories."""
-    
-    RULES_PATTERNS = [
-        '.cursor/rules.mdc',
-        '.cursor/rules/*.mdc',
-        '.cursorrules',
-    ]
-    
-    def __init__(self):
-        self._cache: Dict[str, List[CursorRule]] = {}
-    
-    async def load_rules_from_repo(self, repo_path: str) -> List[CursorRule]:
-        """Load all cursor rules from a repository."""
-        if repo_path in self._cache:
-            return self._cache[repo_path]
-        
-        rules = []
-        
-        # Check for .cursor/rules.mdc
-        rules_mdc = Path(repo_path) / '.cursor' / 'rules.mdc'
-        if rules_mdc.exists():
-            rules.extend(self._parse_mdc_file(str(rules_mdc)))
-        
-        # Check for .cursor/rules/*.mdc
-        rules_dir = Path(repo_path) / '.cursor' / 'rules'
-        if rules_dir.exists():
-            for mdc_file in rules_dir.glob('*.mdc'):
-                rules.extend(self._parse_mdc_file(str(mdc_file)))
-        
-        # Check for .cursorrules (legacy format)
-        cursorrules = Path(repo_path) / '.cursorrules'
-        if cursorrules.exists():
-            rules.extend(self._parse_cursorrules_file(str(cursorrules)))
-        
-        self._cache[repo_path] = rules
-        return rules
-    
-    def _parse_mdc_file(self, file_path: str) -> List[CursorRule]:
-        """Parse a .mdc file and extract rules."""
-        rules = []
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Parse frontmatter
-            frontmatter = {}
-            if content.startswith('---'):
-                parts = content.split('---', 2)
-                if len(parts) >= 3:
-                    frontmatter = self._parse_frontmatter(parts[1])
-                    content = parts[2]
-            
-            # Extract glob patterns
-            globs = frontmatter.get('globs', ['**/*'])
-            if isinstance(globs, str):
-                globs = [globs]
-            
-            # Parse sections
-            sections = self._extract_sections(content)
-            
-            for section_name, section_content in sections.items():
-                # Extract individual rules from section
-                extracted_rules = self._extract_rules_from_section(section_content)
-                
-                for rule_text in extracted_rules:
-                    rules.append(CursorRule(
-                        source_file=file_path,
-                        category=section_name,
-                        rule_text=rule_text,
-                        applies_to=globs
-                    ))
-        
-        except Exception as e:
-            get_logger().warning(f"Failed to parse cursor rules file {file_path}: {e}")
-        
-        return rules
-    
-    def _parse_frontmatter(self, frontmatter_text: str) -> Dict:
-        """Parse YAML-like frontmatter."""
-        result = {}
-        for line in frontmatter_text.strip().split('\n'):
-            if ':' in line:
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip()
-                
-                # Handle arrays
-                if value.startswith('[') and value.endswith(']'):
-                    value = [v.strip().strip('"').strip("'") 
-                             for v in value[1:-1].split(',')]
-                elif value.startswith('-'):
-                    # Multi-line array
-                    continue
-                
-                result[key] = value
-        
-        return result
-    
-    def _extract_sections(self, content: str) -> Dict[str, str]:
-        """Extract sections from markdown content."""
-        sections = {}
-        current_section = "general"
-        current_content = []
-        
-        for line in content.split('\n'):
-            if line.startswith('## '):
-                if current_content:
-                    sections[current_section] = '\n'.join(current_content)
-                current_section = line[3:].strip().lower().replace(' ', '_')
-                current_content = []
-            else:
-                current_content.append(line)
-        
-        if current_content:
-            sections[current_section] = '\n'.join(current_content)
-        
-        return sections
-    
-    def _extract_rules_from_section(self, section_content: str) -> List[str]:
-        """Extract individual rules from a section."""
-        rules = []
-        
-        # Split by bullet points or numbered lists
-        lines = section_content.split('\n')
-        current_rule = []
-        
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('- ') or stripped.startswith('* ') or re.match(r'^\d+\.', stripped):
-                if current_rule:
-                    rules.append(' '.join(current_rule))
-                current_rule = [stripped.lstrip('- *0123456789.').strip()]
-            elif stripped and current_rule:
-                current_rule.append(stripped)
-        
-        if current_rule:
-            rules.append(' '.join(current_rule))
-        
-        return [r for r in rules if r]
-    
-    def _parse_cursorrules_file(self, file_path: str) -> List[CursorRule]:
-        """Parse legacy .cursorrules file."""
-        rules = []
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            
-            # Treat entire file as rules
-            for line in content.split('\n'):
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    rules.append(CursorRule(
-                        source_file=file_path,
-                        category='general',
-                        rule_text=line,
-                        applies_to=['**/*']
-                    ))
-        
-        except Exception as e:
-            get_logger().warning(f"Failed to parse cursorrules file {file_path}: {e}")
-        
-        return rules
-    
-    def rules_to_prompt_context(self, rules: List[CursorRule]) -> str:
-        """Convert cursor rules to prompt context for AI review."""
-        if not rules:
-            return ""
-        
-        context = "\n\n## Team Coding Standards (from .cursor rules)\n\n"
-        
-        # Group by category
-        by_category: Dict[str, List[str]] = {}
-        for rule in rules:
-            if rule.category not in by_category:
-                by_category[rule.category] = []
-            by_category[rule.category].append(rule.rule_text)
-        
-        for category, rule_texts in by_category.items():
-            context += f"### {category.replace('_', ' ').title()}\n"
-            for rule_text in rule_texts:
-                context += f"- {rule_text}\n"
-            context += "\n"
-        
-        return context
-```
-
-#### 4.3 Integration with PR Review
-
-Update: `pr_agent/tools/pr_reviewer.py`
-
-```python
-# Add to PRReviewer class
-
-async def _load_cursor_rules(self) -> str:
-    """Load cursor rules from the repository being reviewed."""
-    from pr_agent.tools.cursor_rules_loader import CursorRulesLoader
-    
-    loader = CursorRulesLoader()
-    
-    # Get repository path or clone URL
-    repo_url = self.git_provider.get_repo_url()
-    
-    # For local repos, load directly
-    # For remote repos, the rules should be indexed in DB
-    rules = await self._get_indexed_cursor_rules(repo_url)
-    
-    if rules:
-        return loader.rules_to_prompt_context(rules)
-    
-    return ""
-
-async def _get_indexed_cursor_rules(self, repo_url: str) -> List[Dict]:
-    """Get cursor rules from database for a repository."""
-    async with self.db.connection() as conn:
-        rows = await conn.fetch("""
-            SELECT category, rule_text, applies_to
-            FROM cursor_rules
-            WHERE repository_id = (
-                SELECT id FROM repositories WHERE github_url = $1
-            )
-        """, repo_url)
-    
-    return [dict(r) for r in rows]
-```
-
-#### 4.4 Rules Loader (TOML + Database)
+#### 4.2 Rules Loader (TOML + Database)
 
 Create: `pr_agent/tools/custom_rules_loader.py`
 
@@ -2940,93 +2692,366 @@ settings:
 
 ---
 
-## Cursor Team Rules Reference
+## Cursor Team Rules (From Cursor Dashboard)
 
-The following cursor rules files define team coding standards. These should be parsed and integrated into the PR review:
+These are the actual Cursor Team Rules configured in the Workiz Cursor dashboard. These rules are enforced across all team members and projects. Reference: [Cursor Team Rules Documentation](https://cursor.com/docs/context/rules#team-rules)
 
-### `.cursor/rules.mdc` (Auth Service)
+---
 
-```markdown
-# Auth Service Rules
+### Rule 1: Verify Actual Implementation
 
-## Test Execution
-All tests in the auth service project must be run using: npm run test
-Always grep for "fail" and "error" in the test output.
-Always check the actual implementation - do not guess or make assumptions.
+> Whenever you work on, review, or refactor code, you must always inspect the actual implementation in the codebase rather than relying on assumptions, undocumented mental models, or vague recollections of how things "should" work.
 
-## Code Style
-Avoid writing inline comments.
+**What you must do:**
+- Locate the actual implementation relevant to the work
+- Read the code to understand how it behaves now
+- Cross-check documentation with what the code actually does
+- If behavior is unclear, seek clarification or write a test
+- Document deviations from expected architecture
 
-## PubSub Pattern
-Follow the pattern in `.cursor/rules/pubsub-pattern.mdc`
+**When this rule applies:**
+- Modifying existing code (bug-fix, refactor, enhancement)
+- Adding new modules that integrate with existing functionality
+- During code reviews
+- When planning architecture changes
+
+---
+
+### Rule 2: Ask Ben for Clarification
+
+> If an issue/bug or product definition is unclear at any point during development, the developer must pause work, ask Ben for clarification, and provide Ben's answer verbatim in the very next AI prompt before proceeding.
+
+---
+
+### Rule 3: Reuse Existing Code
+
+> When writing code, always check if there is an already implemented method or utility that can be used, not only in the current file but across the project. Do not duplicate code; reuse existing implementations whenever possible.
+
+---
+
+### Rule 4: No Inline Comments
+
+> Avoid writing inline comments. Code should be self-documenting.
+
+---
+
+### Rule 5: Structured Logging with Context
+
+> All logger calls MUST include a context object as the second parameter for structured logging and better debugging.
+
+**Required format:**
+```typescript
+this.logger.log('message', { contextData });
+this.logger.warn('message', { contextData });
+this.logger.error('message', { contextData });
+this.logger.debug('message', { contextData });
 ```
 
-### `.cursor/rules/pubsub-pattern.mdc` (Auth Service)
+**Context Object Requirements:**
+- **Identifiers**: accountId, userId, messageId, orderId, sqlId, transactionId, requestId
+- **Operation details**: Input parameters (sanitized), state information, business data
+- **Error information** (for warn/error): error.message, errorCode, stack
+- **Performance metrics**: duration, attempt, retryCount
 
-```markdown
-When implementing Google Cloud Pub/Sub event handlers in NestJS:
+**Examples:**
 
-1. Define metadata constants in src/constants/pubsub-metadata.ts:
+✅ **GOOD:**
+```typescript
+this.logger.log('Creating new message', {
+  accountId: dto.accountId,
+  messageType: dto.type,
+  recipientCount: dto.recipients.length,
+});
+
+this.logger.error('Failed to send message', {
+  messageId: message.id,
+  accountId: message.accountId,
+  provider: 'twilio',
+  error: error.message,
+  stack: error.stack,
+});
+```
+
+❌ **BAD:**
+```typescript
+this.logger.log('Creating new message');
+this.logger.log(`Creating message for account ${accountId}`);
+this.logger.error(`Error: ${error.message}`);
+```
+
+**Sensitive data:** NEVER log passwords, tokens, API keys, or credit card data.
+
+---
+
+### Rule 6: Controller Structure (REST Standards)
+
+> When creating a new controller, follow this mandatory structure:
+
+**HTTP Routes and REST Standards:**
+- Use **plural nouns** for resource names: `/users`, `/products`, `/videos`
+- `GET /resource/:id` → 200 OK, single DTO
+- `GET /resource` → 200 OK, paginated response
+- `POST /resource` → 201 Created, created resource with id
+- `PUT /resource/:id` → 200 OK, updated resource
+- `DELETE /resource/:id` → 204 No Content
+
+**Directory Structure:**
+```
+src/resources/videos/
+├── entities/
+│   └── video.entity.ts      ✅ Entity files singular
+├── dto/
+│   └── *.dto.ts             ✅ All DTOs end with .dto.ts
+├── enum/
+│   └── *.enum.ts
+├── interfaces/
+│   └── *.interfaces.ts
+├── videos.controller.ts
+├── videos.module.ts
+├── videos.service.ts
+└── videos.swagger.decorator.ts ✅ Required for every controller
+```
+
+---
+
+### Rule 7: Don't Call Non-Existing Methods
+
+> Do not call non-existing methods; always check that what you write and call really exists in the codebase. If using a library, always check the correct way to use it. Search the web and use context7 MCP.
+
+---
+
+### Rule 8: Use NestJS Dependency Injection
+
+> Use NestJS's built-in DI system (`@Injectable()`, constructor injection) everywhere. This ensures loose coupling and testability.
+
+- Avoid manually `new`-ing dependencies inside classes
+- For multiple implementations of an interface, use the provider pattern + token/abstract class
+
+---
+
+### Rule 9: Global Exception Filter
+
+> Use global exception filters to standardize API error responses. Use `@workiz/all-exceptions-filter` package. Do not catch exceptions in the code, but let the main catcher do so. Use try-catch only if there is no other choice.
+
+- Use structured logging (Winston via `WorkizLogger`)
+- Ensure sufficient logging in critical paths
+
+---
+
+### Rule 10: Functional Programming Style
+
+> Follow functional programming patterns in NestJS/TypeScript.
+
+**Immutability:**
+- Use only `const` variables, never `let` or `var`
+- Array operations: use `map()`, `filter()`, `reduce()`, `concat()`, spread `[...arr]`
+- Object operations: use spread `{...obj}` instead of direct mutation
+
+**Pure Functions:**
+- Same input always produces same output, no side effects
+- Separate pure business logic from side effects
+
+**Function Size:**
+- Create small, single-purpose functions (ideally < 10 lines)
+- Compose complex operations from smaller functions
+
+**Declarative Over Imperative:**
+- Use array methods over `for` loops
+- Use ternary operators or object lookups over `if/else` chains
+
+**Examples:**
+
+❌ **BAD (imperative):**
+```typescript
+let total = 0;
+for (let i = 0; i < items.length; i++) {
+  if (items[i].active) {
+    total += items[i].price;
+  }
+}
+```
+
+✅ **GOOD (declarative):**
+```typescript
+const total = items
+  .filter(item => item.active)
+  .reduce((sum, item) => sum + item.price, 0);
+```
+
+❌ **BAD (mutation):**
+```typescript
+const user = await this.findUser(id);
+user.lastLogin = new Date();
+```
+
+✅ **GOOD (immutable):**
+```typescript
+const user = await this.findUser(id);
+const updatedUser = { ...user, lastLogin: new Date() };
+```
+
+---
+
+### Rule 11: Run Linting
+
+> Always run `npm run lint` after you finish any changes in NestJS projects.
+
+---
+
+### Rule 12: TypeORM Migrations (Raw SQL Only)
+
+> Always use **raw SQL queries** instead of TypeORM's table builder API in migrations.
+
+**Migration File Naming:**
+```
+{timestamp}-{descriptive-name}.ts
+```
+Example: `1752315994000-create-zapier-webhooks-table.ts`
+
+**Template:**
+```typescript
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class YourMigrationName{timestamp} implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
+      CREATE TABLE table_name (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        column_name VARCHAR(255) NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      );
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IDX_table_name_column_name ON table_name (column_name);
+    `);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX IDX_table_name_column_name ON table_name;`);
+    await queryRunner.query(`DROP TABLE table_name;`);
+  }
+}
+```
+
+**Index Naming Convention:**
+- Single-column: `IDX_{table_name}_{column_name}`
+- Composite: `IDX_{table_name}_{column1}_{column2}`
+
+---
+
+### Rule 13: Async Best Practices
+
+> Be mindful of asynchronous operations: use async/await, Promises, or RxJS Observables. Ensure you don't block the event loop.
+
+- Implement caching for frequently accessed data (Redis, in-memory)
+- Think about service decomposition for growth
+- Use proper indexes, pagination, and limit query sizes
+
+---
+
+### Rule 14: Feature-Based Modular Architecture
+
+> Use a feature-based modular architecture — each major domain lives in its own module folder.
+
+- Within each module: separate controllers, services, repositories, dto/validators, entities
+- Modules should be loosely coupled via well-defined interfaces
+- Name files consistently: `users.controller.ts`, `users.service.ts`, `users.module.ts`
+- Have a "common" or "core" module for shared logic
+
+---
+
+### Rule 15: PubSub Event Handlers
+
+> When implementing Google Cloud Pub/Sub event handlers in NestJS, follow this pattern exactly:
+
+1. **Metadata constants** in `src/constants/pubsub-metadata.ts`:
+   ```typescript
    RESOURCE_TOPIC_METADATA = '__resource-topic-candidate'
    RESOURCE_EVENT_METADATA = '__resource-event-candidate'
+   ```
 
-2. Decorator order: @PubSubTopic, @PubSubEvent, @PubSubAsyncAcknowledge
+2. **Decorators in order**: `@PubSubTopic`, `@PubSubEvent`, `@PubSubAsyncAcknowledge`
 
-3. Method signature:
+3. **Method signature**:
+   ```typescript
    public async onResourceAction(
      @PubSubPayload() _originalMessage: EmittedMessage<any>,
      @PubSubPayload(EventDto) eventData: EventDto
    ): Promise<void>
+   ```
 
-4. Required imports:
-   - PubSubAsyncAcknowledge, PubSubEvent, PubSubPayload, PubSubTopic from @workiz/pubsub-decorator-reflector
-   - EmittedMessage from @algoan/pubsub
+4. **Always log**: `this.logger.log('Received resource event', eventData)`
 
-5. Always log: this.logger.log('Received resource event', eventData)
+5. **Delegate with log details**:
+   ```typescript
+   await this.service.method(eventData, { 
+     transport: 'pubsub', 
+     payload: maskSensitive(eventData) 
+   });
+   ```
 
-6. Delegate with log details:
-   await this.service.method(eventData, { transport: 'pubsub', payload: maskSensitive(eventData) })
+6. **Register in main.ts**:
+   ```typescript
+   app.get(ReflectDecoratorService)
+     .reflectDecorators([ResourceController], RESOURCE_TOPIC_METADATA)
+     .reflectDecorators([ResourceController], RESOURCE_EVENT_METADATA, 'event', process.env.RESOURCE_EVENT_NAME);
+   ```
 
-7. Register in main.ts:
-   app.get(ReflectDecoratorService).reflectDecorators([Controller], METADATA)
+7. **Naming**: `onResourceAction` format (onUserCreated, onOrderUpdated)
 
-8. Naming: onResourceAction format (onUserCreated, onOrderUpdated)
+8. **Transport types**: `'pubsub'`, `'internal'`, `'http'`
 
-9. Transport types: 'pubsub', 'internal', 'http'
-
-NEVER:
+**NEVER:**
 - Implement business logic in controllers
 - Forget to register in main.ts
 - Use synchronous method signatures
-- Log sensitive data without maskSensitive()
-```
+- Log sensitive data without `maskSensitive()`
 
-### Workspace Rules (From Cursor Settings)
+---
 
-The following rules are applied workspace-wide via Cursor settings:
+### Rule 16: Single Responsibility
 
-| Rule | Description |
-|------|-------------|
-| **Verify Implementation** | Always check actual code before making changes |
-| **Ask Ben for Clarification** | Pause and ask if requirements are unclear |
-| **Reuse Code** | Check for existing methods/utilities across project |
-| **No Inline Comments** | Code should be self-documenting |
-| **Structured Logging** | Logger calls must include context objects |
-| **Controller Structure** | Follow REST standards, plural nouns, proper responses |
-| **Don't Call Non-Existing** | Verify methods exist before calling |
-| **Use NestJS DI** | Use @Injectable() and constructor injection |
-| **Global Exception Filter** | Use @workiz/all-exceptions-filter, avoid try-catch |
-| **Functional Programming** | Prefer const, immutable operations, small functions |
-| **Run npm run lint** | After NestJS changes |
-| **TypeORM Raw SQL** | Use raw SQL in migrations, not table builder |
-| **Async Best Practices** | Proper async/await, don't block event loop |
-| **Feature-Based Architecture** | Modular, loosely coupled modules |
-| **PubSub Patterns** | Follow exact decorator and registration pattern |
-| **Single Responsibility** | One purpose per class/function |
-| **Test Files Only** | Only modify test files unless discussed |
-| **Run npm run test** | For NestJS projects |
-| **Run npx tsc --noEmit** | After TypeScript changes |
-| **DTOs with Validation** | Use class-validator for input |
+> Every class or function should have one and only one responsibility.
+
+- Controllers handle HTTP/request routing
+- Services implement business logic
+- Repositories/ORM layers handle data access
+- Methods should do one logical thing
+
+---
+
+### Rule 17: Test File Modifications
+
+> When writing, fixing, or maintaining tests, only modify test files. Do not change implementation files unless explicitly discussed and approved.
+
+- If a test fails and cause is unclear, add debug logs
+- Always check implementation to understand if the issue is in test or code
+
+---
+
+### Rule 18: Run Tests
+
+> All tests must be run using: `npm run test`
+
+Always grep for "fail" and "error" in test output to quickly identify issues.
+
+---
+
+### Rule 19: TypeScript Type Checking
+
+> Always run `npx tsc --noEmit` in TypeScript projects after finishing a change in the code.
+
+---
+
+### Rule 20: DTOs with Validation
+
+> Use Data Transfer Objects (DTOs) for input into controllers. Validate them with `class-validator` and transform with `class-transformer`.
+
+- Always validate and sanitize incoming data as early as possible (in pipes)
+- Keep API model (DTO) and database model (Entity) clearly separated
 
 ---
 
@@ -5822,36 +5847,6 @@ class RepositoryIndexingService:
         if elements_batch:
             await self._store_elements_batch(elements_batch)
         
-        # Extract and store cursor rules
-        await self._process_cursor_rules(repo_path, repo_id)
-    
-    async def _process_cursor_rules(self, repo_path: str, repo_id: int) -> None:
-        """Extract and store cursor rules from repository."""
-        from pr_agent.tools.cursor_rules_loader import CursorRulesLoader
-        
-        loader = CursorRulesLoader()
-        rules = await loader.load_rules_from_repo(repo_path)
-        
-        if not rules:
-            return
-        
-        async with self.db.connection() as conn:
-            # Clear existing rules for this repo
-            await conn.execute(
-                "DELETE FROM cursor_rules WHERE repository_id = $1",
-                repo_id
-            )
-            
-            # Insert new rules
-            for rule in rules:
-                await conn.execute("""
-                    INSERT INTO cursor_rules 
-                    (repository_id, source_file, category, rule_text, applies_to)
-                    VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT DO NOTHING
-                """, repo_id, rule.source_file, rule.category, 
-                    rule.rule_text, rule.applies_to)
-        
         return stats
     
     async def _store_elements_batch(self, elements_batch: List[Dict]) -> None:
@@ -7186,23 +7181,10 @@ CREATE TABLE package_updates (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Cursor rules extracted from repositories
-CREATE TABLE cursor_rules (
-    id SERIAL PRIMARY KEY,
-    repository_id INT REFERENCES repositories(id),
-    source_file VARCHAR(255) NOT NULL,
-    category VARCHAR(100),
-    rule_text TEXT NOT NULL,
-    applies_to TEXT[],  -- glob patterns
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(repository_id, source_file, rule_text)
-);
-
 -- Create indexes
 CREATE INDEX idx_package_deps_pkg ON package_dependencies(package_name);
 CREATE INDEX idx_package_deps_repo ON package_dependencies(repository_id);
 CREATE INDEX idx_internal_packages_name ON internal_packages(package_name);
-CREATE INDEX idx_cursor_rules_repo ON cursor_rules(repository_id);
 ```
 
 ### Integration with PR Review
@@ -7978,32 +7960,32 @@ Extra instructions:
 | **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps, react_class_component | Web app, Mobile web |
 | **Python** | `PythonAnalyzer` | py_no_print, pg_sql_injection, pg_n_plus_one, asyncio_blocking_call, fastapi_sync_endpoint | FastAPI + PostgreSQL |
 
-### ✅ Cursor Team Rules Integrated (From `.cursor/rules.mdc`)
+### ✅ Cursor Team Rules Integrated (20 Rules from Cursor Dashboard)
 
-| Category | Rules Added | Source File |
-|----------|-------------|-------------|
-| **Structured Logging** | no_logger_context, logger_string_concat, maskSensitive required | `rules.mdc` |
-| **Functional Style** | let_usage, var_usage, array_mutation, object_mutation, imperative_loop | Workspace Rules |
-| **PubSub Patterns** | pubsub_no_ack, pubsub_sync_handler, pubsub_metadata, pubsub_registration | `pubsub-pattern.mdc` |
-| **Exception Handling** | catch_without_rethrow, try_catch_in_service, use @workiz/all-exceptions-filter | Workspace Rules |
-| **TypeORM Migrations** | typeorm_table_builder (use raw SQL only) | Workspace Rules |
-| **Controller Standards** | singular_route, controller_complex_logic, no business logic in controllers | Workspace Rules |
-| **No Inline Comments** | inline_comment detection | `rules.mdc` |
-| **Test Execution** | Use `npm run test`, grep for "fail" and "error" | `rules.mdc` |
-| **Code Verification** | Always check actual implementation, don't assume | `rules.mdc` |
-| **DI Pattern** | Use NestJS IoC, no manual instantiation | Workspace Rules |
+| # | Rule | Key Checks |
+|---|------|------------|
+| 1 | **Verify Implementation** | Don't assume, check actual code |
+| 2 | **Ask Ben for Clarification** | Pause if requirements unclear |
+| 3 | **Reuse Existing Code** | Check for existing utilities across project |
+| 4 | **No Inline Comments** | Code should be self-documenting |
+| 5 | **Structured Logging** | Logger calls must include context object |
+| 6 | **Controller Structure** | REST standards, plural nouns, proper directory structure |
+| 7 | **Don't Call Non-Existing** | Verify methods exist before calling |
+| 8 | **NestJS DI** | Use @Injectable(), constructor injection |
+| 9 | **Global Exception Filter** | Use @workiz/all-exceptions-filter, avoid try-catch |
+| 10 | **Functional Programming** | const over let, immutable operations, small functions |
+| 11 | **Run Linting** | `npm run lint` after NestJS changes |
+| 12 | **TypeORM Migrations** | Raw SQL only, specific naming convention |
+| 13 | **Async Best Practices** | Don't block event loop, proper caching |
+| 14 | **Feature-Based Architecture** | Modular, loosely coupled modules |
+| 15 | **PubSub Patterns** | Exact decorator order, maskSensitive(), main.ts registration |
+| 16 | **Single Responsibility** | One purpose per class/function |
+| 17 | **Test File Modifications** | Only modify test files unless discussed |
+| 18 | **Run Tests** | `npm run test`, grep for errors |
+| 19 | **TypeScript Type Checking** | `npx tsc --noEmit` after changes |
+| 20 | **DTOs with Validation** | class-validator for all input |
 
-### ✅ PubSub Pattern Requirements (From `pubsub-pattern.mdc`)
-
-| Requirement | Rule Check |
-|-------------|------------|
-| Metadata constants in `src/constants/pubsub-metadata.ts` | `pubsub_metadata_location` |
-| Decorators: @PubSubTopic, @PubSubEvent, @PubSubAsyncAcknowledge | `pubsub_missing_decorators` |
-| Method signature with EmittedMessage and typed DTO | `pubsub_method_signature` |
-| Register in main.ts with ReflectDecoratorService | `pubsub_registration_missing` |
-| Use maskSensitive() for logging payloads | `pubsub_sensitive_logging` |
-| No business logic in controller handlers | `pubsub_controller_logic` |
-| Handler naming: onResourceAction format | `pubsub_handler_naming` |
+See full documentation in [Cursor Team Rules](#cursor-team-rules-from-cursor-dashboard) section above.
 
 ### ✅ Databases Covered
 
@@ -8108,7 +8090,6 @@ pr_agent/
 │   ├── jira_context_provider.py         # RAG for Jira tickets
 │   ├── custom_rules_engine.py           # Custom review rules
 │   ├── custom_rules_loader.py           # Load rules from TOML/DB
-│   ├── cursor_rules_loader.py           # Load .cursor/rules.mdc files
 │   ├── sql_analyzer.py                  # MySQL/MongoDB/ES analyzer
 │   ├── pubsub_analyzer.py               # PubSub topology analyzer
 │   ├── security_analyzer.py             # Deep security checks
