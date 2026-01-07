@@ -19,7 +19,7 @@ class DatadogJSONFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
             "service": "pr-agent",
-            "env": os.environ.get("NODE_ENV", "development"),
+            "env": os.environ.get("ENV", "development"),
             "version": os.environ.get("APP_VERSION", "dev"),
             "dd": {
                 "trace_id": getattr(record, "dd_trace_id", None),
@@ -71,7 +71,7 @@ def setup_logging(level: str = "INFO") -> None:
     logging.getLogger("litellm").setLevel(logging.WARNING)
     
     logger = logging.getLogger("pr_agent")
-    logger.info("Logging configured", extra={"context": {"level": level, "env": os.environ.get("NODE_ENV", "development")}})
+    logger.info("Logging configured", extra={"context": {"level": level, "env": os.environ.get("ENV", "development")}})
 
 
 def get_logger(name: str) -> logging.Logger:
