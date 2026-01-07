@@ -91,7 +91,8 @@ def load_config_sync(
     project_id: str,
     service_name: str = SERVICE_NAME,
     env_name_override: str | None = None,
-    service_root: Path | None = None
+    service_root: Path | None = None,
+    update_environ: bool = True
 ) -> dict[str, str]:
     """
     Load configuration from .env file or Google Cloud Secret Manager (synchronous).
@@ -99,11 +100,17 @@ def load_config_sync(
     This is the primary config loading function. Use this at application startup
     before the async event loop is running.
     
+    SIDE EFFECT: By default, this updates os.environ with loaded values.
+    Existing environment variables with the same keys WILL BE OVERWRITTEN.
+    Set update_environ=False to disable this behavior.
+    
     Args:
         project_id: Google Cloud project ID
         service_name: Name of the service (defaults to 'pr-agent')
         env_name_override: Optional override for the environment name
         service_root: Root directory of the service (defaults to project root)
+        update_environ: If True (default), updates os.environ with loaded config.
+                       Set to False to only return the config dict without side effects.
     
     Returns:
         Dictionary of configuration values
@@ -121,8 +128,11 @@ def load_config_sync(
         logger.info("Loading config from Secret Manager", extra={"context": {"secret": secret_name}})
         config = _get_secret_manager_config(project_id, service_name, env_name_override)
 
-    os.environ.update(config)
-    logger.debug("Config loaded", extra={"context": {"keys_count": len(config)}})
+    if update_environ:
+        os.environ.update(config)
+        logger.debug("Config loaded and applied to os.environ", extra={"context": {"keys_count": len(config)}})
+    else:
+        logger.debug("Config loaded (os.environ not modified)", extra={"context": {"keys_count": len(config)}})
 
     return config
 
@@ -131,7 +141,8 @@ async def load_config(
     project_id: str,
     service_name: str = SERVICE_NAME,
     env_name_override: str | None = None,
-    service_root: Path | None = None
+    service_root: Path | None = None,
+    update_environ: bool = True
 ) -> dict[str, str]:
     """
     Load configuration from .env file or Google Cloud Secret Manager (async).
@@ -141,31 +152,46 @@ async def load_config(
     
     For startup, prefer load_config_sync() before the event loop starts.
     
+    SIDE EFFECT: By default, this updates os.environ with loaded values.
+    Set update_environ=False to disable this behavior.
+    
     Args:
         project_id: Google Cloud project ID
         service_name: Name of the service (defaults to 'pr-agent')
         env_name_override: Optional override for the environment name
         service_root: Root directory of the service (defaults to project root)
+        update_environ: If True (default), updates os.environ with loaded config.
     
     Returns:
         Dictionary of configuration values
     
     Usage:
         config = await load_config('workiz-development')
+        config = await load_config('workiz-development', update_environ=False)  # No side effects
     """
     return await asyncio.to_thread(
         load_config_sync,
         project_id,
         service_name,
         env_name_override,
-        service_root
+        service_root,
+        update_environ
     )
 
 
-def load_local_env() -> dict[str, str]:
+def load_local_env(update_environ: bool = True) -> dict[str, str]:
     """
     Load configuration from .env file only (for local development).
     Does not fall back to Secret Manager.
+    
+    SIDE EFFECT: By default, this updates os.environ with loaded values.
+    Set update_environ=False to disable this behavior.
+    
+    Args:
+        update_environ: If True (default), updates os.environ with loaded config.
+    
+    Returns:
+        Dictionary of configuration values
     """
     service_root = Path(__file__).parent.parent.parent
     env_file = service_root / '.env'
@@ -173,7 +199,8 @@ def load_local_env() -> dict[str, str]:
     if env_file.exists():
         logger.info("Loading config from local .env", extra={"context": {"path": str(env_file)}})
         config = _parse_env_content(env_file.read_text())
-        os.environ.update(config)
+        if update_environ:
+            os.environ.update(config)
         return config
     
     logger.info("No .env file found, using existing environment variables")
