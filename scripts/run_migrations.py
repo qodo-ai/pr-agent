@@ -3,6 +3,12 @@
 Run SQL migrations from migrations/ directory.
 Following the same pattern as spam-detect service.
 
+Migration Strategy:
+    - Each migration runs in its own transaction (atomic per-migration)
+    - If a migration fails, previously applied migrations remain (partial state)
+    - Re-running after failure will skip already-applied migrations
+    - To rollback, you must manually reverse changes or restore from backup
+
 Preferred usage:
     PYTHONPATH=. python scripts/run_migrations.py
     
@@ -149,7 +155,15 @@ def run_migrations():
         result = conn.execute("SELECT filename FROM schema_migrations")
         executed = {row[0] for row in result.fetchall()}
         
-        new_migrations = 0
+        applied_migrations = []
+        pending_migrations = [f.name for f in migration_files if f.name not in executed]
+        
+        if pending_migrations:
+            logger.info("Pending migrations to apply", extra={"context": {
+                "pending": pending_migrations,
+                "count": len(pending_migrations)
+            }})
+        
         for migration_file in migration_files:
             if migration_file.name in executed:
                 logger.debug("Skipping migration (already executed)", extra={"context": {"file": migration_file.name}})
@@ -167,19 +181,26 @@ def run_migrations():
                         (migration_file.name,)
                     )
                 
+                applied_migrations.append(migration_file.name)
                 logger.info("Migration completed", extra={"context": {"file": migration_file.name}})
-                new_migrations += 1
             except Exception as e:
-                logger.error("Migration failed", extra={"context": {
-                    "file": migration_file.name,
-                    "error": str(e)
+                remaining = [m for m in pending_migrations if m not in applied_migrations and m != migration_file.name]
+                logger.error("Migration failed - schema may be in partial state", extra={"context": {
+                    "failed_migration": migration_file.name,
+                    "successfully_applied": applied_migrations,
+                    "not_applied": [migration_file.name] + remaining,
+                    "error": str(e),
+                    "recovery_hint": "Fix the failing migration and re-run. Successfully applied migrations will be skipped."
                 }})
                 raise
     
-    if new_migrations == 0:
+    if not applied_migrations:
         logger.info("Database is up to date, no new migrations")
     else:
-        logger.info("Migrations completed", extra={"context": {"new_migrations": new_migrations}})
+        logger.info("Migrations completed successfully", extra={"context": {
+            "applied": applied_migrations,
+            "count": len(applied_migrations)
+        }})
 
 
 if __name__ == "__main__":
