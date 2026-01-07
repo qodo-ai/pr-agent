@@ -946,6 +946,254 @@ class CustomRulesEngine:
         return results
 ```
 
+#### 4.2 Rules Loader (TOML + Database)
+
+Create: `pr_agent/tools/custom_rules_loader.py`
+
+```python
+import re
+import toml
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from pr_agent.config_loader import get_settings
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.log import get_logger
+
+@dataclass
+class RulePattern:
+    """Rule pattern loaded from config or database."""
+    name: str
+    category: str
+    language: Optional[str]
+    framework: Optional[str]
+    pattern: str
+    message: str
+    severity: str
+    suggestion: str
+    enabled: bool = True
+
+class CustomRulesLoader:
+    """Load custom rules from TOML config and database."""
+    
+    def __init__(self, db: Optional[DatabaseManager] = None):
+        self.db = db
+        self._rules_cache: Dict[str, List[RulePattern]] = {}
+    
+    async def load_all_rules(self) -> Dict[str, List[RulePattern]]:
+        """Load rules from both TOML and database."""
+        rules = {}
+        
+        # Load from TOML config
+        toml_rules = self._load_from_toml()
+        for category, patterns in toml_rules.items():
+            rules[category] = patterns
+        
+        # Load from database (can override TOML)
+        if self.db:
+            db_rules = await self._load_from_database()
+            for category, patterns in db_rules.items():
+                if category in rules:
+                    # Merge, db rules can override toml
+                    existing_names = {r.name for r in rules[category]}
+                    for pattern in patterns:
+                        if pattern.name in existing_names:
+                            # Replace
+                            rules[category] = [
+                                p if p.name != pattern.name else pattern 
+                                for p in rules[category]
+                            ]
+                        else:
+                            rules[category].append(pattern)
+                else:
+                    rules[category] = patterns
+        
+        self._rules_cache = rules
+        return rules
+    
+    def _load_from_toml(self) -> Dict[str, List[RulePattern]]:
+        """Load rules from workiz_rules.toml."""
+        rules = {}
+        
+        try:
+            settings_path = 'pr_agent/settings/workiz_rules.toml'
+            with open(settings_path, 'r') as f:
+                config = toml.load(f)
+            
+            workiz_rules = config.get('workiz_rules', {})
+            
+            for category, category_config in workiz_rules.items():
+                if category == 'functional':
+                    # Special handling for functional rules
+                    continue
+                
+                patterns = category_config.get('patterns', [])
+                rules[category] = [
+                    RulePattern(
+                        name=p['name'],
+                        category=category,
+                        language=category if category in ['php', 'javascript', 'typescript'] else None,
+                        framework=p.get('framework') or (category if category in ['nestjs', 'react'] else None),
+                        pattern=p['pattern'],
+                        message=p['message'],
+                        severity=p.get('severity', 'warning'),
+                        suggestion=p.get('suggestion', ''),
+                        enabled=p.get('enabled', True)
+                    )
+                    for p in patterns
+                ]
+        
+        except FileNotFoundError:
+            get_logger().warning("workiz_rules.toml not found, using defaults")
+        except Exception as e:
+            get_logger().error(f"Error loading rules from TOML: {e}")
+        
+        return rules
+    
+    async def _load_from_database(self) -> Dict[str, List[RulePattern]]:
+        """Load rules from database."""
+        rules = {}
+        
+        try:
+            async with self.db.connection() as conn:
+                rows = await conn.fetch("""
+                    SELECT rule_name, category, language, framework, 
+                           pattern, message, severity, suggestion, enabled
+                    FROM custom_rules
+                    WHERE enabled = TRUE
+                """)
+                
+                for row in rows:
+                    category = row['category']
+                    if category not in rules:
+                        rules[category] = []
+                    
+                    rules[category].append(RulePattern(
+                        name=row['rule_name'],
+                        category=category,
+                        language=row['language'],
+                        framework=row['framework'],
+                        pattern=row['pattern'],
+                        message=row['message'],
+                        severity=row['severity'],
+                        suggestion=row['suggestion'],
+                        enabled=row['enabled']
+                    ))
+        
+        except Exception as e:
+            get_logger().error(f"Error loading rules from database: {e}")
+        
+        return rules
+    
+    def get_rules_for_file(self, file_path: str) -> List[RulePattern]:
+        """Get applicable rules for a specific file."""
+        applicable_rules = []
+        
+        # Determine file type
+        ext = file_path.split('.')[-1].lower()
+        is_controller = '.controller.' in file_path
+        is_service = '.service.' in file_path
+        is_component = '.tsx' in file_path or '.jsx' in file_path
+        
+        # Map extension to language
+        lang_map = {
+            'php': 'php',
+            'js': 'javascript',
+            'mjs': 'javascript',
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'jsx': 'javascript'
+        }
+        file_language = lang_map.get(ext)
+        
+        # Determine framework
+        file_framework = None
+        if is_controller or is_service:
+            file_framework = 'nestjs'
+        elif is_component:
+            file_framework = 'react'
+        
+        # Collect applicable rules
+        for category, patterns in self._rules_cache.items():
+            for rule in patterns:
+                if not rule.enabled:
+                    continue
+                
+                # Check language match
+                if rule.language and rule.language != file_language:
+                    continue
+                
+                # Check framework match
+                if rule.framework and rule.framework != file_framework:
+                    continue
+                
+                # Security and database rules apply to all
+                if category in ['security', 'database']:
+                    applicable_rules.append(rule)
+                    continue
+                
+                # Language-specific rules
+                if rule.language == file_language:
+                    applicable_rules.append(rule)
+                
+                # Framework-specific rules
+                if rule.framework == file_framework:
+                    applicable_rules.append(rule)
+        
+        return applicable_rules
+
+
+class DynamicRuleChecker:
+    """Check files against dynamically loaded rules."""
+    
+    def __init__(self, rules_loader: CustomRulesLoader):
+        self.loader = rules_loader
+    
+    def check_file(self, content: str, file_path: str) -> List[Dict]:
+        """Check file content against applicable rules."""
+        violations = []
+        rules = self.loader.get_rules_for_file(file_path)
+        
+        lines = content.split('\n')
+        
+        for rule in rules:
+            try:
+                pattern = re.compile(rule.pattern, re.IGNORECASE | re.MULTILINE)
+                
+                for i, line in enumerate(lines, 1):
+                    if pattern.search(line):
+                        violations.append({
+                            'rule': rule.name,
+                            'category': rule.category,
+                            'file': file_path,
+                            'line': i,
+                            'message': rule.message,
+                            'severity': rule.severity,
+                            'suggestion': rule.suggestion,
+                            'matched_line': line.strip()
+                        })
+            except re.error as e:
+                get_logger().warning(f"Invalid regex in rule {rule.name}: {e}")
+        
+        return violations
+    
+    def check_all_files(self, files: List[Dict]) -> Dict[str, List[Dict]]:
+        """Check multiple files and return violations by file."""
+        results = {}
+        
+        for file_info in files:
+            file_path = file_info.get('filename') or file_info.get('path')
+            content = file_info.get('content') or file_info.get('head_file', '')
+            
+            if not content:
+                continue
+            
+            violations = self.check_file(content, file_path)
+            if violations:
+                results[file_path] = violations
+        
+        return results
+```
+
 ### Phase 5: SQL Review (Week 6-7)
 
 #### 5.1 SQL Analyzer
@@ -1799,6 +2047,238 @@ class DatabaseManager:
 
 ---
 
+## Webhook Handlers for Continuous Updates
+
+### Add to GitHub App Server
+
+Update: `pr_agent/servers/github_app.py`
+
+```python
+# Add these imports at the top
+from pr_agent.services.indexing_service import RepositoryIndexingService, IncrementalUpdateService
+from pr_agent.services.jira_sync_service import JiraSyncService
+from pr_agent.db.connection import DatabaseManager
+
+# Add new endpoints
+@router.post("/api/v1/webhooks/push")
+async def handle_push_webhook(background_tasks: BackgroundTasks, request: Request):
+    """Handle push events for incremental indexing."""
+    body = await request.json()
+    
+    # Verify webhook signature
+    if not verify_webhook_signature(request):
+        return Response(status_code=401)
+    
+    # Queue incremental indexing
+    background_tasks.add_task(process_push_event, body)
+    return {"status": "queued"}
+
+@router.post("/api/v1/webhooks/jira")
+async def handle_jira_webhook(background_tasks: BackgroundTasks, request: Request):
+    """Handle Jira webhooks for ticket sync."""
+    body = await request.json()
+    
+    # Queue Jira sync
+    background_tasks.add_task(process_jira_event, body)
+    return {"status": "queued"}
+
+async def process_push_event(payload: Dict):
+    """Process GitHub push event for indexing."""
+    db = await get_database_manager()
+    indexing_service = RepositoryIndexingService(
+        db=db,
+        github_token=get_settings().github.user_token,
+        embedding_handler=None  # Will use default
+    )
+    update_service = IncrementalUpdateService(indexing_service)
+    await update_service.handle_push_webhook(payload)
+
+async def process_jira_event(payload: Dict):
+    """Process Jira webhook event."""
+    event_type = payload.get('webhookEvent', '')
+    
+    if event_type in ['jira:issue_created', 'jira:issue_updated']:
+        issue_key = payload['issue']['key']
+        
+        db = await get_database_manager()
+        jira_client = get_jira_client()
+        jira_sync = JiraSyncService(jira_client, db, None)
+        
+        # Sync single ticket
+        issue = jira_client.jira.issue(issue_key, expand='changelog')
+        ticket_data = jira_sync._extract_ticket_data(issue)
+        await jira_sync._store_tickets_batch([ticket_data])
+```
+
+### Add Admin API Endpoints
+
+Create: `pr_agent/servers/admin_api.py`
+
+```python
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from pydantic import BaseModel
+from typing import List, Optional
+from pr_agent.services.indexing_service import RepositoryIndexingService
+from pr_agent.services.jira_sync_service import JiraSyncService, SyncScheduler
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.config_loader import get_settings
+
+admin_router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+class IndexRequest(BaseModel):
+    repository_urls: List[str]
+    branch: str = "main"
+    full_index: bool = False
+
+class JiraSyncRequest(BaseModel):
+    project_keys: List[str]
+    full_sync: bool = False
+
+class IndexStatusResponse(BaseModel):
+    repositories: List[dict]
+    jira_tickets_count: int
+    last_sync: Optional[str]
+
+@admin_router.post("/index/repositories")
+async def trigger_repo_indexing(
+    request: IndexRequest,
+    background_tasks: BackgroundTasks
+):
+    """Trigger repository indexing."""
+    async def do_indexing():
+        db = DatabaseManager(get_settings().workiz.database_url)
+        await db.initialize()
+        
+        indexing_service = RepositoryIndexingService(
+            db=db,
+            github_token=get_settings().github.user_token,
+            embedding_handler=None
+        )
+        
+        job_type = 'full' if request.full_index else 'incremental'
+        for url in request.repository_urls:
+            await indexing_service.index_repository(url, request.branch, job_type)
+        
+        await db.close()
+    
+    background_tasks.add_task(do_indexing)
+    return {"status": "indexing queued", "repositories": len(request.repository_urls)}
+
+@admin_router.post("/sync/jira")
+async def trigger_jira_sync(
+    request: JiraSyncRequest,
+    background_tasks: BackgroundTasks
+):
+    """Trigger Jira synchronization."""
+    async def do_sync():
+        db = DatabaseManager(get_settings().workiz.database_url)
+        await db.initialize()
+        
+        from pr_agent.integrations.jira_client import JiraClient
+        jira_client = JiraClient(
+            base_url=get_settings().jira.base_url,
+            email=get_settings().jira.email,
+            api_token=get_settings().jira.api_token
+        )
+        
+        jira_sync = JiraSyncService(jira_client, db, None)
+        
+        if request.full_sync:
+            await jira_sync.full_sync(request.project_keys)
+        else:
+            await jira_sync.incremental_sync(request.project_keys)
+        
+        await db.close()
+    
+    background_tasks.add_task(do_sync)
+    return {"status": "sync queued", "projects": request.project_keys}
+
+@admin_router.get("/status", response_model=IndexStatusResponse)
+async def get_indexing_status():
+    """Get current indexing status."""
+    db = DatabaseManager(get_settings().workiz.database_url)
+    await db.initialize()
+    
+    async with db.connection() as conn:
+        repos = await conn.fetch("""
+            SELECT r.org_name, r.repo_name, r.last_indexed_at,
+                   COUNT(cc.id) as chunk_count
+            FROM repositories r
+            LEFT JOIN code_chunks cc ON r.id = cc.repository_id
+            GROUP BY r.id
+            ORDER BY r.last_indexed_at DESC
+        """)
+        
+        jira_count = await conn.fetchval("SELECT COUNT(*) FROM jira_tickets")
+        
+        last_job = await conn.fetchrow("""
+            SELECT completed_at FROM indexing_jobs 
+            WHERE status = 'completed' 
+            ORDER BY completed_at DESC LIMIT 1
+        """)
+    
+    await db.close()
+    
+    return IndexStatusResponse(
+        repositories=[dict(r) for r in repos],
+        jira_tickets_count=jira_count,
+        last_sync=str(last_job['completed_at']) if last_job else None
+    )
+
+@admin_router.get("/pubsub/topology")
+async def get_pubsub_topology():
+    """Get PubSub event topology across all repos."""
+    db = DatabaseManager(get_settings().workiz.database_url)
+    await db.initialize()
+    
+    async with db.connection() as conn:
+        publishers = await conn.fetch("""
+            SELECT pe.topic, r.repo_name, pe.file_path, pe.handler_name
+            FROM pubsub_events pe
+            JOIN repositories r ON pe.repository_id = r.id
+            WHERE pe.event_type = 'publish'
+            ORDER BY pe.topic
+        """)
+        
+        subscribers = await conn.fetch("""
+            SELECT pe.topic, r.repo_name, pe.file_path, pe.handler_name,
+                   pe.message_schema
+            FROM pubsub_events pe
+            JOIN repositories r ON pe.repository_id = r.id
+            WHERE pe.event_type = 'subscribe'
+            ORDER BY pe.topic
+        """)
+    
+    await db.close()
+    
+    # Build topology
+    topology = {}
+    for pub in publishers:
+        topic = pub['topic']
+        if topic not in topology:
+            topology[topic] = {'publishers': [], 'subscribers': []}
+        topology[topic]['publishers'].append({
+            'repo': pub['repo_name'],
+            'file': pub['file_path'],
+            'handler': pub['handler_name']
+        })
+    
+    for sub in subscribers:
+        topic = sub['topic']
+        if topic not in topology:
+            topology[topic] = {'publishers': [], 'subscribers': []}
+        topology[topic]['subscribers'].append({
+            'repo': sub['repo_name'],
+            'file': sub['file_path'],
+            'handler': sub['handler_name'],
+            'schema': sub['message_schema']
+        })
+    
+    return topology
+```
+
+---
+
 ## Local Development Setup
 
 ### Prerequisites
@@ -1807,11 +2287,12 @@ class DatabaseManager:
 # Python 3.12+
 python3 --version
 
-# PostgreSQL 15+ with pgvector
-psql --version
+# Docker & Docker Compose (recommended for local DB)
+docker --version
+docker-compose --version
 
-# Install pgvector extension
-CREATE EXTENSION vector;
+# OR PostgreSQL 15+ with pgvector installed locally
+psql --version
 ```
 
 ### Installation Steps
@@ -1828,13 +2309,342 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # 4. Install additional dependencies for Workiz features
-pip install asyncpg jira pgvector
+pip install asyncpg jira pgvector aiohttp gitpython pyyaml
 
 # 5. Copy secrets template
 cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
 
 # 6. Edit secrets file with your credentials
 # See Configuration Guide below
+```
+
+### Database Setup
+
+#### Option A: Docker Compose (Recommended)
+
+Create `docker-compose.local.yml`:
+
+```yaml
+version: '3.8'
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pr-agent-db
+    environment:
+      POSTGRES_DB: pr_agent
+      POSTGRES_USER: pr_agent
+      POSTGRES_PASSWORD: pr_agent_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pr_agent_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+
+volumes:
+  pr_agent_data:
+```
+
+Create `db/init/01_schema.sql`:
+
+```sql
+-- Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Repositories table
+CREATE TABLE repositories (
+    id SERIAL PRIMARY KEY,
+    org_name VARCHAR(255) NOT NULL,
+    repo_name VARCHAR(255) NOT NULL,
+    github_url TEXT,
+    default_branch VARCHAR(100) DEFAULT 'main',
+    last_indexed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(org_name, repo_name)
+);
+
+-- Code chunks with embeddings
+CREATE TABLE code_chunks (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    file_path TEXT NOT NULL,
+    chunk_content TEXT NOT NULL,
+    chunk_type VARCHAR(50),
+    start_line INT,
+    end_line INT,
+    embedding vector(1536),
+    metadata JSONB,
+    commit_sha VARCHAR(40),
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repository_id, file_path, start_line)
+);
+
+-- Jira tickets
+CREATE TABLE jira_tickets (
+    id SERIAL PRIMARY KEY,
+    ticket_key VARCHAR(50) UNIQUE NOT NULL,
+    title TEXT,
+    description TEXT,
+    status VARCHAR(100),
+    ticket_type VARCHAR(100),
+    acceptance_criteria TEXT,
+    labels TEXT[],
+    embedding vector(1536),
+    raw_data JSONB,
+    last_synced TIMESTAMP
+);
+
+-- Jira ticket history
+CREATE TABLE jira_ticket_history (
+    id SERIAL PRIMARY KEY,
+    ticket_key VARCHAR(50) REFERENCES jira_tickets(ticket_key),
+    field_changed VARCHAR(255),
+    old_value TEXT,
+    new_value TEXT,
+    changed_by VARCHAR(255),
+    changed_at TIMESTAMP,
+    comment_text TEXT
+);
+
+-- PubSub events topology
+CREATE TABLE pubsub_events (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    file_path TEXT NOT NULL,
+    line_number INT,
+    topic VARCHAR(255) NOT NULL,
+    event_type VARCHAR(50),
+    handler_name VARCHAR(255),
+    message_schema VARCHAR(255),
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Database queries found in code
+CREATE TABLE database_queries (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    file_path TEXT NOT NULL,
+    line_number INT,
+    query_type VARCHAR(50),
+    operation VARCHAR(50),
+    query_content TEXT,
+    tables_collections TEXT[],
+    potential_issues JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Custom review rules
+CREATE TABLE custom_rules (
+    id SERIAL PRIMARY KEY,
+    rule_name VARCHAR(255) NOT NULL,
+    category VARCHAR(100),
+    language VARCHAR(50),
+    framework VARCHAR(100),
+    pattern TEXT,
+    message TEXT,
+    severity VARCHAR(50) DEFAULT 'warning',
+    suggestion TEXT,
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexing jobs
+CREATE TABLE indexing_jobs (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    job_type VARCHAR(50),
+    status VARCHAR(50),
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    stats JSONB,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_code_chunks_repo ON code_chunks(repository_id);
+CREATE INDEX idx_code_chunks_type ON code_chunks(chunk_type);
+CREATE INDEX idx_code_chunks_embedding ON code_chunks USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX idx_jira_tickets_embedding ON jira_tickets USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX idx_pubsub_events_topic ON pubsub_events(topic);
+CREATE INDEX idx_pubsub_events_type ON pubsub_events(event_type);
+CREATE INDEX idx_database_queries_repo ON database_queries(repository_id);
+CREATE INDEX idx_indexing_jobs_status ON indexing_jobs(status);
+
+-- Insert default custom rules for Workiz stack
+INSERT INTO custom_rules (rule_name, category, language, framework, pattern, message, severity, suggestion) VALUES
+-- PHP Rules
+('php_avoid_raw_sql', 'security', 'php', 'laravel', 'DB::raw\(|->whereRaw\(', 'Raw SQL queries detected', 'warning', 'Use query builder or prepared statements'),
+('php_no_dd', 'code_quality', 'php', NULL, '\bdd\(|\bdump\(', 'Debug statement found', 'error', 'Remove debug statements before merging'),
+
+-- JavaScript/TypeScript Rules
+('js_no_console', 'code_quality', 'javascript', NULL, 'console\.(log|debug|info)\(', 'Console statement found', 'warning', 'Remove console statements or use proper logging'),
+('ts_no_any', 'code_quality', 'typescript', NULL, ':\s*any\b', 'Explicit any type used', 'info', 'Consider using a more specific type'),
+
+-- NestJS Rules
+('nestjs_di_injection', 'architecture', 'typescript', 'nestjs', 'new\s+\w+Service\(|new\s+\w+Repository\(', 'Manual instantiation instead of DI', 'warning', 'Use dependency injection via constructor'),
+('nestjs_controller_logic', 'architecture', 'typescript', 'nestjs', '@Controller.*\{[^}]*\b(save|update|delete|create)\b.*\}', 'Business logic in controller', 'info', 'Move business logic to service layer'),
+('nestjs_async_handler', 'code_quality', 'typescript', 'nestjs', '@(Get|Post|Put|Delete|Patch)\([^)]*\)\s*\n\s*\w+\([^)]*\):\s*[^P]', 'Handler may not be async', 'info', 'Consider using async handlers'),
+
+-- React Rules
+('react_no_inline_styles', 'code_quality', 'typescript', 'react', 'style=\{\{', 'Inline styles detected', 'info', 'Consider using CSS modules or styled-components'),
+('react_use_memo', 'performance', 'typescript', 'react', 'useMemo\(\s*\(\)\s*=>\s*\[', 'useMemo with array literal', 'info', 'Verify dependencies array is correct'),
+
+-- Security Rules
+('security_hardcoded_secret', 'security', NULL, NULL, '(password|secret|api_key|apikey|token)\s*[:=]\s*[''"][^''"]{8,}[''"]', 'Possible hardcoded secret', 'error', 'Use environment variables for secrets'),
+('security_sql_injection', 'security', NULL, NULL, '\$\{.*\}.*(?:SELECT|INSERT|UPDATE|DELETE|WHERE)', 'Possible SQL injection', 'error', 'Use parameterized queries'),
+
+-- Functional Programming Rules
+('fp_no_mutation', 'style', 'typescript', NULL, '\.(push|pop|shift|unshift|splice)\(', 'Array mutation detected', 'info', 'Consider using immutable array operations like map, filter, concat'),
+('fp_small_functions', 'style', NULL, NULL, 'function\s+\w+\s*\([^)]*\)\s*\{[^}]{500,}\}', 'Large function detected', 'info', 'Consider breaking into smaller functions');
+```
+
+Start the database:
+
+```bash
+docker-compose -f docker-compose.local.yml up -d
+```
+
+#### Option B: Local PostgreSQL
+
+```bash
+# Install pgvector (macOS)
+brew install postgresql@16 pgvector
+
+# Create database
+createdb pr_agent
+
+# Run schema
+psql -d pr_agent -f db/init/01_schema.sql
+```
+
+### Initial Data Population
+
+Create `repos.yaml` configuration:
+
+```yaml
+# repos.yaml - Repository configuration for indexing
+repositories:
+  # PHP Services
+  - url: https://github.com/workiz/legacy-api.git
+    language: php
+    framework: laravel
+    
+  - url: https://github.com/workiz/billing-service.git
+    language: php
+    framework: laravel
+  
+  # NodeJS Services (JavaScript)
+  - url: https://github.com/workiz/notification-service.git
+    language: javascript
+    framework: express
+    
+  # NodeJS Services (TypeScript)
+  - url: https://github.com/workiz/scheduling-service.git
+    language: typescript
+    framework: express
+  
+  # NestJS Services
+  - url: https://github.com/workiz/user-service.git
+    language: typescript
+    framework: nestjs
+    
+  - url: https://github.com/workiz/job-service.git
+    language: typescript
+    framework: nestjs
+    
+  - url: https://github.com/workiz/messaging-service.git
+    language: typescript
+    framework: nestjs
+  
+  # React Frontend
+  - url: https://github.com/workiz/web-app.git
+    language: typescript
+    framework: react
+    
+  - url: https://github.com/workiz/mobile-web.git
+    language: typescript
+    framework: react
+
+# Jira configuration
+jira:
+  projects:
+    - WORK
+    - DEVOPS
+    - INFRA
+    - MOBILE
+
+# Indexing settings
+settings:
+  branch: main
+  exclude_paths:
+    - node_modules/
+    - vendor/
+    - dist/
+    - build/
+    - __tests__/
+    - test/
+    - coverage/
+    - .next/
+```
+
+Run initial population:
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Set environment variables
+export WORKIZ_DATABASE_URL="postgresql://pr_agent:pr_agent_dev@localhost:5432/pr_agent"
+export GITHUB_USER_TOKEN="ghp_your_token_here"
+export OPENAI_KEY="sk-your_key_here"
+export JIRA_BASE_URL="https://workiz.atlassian.net"
+export JIRA_API_TOKEN="your_jira_token"
+export JIRA_EMAIL="your_email@workiz.com"
+
+# Run initial indexing (this may take a while)
+python -m pr_agent.cli_admin index-repos --config repos.yaml
+
+# Run Jira sync
+python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS,INFRA,MOBILE --full
+
+# Check status
+python -m pr_agent.cli_admin status
+```
+
+### Setting Up Continuous Updates
+
+#### GitHub Webhook for Repository Updates
+
+1. Go to your GitHub organization settings → Webhooks
+2. Add a new webhook:
+   - **Payload URL**: `https://your-server/api/v1/webhooks/push`
+   - **Content type**: `application/json`
+   - **Secret**: Generate and save in `.secrets.toml`
+   - **Events**: Select "Push events" and "Pull request events"
+
+#### Jira Webhook for Ticket Updates
+
+1. Go to Jira Settings → System → Webhooks
+2. Create a new webhook:
+   - **URL**: `https://your-server/api/v1/webhooks/jira`
+   - **Events**: Select:
+     - `jira:issue_created`
+     - `jira:issue_updated`
+     - `jira:issue_deleted`
+
+#### Scheduled Sync (Cron)
+
+For environments without webhook access, set up cron jobs:
+
+```bash
+# Add to crontab -e
+
+# Incremental repo sync every 6 hours
+0 */6 * * * cd /path/to/workiz-pr-agent && source venv/bin/activate && python -m pr_agent.cli_admin index-repos --config repos.yaml --incremental
+
+# Jira sync every 2 hours
+0 */2 * * * cd /path/to/workiz-pr-agent && source venv/bin/activate && python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS,INFRA,MOBILE
 ```
 
 ### Running the Server Locally
@@ -1942,6 +2752,450 @@ export WORKIZ_DATABASE_URL="postgresql://..."
 export JIRA_BASE_URL="https://workiz.atlassian.net"
 export JIRA_API_TOKEN="..."
 export JIRA_EMAIL="..."
+```
+
+### 4. Custom Styling Rules Configuration
+
+Create `pr_agent/settings/workiz_rules.toml`:
+
+```toml
+[workiz_rules]
+
+# =============================================================================
+# PHP / Laravel Rules
+# =============================================================================
+
+[workiz_rules.php]
+
+[[workiz_rules.php.patterns]]
+name = "avoid_raw_sql"
+pattern = 'DB::raw\(|->whereRaw\(|->selectRaw\('
+message = "Raw SQL queries detected - potential SQL injection risk"
+severity = "warning"
+suggestion = "Use Laravel query builder methods or parameterized queries"
+
+[[workiz_rules.php.patterns]]
+name = "no_dd_dump"
+pattern = '\bdd\(|\bdump\(|\bvar_dump\('
+message = "Debug statement found"
+severity = "error"
+suggestion = "Remove debug statements before merging"
+
+[[workiz_rules.php.patterns]]
+name = "eloquent_n_plus_one"
+pattern = 'foreach.*\$\w+->(\w+)\s*\{'
+message = "Potential N+1 query detected in loop"
+severity = "warning"
+suggestion = "Use eager loading with ->with() to prevent N+1 queries"
+
+[[workiz_rules.php.patterns]]
+name = "mass_assignment"
+pattern = '\$fillable\s*=\s*\[\s*[''"]?\*[''"]?\s*\]'
+message = "Mass assignment vulnerability - all fields fillable"
+severity = "error"
+suggestion = "Explicitly list fillable fields or use $guarded"
+
+[[workiz_rules.php.patterns]]
+name = "env_in_code"
+pattern = "env\\(['\"]\\w+['\"]\\)"
+message = "Direct env() call outside config files"
+severity = "warning"
+suggestion = "Use config() instead - env() only works in config files"
+
+# =============================================================================
+# JavaScript / Node.js Rules
+# =============================================================================
+
+[workiz_rules.javascript]
+
+[[workiz_rules.javascript.patterns]]
+name = "no_console"
+pattern = 'console\.(log|debug|info|warn|error)\('
+message = "Console statement found"
+severity = "warning"
+suggestion = "Use structured logging (Winston/Pino) instead of console"
+
+[[workiz_rules.javascript.patterns]]
+name = "callback_hell"
+pattern = '\)\s*\{\s*\n[^\}]*\)\s*\{\s*\n[^\}]*\)\s*\{'
+message = "Nested callbacks detected - callback hell"
+severity = "warning"
+suggestion = "Refactor to use async/await or Promise chains"
+
+[[workiz_rules.javascript.patterns]]
+name = "no_var"
+pattern = '\bvar\s+\w+'
+message = "var keyword used instead of const/let"
+severity = "warning"
+suggestion = "Use const for constants and let for variables"
+
+[[workiz_rules.javascript.patterns]]
+name = "mutation_in_reduce"
+pattern = '\.reduce\([^)]+\{\s*[^}]*\.push\('
+message = "Array mutation inside reduce"
+severity = "info"
+suggestion = "Use spread operator or concat for immutable patterns"
+
+# =============================================================================
+# TypeScript Rules
+# =============================================================================
+
+[workiz_rules.typescript]
+
+[[workiz_rules.typescript.patterns]]
+name = "no_any"
+pattern = ':\s*any\b(?!\s*\[\])|<any>'
+message = "Explicit 'any' type defeats TypeScript's purpose"
+severity = "warning"
+suggestion = "Use specific types, generics, or 'unknown' if type is truly unknown"
+
+[[workiz_rules.typescript.patterns]]
+name = "no_ts_ignore"
+pattern = '@ts-ignore|@ts-nocheck'
+message = "TypeScript errors suppressed"
+severity = "warning"
+suggestion = "Fix the type error instead of ignoring it"
+
+[[workiz_rules.typescript.patterns]]
+name = "prefer_readonly"
+pattern = 'private\s+(?!readonly)\w+:\s*\w+'
+message = "Private property without readonly modifier"
+severity = "info"
+suggestion = "Consider using readonly for properties not reassigned after construction"
+
+[[workiz_rules.typescript.patterns]]
+name = "enum_string_values"
+pattern = 'enum\s+\w+\s*\{[^}]*=\s*\d+[^}]*\}'
+message = "Enum with numeric values"
+severity = "info"
+suggestion = "Consider using string enums for better debugging and serialization"
+
+# =============================================================================
+# NestJS Rules
+# =============================================================================
+
+[workiz_rules.nestjs]
+
+[[workiz_rules.nestjs.patterns]]
+name = "manual_instantiation"
+pattern = 'new\s+\w+(Service|Repository|Provider|Guard|Interceptor)\('
+message = "Manual class instantiation instead of dependency injection"
+severity = "warning"
+suggestion = "Inject dependencies via constructor - let NestJS IoC container manage instances"
+
+[[workiz_rules.nestjs.patterns]]
+name = "controller_business_logic"
+pattern = '@Controller[^}]*\{[^}]*(\.save\(|\.create\(|\.update\(|\.delete\(|\.findOne\()'
+message = "Direct repository/ORM calls in controller"
+severity = "warning"
+suggestion = "Controllers should delegate to services - move business logic to service layer"
+
+[[workiz_rules.nestjs.patterns]]
+name = "missing_async"
+pattern = '@(Get|Post|Put|Patch|Delete)\([^)]*\)\s*\n\s*\w+\([^)]*\):\s*(?!Promise)'
+message = "Handler appears to be synchronous"
+severity = "info"
+suggestion = "Most handlers should be async and return Promise"
+
+[[workiz_rules.nestjs.patterns]]
+name = "no_logger_context"
+pattern = 'this\.logger\.(log|warn|error|debug)\([^,)]+\)'
+message = "Logger call without context object"
+severity = "warning"
+suggestion = "Always include context object: this.logger.log('message', { accountId, ... })"
+
+[[workiz_rules.nestjs.patterns]]
+name = "let_usage"
+pattern = '\blet\s+\w+\s*[:=]'
+message = "let keyword used - prefer const and immutable patterns"
+severity = "info"
+suggestion = "Use const with immutable operations (map, filter, spread) instead of let with mutation"
+
+[[workiz_rules.nestjs.patterns]]
+name = "array_mutation"
+pattern = '\.(push|pop|shift|unshift|splice|sort|reverse)\('
+message = "Array mutation method used"
+severity = "info"
+suggestion = "Use immutable methods: [...arr, item], arr.filter(), arr.map(), [...arr].sort()"
+
+[[workiz_rules.nestjs.patterns]]
+name = "pubsub_no_ack"
+pattern = '@PubSubTopic[^@]*@PubSubEvent(?![^@]*@PubSubAsyncAcknowledge)'
+message = "PubSub handler without @PubSubAsyncAcknowledge"
+severity = "error"
+suggestion = "Always use @PubSubAsyncAcknowledge to prevent message loss"
+
+[[workiz_rules.nestjs.patterns]]
+name = "catch_without_rethrow"
+pattern = 'catch\s*\([^)]*\)\s*\{[^}]*(?!throw)'
+message = "Exception caught but not rethrown"
+severity = "warning"
+suggestion = "Let exceptions propagate to global filter, or rethrow after logging"
+
+# =============================================================================
+# React Rules
+# =============================================================================
+
+[workiz_rules.react]
+
+[[workiz_rules.react.patterns]]
+name = "inline_styles"
+pattern = 'style=\{\{'
+message = "Inline styles detected"
+severity = "info"
+suggestion = "Use CSS modules, styled-components, or Tailwind for better maintainability"
+
+[[workiz_rules.react.patterns]]
+name = "missing_key"
+pattern = '\.map\([^)]+\)\s*=>\s*<(?!Fragment)[A-Z][^>]*(?!key=)'
+message = "Map without key prop on element"
+severity = "warning"
+suggestion = "Add unique key prop to elements rendered in a loop"
+
+[[workiz_rules.react.patterns]]
+name = "index_as_key"
+pattern = 'key=\{(index|i|idx)\}'
+message = "Array index used as key"
+severity = "warning"
+suggestion = "Use unique ID from data instead of array index as key"
+
+[[workiz_rules.react.patterns]]
+name = "useeffect_no_deps"
+pattern = 'useEffect\([^)]+\)\s*$'
+message = "useEffect without dependency array"
+severity = "warning"
+suggestion = "Always specify dependency array to prevent infinite loops"
+
+[[workiz_rules.react.patterns]]
+name = "class_component"
+pattern = 'class\s+\w+\s+extends\s+(React\.)?Component'
+message = "Class component detected"
+severity = "info"
+suggestion = "Consider refactoring to functional component with hooks"
+
+[[workiz_rules.react.patterns]]
+name = "prop_drilling"
+pattern = '\(\{[^}]{200,}\}\)'
+message = "Many props being passed - possible prop drilling"
+severity = "info"
+suggestion = "Consider using Context or state management for deeply nested props"
+
+# =============================================================================
+# Python Rules
+# =============================================================================
+
+[workiz_rules.python]
+
+[[workiz_rules.python.patterns]]
+name = "py_no_print"
+pattern = '\bprint\s*\('
+message = "print() statement found"
+severity = "warning"
+suggestion = "Use proper logging instead of print statements"
+
+[[workiz_rules.python.patterns]]
+name = "py_bare_except"
+pattern = 'except\s*:'
+message = "Bare except clause catches all exceptions including KeyboardInterrupt"
+severity = "warning"
+suggestion = "Use 'except Exception:' or catch specific exceptions"
+
+[[workiz_rules.python.patterns]]
+name = "py_mutable_default"
+pattern = 'def\s+\w+\s*\([^)]*=\s*(\[\]|\{\})'
+message = "Mutable default argument - can cause unexpected behavior"
+severity = "error"
+suggestion = "Use None as default and create mutable inside function"
+
+[[workiz_rules.python.patterns]]
+name = "py_global_var"
+pattern = '\bglobal\s+\w+'
+message = "Global variable usage detected"
+severity = "warning"
+suggestion = "Avoid global state - use parameters or class attributes"
+
+[[workiz_rules.python.patterns]]
+name = "py_type_hints"
+pattern = 'def\s+\w+\s*\([^)]*\)\s*:'
+message = "Function without return type hint"
+severity = "info"
+suggestion = "Add return type annotation: def func() -> ReturnType:"
+
+[[workiz_rules.python.patterns]]
+name = "py_star_import"
+pattern = 'from\s+\S+\s+import\s+\*'
+message = "Star import pollutes namespace"
+severity = "warning"
+suggestion = "Import specific names instead of using *"
+
+[[workiz_rules.python.patterns]]
+name = "py_assert_in_prod"
+pattern = '\bassert\s+'
+message = "Assert statements are stripped in optimized mode (-O)"
+severity = "info"
+suggestion = "Use proper validation with exceptions for production code"
+
+[[workiz_rules.python.patterns]]
+name = "py_hardcoded_password"
+pattern = '(password|secret|api_key)\s*=\s*[''"][^''"]{4,}[''"]'
+message = "Possible hardcoded credential"
+severity = "error"
+suggestion = "Use environment variables or secret manager"
+
+# FastAPI specific
+[[workiz_rules.python.patterns]]
+name = "fastapi_sync_endpoint"
+pattern = '@(app|router)\.(get|post|put|patch|delete)\([^)]*\)\s*\ndef\s+'
+message = "Synchronous FastAPI endpoint may block event loop"
+severity = "warning"
+suggestion = "Use async def for FastAPI endpoints"
+
+# =============================================================================
+# Functional Programming Style Rules
+# =============================================================================
+
+[workiz_rules.functional]
+
+[[workiz_rules.functional.patterns]]
+name = "large_function"
+lines_threshold = 30
+message = "Function exceeds 30 lines"
+severity = "warning"
+suggestion = "Break into smaller, single-purpose functions"
+
+[[workiz_rules.functional.patterns]]
+name = "deep_nesting"
+nesting_threshold = 3
+message = "Deep nesting detected (>3 levels)"
+severity = "warning"
+suggestion = "Extract nested logic into separate functions or use early returns"
+
+[[workiz_rules.functional.patterns]]
+name = "object_mutation"
+pattern = '\w+\.\w+\s*=\s*[^=]'
+message = "Object mutation detected"
+severity = "info"
+suggestion = "Use spread operator: { ...obj, prop: newValue }"
+
+[[workiz_rules.functional.patterns]]
+name = "for_loop"
+pattern = '\bfor\s*\([^)]+\)\s*\{'
+message = "Imperative for loop"
+severity = "info"
+suggestion = "Consider using map, filter, reduce, or forEach for declarative iteration"
+
+# =============================================================================
+# Security Rules
+# =============================================================================
+
+[workiz_rules.security]
+
+[[workiz_rules.security.patterns]]
+name = "hardcoded_secret"
+pattern = '(password|secret|api_key|apikey|token|private_key)\s*[:=]\s*[''"][^''"]{8,}[''"]'
+message = "Possible hardcoded secret detected"
+severity = "error"
+suggestion = "Use environment variables or secret management service"
+
+[[workiz_rules.security.patterns]]
+name = "sql_injection"
+pattern = '(\$\{|\+\s*\w+\s*\+).*?(SELECT|INSERT|UPDATE|DELETE|WHERE)'
+message = "Possible SQL injection vulnerability"
+severity = "error"
+suggestion = "Use parameterized queries or ORM methods"
+
+[[workiz_rules.security.patterns]]
+name = "eval_usage"
+pattern = '\beval\s*\('
+message = "eval() usage detected - security risk"
+severity = "error"
+suggestion = "Never use eval() - find alternative approaches"
+
+[[workiz_rules.security.patterns]]
+name = "innerHTML"
+pattern = '\.innerHTML\s*=|dangerouslySetInnerHTML'
+message = "Direct HTML insertion - XSS risk"
+severity = "warning"
+suggestion = "Sanitize content or use safer alternatives"
+
+[[workiz_rules.security.patterns]]
+name = "http_without_https"
+pattern = '[''"]http://(?!localhost|127\.0\.0\.1)'
+message = "HTTP URL used instead of HTTPS"
+severity = "warning"
+suggestion = "Use HTTPS for secure communication"
+
+# =============================================================================
+# Database Query Rules (MySQL, MongoDB, Elasticsearch)
+# =============================================================================
+
+[workiz_rules.database]
+
+# MySQL specific
+[[workiz_rules.database.patterns]]
+name = "mysql_select_star"
+pattern = 'SELECT\s+\*\s+FROM'
+message = "SELECT * query - fetches all columns"
+severity = "warning"
+suggestion = "Specify only needed columns for better performance"
+
+[[workiz_rules.database.patterns]]
+name = "mysql_no_limit"
+pattern = 'SELECT.*FROM.*WHERE(?!.*LIMIT)'
+message = "Query without LIMIT clause"
+severity = "info"
+suggestion = "Consider adding LIMIT to prevent unbounded result sets"
+
+[[workiz_rules.database.patterns]]
+name = "mysql_like_wildcard_start"
+pattern = "LIKE\s+['\"]%"
+message = "LIKE with leading wildcard cannot use index"
+severity = "warning"
+suggestion = "Leading wildcards prevent index usage - consider full-text search"
+
+# MongoDB specific
+[[workiz_rules.database.patterns]]
+name = "mongo_no_index_hint"
+pattern = '\.find\(\s*\{[^}]*\}\s*\)(?!\.hint)'
+message = "MongoDB find without index hint"
+severity = "info"
+suggestion = "Consider adding .hint() for complex queries or verify indexes exist"
+
+[[workiz_rules.database.patterns]]
+name = "mongo_regex_no_anchor"
+pattern = '\$regex.*[''"][^^]'
+message = "MongoDB regex without ^ anchor cannot use index"
+severity = "warning"
+suggestion = "Use anchored regex /^pattern/ when possible"
+
+[[workiz_rules.database.patterns]]
+name = "mongo_large_in"
+pattern = '\$in\s*:\s*\[[^\]]{500,}\]'
+message = "Large $in array may cause performance issues"
+severity = "warning"
+suggestion = "Batch queries or consider different data model"
+
+# Elasticsearch specific
+[[workiz_rules.database.patterns]]
+name = "es_wildcard_query"
+pattern = 'wildcard.*query'
+message = "Elasticsearch wildcard query is slow"
+severity = "warning"
+suggestion = "Use prefix query or ngrams for better performance"
+
+[[workiz_rules.database.patterns]]
+name = "es_deep_pagination"
+pattern = '"from"\s*:\s*\d{4,}'
+message = "Elasticsearch deep pagination is inefficient"
+severity = "warning"
+suggestion = "Use search_after for deep pagination instead of from/size"
+
+[[workiz_rules.database.patterns]]
+name = "es_script_query"
+pattern = '"script"\s*:\s*\{'
+message = "Elasticsearch script queries cannot be cached"
+severity = "info"
+suggestion = "Consider using runtime fields or pre-computed values"
 ```
 
 ---
@@ -2126,6 +3380,3636 @@ async def test_full_review_flow():
 
 ---
 
+## Language and Framework Support
+
+### Supported Stack Overview
+
+| Language/Framework | File Extensions | Key Patterns to Index |
+|--------------------|-----------------|----------------------|
+| PHP | `.php` | Classes, Functions, Routes (Laravel/Symfony) |
+| NodeJS (JavaScript) | `.js`, `.mjs`, `.cjs` | Functions, Express routes, Event handlers |
+| NodeJS (TypeScript) | `.ts`, `.tsx` | Classes, Functions, Interfaces, Types |
+| NestJS (TypeScript) | `.ts` | Controllers, Services, Modules, Guards, DTOs |
+| React (TypeScript) | `.tsx`, `.ts` | Components, Hooks, Context, Redux |
+
+### Language-Specific Analyzers
+
+Create: `pr_agent/tools/language_analyzers/`
+
+```
+pr_agent/tools/language_analyzers/
+├── __init__.py
+├── base_analyzer.py
+├── php_analyzer.py
+├── javascript_analyzer.py
+├── typescript_analyzer.py
+├── nestjs_analyzer.py
+└── react_analyzer.py
+```
+
+#### Base Analyzer
+
+```python
+# pr_agent/tools/language_analyzers/base_analyzer.py
+from abc import ABC, abstractmethod
+from typing import List, Dict
+from dataclasses import dataclass
+
+@dataclass
+class CodeElement:
+    """Represents an extracted code element for indexing."""
+    element_type: str  # 'function', 'class', 'endpoint', 'component', 'hook', etc.
+    name: str
+    file_path: str
+    start_line: int
+    end_line: int
+    content: str
+    signature: str  # Function/method signature
+    dependencies: List[str]  # Imports, calls
+    metadata: Dict  # Language-specific metadata
+
+class BaseLanguageAnalyzer(ABC):
+    """Base class for language-specific code analyzers."""
+    
+    @property
+    @abstractmethod
+    def supported_extensions(self) -> List[str]:
+        """File extensions this analyzer handles."""
+        pass
+    
+    @abstractmethod
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        """Extract indexable code elements from file content."""
+        pass
+    
+    @abstractmethod
+    def extract_dependencies(self, content: str) -> List[str]:
+        """Extract external dependencies (imports, requires)."""
+        pass
+    
+    @abstractmethod
+    def extract_api_calls(self, content: str) -> List[Dict]:
+        """Extract HTTP/API calls made from this file."""
+        pass
+    
+    @abstractmethod
+    def extract_event_handlers(self, content: str) -> List[Dict]:
+        """Extract event handlers (PubSub, EventEmitter, etc.)."""
+        pass
+    
+    @abstractmethod
+    def extract_event_publishers(self, content: str) -> List[Dict]:
+        """Extract event publishing calls."""
+        pass
+```
+
+#### PHP Analyzer
+
+```python
+# pr_agent/tools/language_analyzers/php_analyzer.py
+import re
+from typing import List, Dict
+from .base_analyzer import BaseLanguageAnalyzer, CodeElement
+
+class PHPAnalyzer(BaseLanguageAnalyzer):
+    """Analyzer for PHP code (Laravel, Symfony, plain PHP)."""
+    
+    @property
+    def supported_extensions(self) -> List[str]:
+        return ['.php']
+    
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        elements = []
+        lines = content.split('\n')
+        
+        # Extract classes
+        class_pattern = r'(abstract\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([^{]+))?'
+        for match in re.finditer(class_pattern, content):
+            class_name = match.group(2)
+            start_line = content[:match.start()].count('\n') + 1
+            end_line = self._find_block_end(content, match.end())
+            
+            elements.append(CodeElement(
+                element_type='class',
+                name=class_name,
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                content=content[match.start():self._get_position(content, end_line)],
+                signature=match.group(0),
+                dependencies=self._extract_class_dependencies(content, class_name),
+                metadata={
+                    'extends': match.group(3),
+                    'implements': match.group(4).split(',') if match.group(4) else [],
+                    'is_abstract': bool(match.group(1))
+                }
+            ))
+        
+        # Extract functions/methods
+        func_pattern = r'(public|private|protected|static|\s)+function\s+(\w+)\s*\(([^)]*)\)'
+        for match in re.finditer(func_pattern, content):
+            func_name = match.group(2)
+            start_line = content[:match.start()].count('\n') + 1
+            end_line = self._find_block_end(content, match.end())
+            
+            elements.append(CodeElement(
+                element_type='function',
+                name=func_name,
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                content=content[match.start():self._get_position(content, end_line)],
+                signature=match.group(0),
+                dependencies=[],
+                metadata={
+                    'visibility': match.group(1).strip() if match.group(1) else 'public',
+                    'params': match.group(3)
+                }
+            ))
+        
+        # Extract Laravel routes
+        route_patterns = [
+            r"Route::(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"->route\s*\(\s*['\"]([^'\"]+)['\"]"
+        ]
+        for pattern in route_patterns:
+            for match in re.finditer(pattern, content):
+                elements.append(CodeElement(
+                    element_type='endpoint',
+                    name=match.group(2) if len(match.groups()) > 1 else match.group(1),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=content[:match.end()].count('\n') + 1,
+                    content=match.group(0),
+                    signature=match.group(0),
+                    dependencies=[],
+                    metadata={
+                        'method': match.group(1).upper() if len(match.groups()) > 1 else 'GET',
+                        'framework': 'laravel'
+                    }
+                ))
+        
+        return elements
+    
+    def extract_dependencies(self, content: str) -> List[str]:
+        """Extract use statements and require/include."""
+        deps = []
+        
+        # use statements
+        use_pattern = r'use\s+([^;]+);'
+        deps.extend(re.findall(use_pattern, content))
+        
+        # require/include
+        require_pattern = r"(require|include)(?:_once)?\s*(?:\()?['\"]([^'\"]+)['\"]"
+        for match in re.finditer(require_pattern, content):
+            deps.append(match.group(2))
+        
+        return deps
+    
+    def extract_api_calls(self, content: str) -> List[Dict]:
+        """Extract HTTP client calls (Guzzle, curl, etc.)."""
+        calls = []
+        
+        # Guzzle calls
+        guzzle_patterns = [
+            r"\->(?:get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"Http::(get|post|put|patch|delete)\s*\(\s*['\"]([^'\"]+)['\"]",
+        ]
+        
+        for pattern in guzzle_patterns:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                calls.append({
+                    'type': 'http',
+                    'method': match.group(1) if len(match.groups()) > 1 else 'GET',
+                    'url': match.group(2) if len(match.groups()) > 1 else match.group(1),
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return calls
+    
+    def extract_event_handlers(self, content: str) -> List[Dict]:
+        """Extract event listeners."""
+        handlers = []
+        
+        # Laravel event listeners
+        patterns = [
+            r"Event::listen\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"protected\s+\$listen\s*=\s*\[([^\]]+)\]",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                handlers.append({
+                    'event': match.group(1),
+                    'line': content[:match.start()].count('\n') + 1,
+                    'framework': 'laravel'
+                })
+        
+        return handlers
+    
+    def extract_event_publishers(self, content: str) -> List[Dict]:
+        """Extract event dispatching."""
+        publishers = []
+        
+        patterns = [
+            r"event\s*\(\s*new\s+(\w+)",
+            r"Event::dispatch\s*\(\s*['\"]?([^'\")\s]+)",
+            r"broadcast\s*\(\s*new\s+(\w+)",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                publishers.append({
+                    'event': match.group(1),
+                    'line': content[:match.start()].count('\n') + 1,
+                    'framework': 'laravel'
+                })
+        
+        return publishers
+    
+    def _find_block_end(self, content: str, start_pos: int) -> int:
+        """Find the end line of a code block (matching braces)."""
+        brace_count = 0
+        started = False
+        for i, char in enumerate(content[start_pos:], start_pos):
+            if char == '{':
+                brace_count += 1
+                started = True
+            elif char == '}':
+                brace_count -= 1
+            if started and brace_count == 0:
+                return content[:i+1].count('\n') + 1
+        return content.count('\n') + 1
+    
+    def _get_position(self, content: str, line_num: int) -> int:
+        """Get character position for a line number."""
+        lines = content.split('\n')
+        return sum(len(line) + 1 for line in lines[:line_num])
+    
+    def _extract_class_dependencies(self, content: str, class_name: str) -> List[str]:
+        """Extract dependencies injected into class constructor."""
+        deps = []
+        # Find constructor
+        constructor_pattern = rf'function\s+__construct\s*\(([^)]+)\)'
+        match = re.search(constructor_pattern, content)
+        if match:
+            params = match.group(1)
+            # Extract type hints
+            type_pattern = r'(\w+)\s+\$\w+'
+            deps = re.findall(type_pattern, params)
+        return deps
+```
+
+#### JavaScript/TypeScript Analyzer
+
+```python
+# pr_agent/tools/language_analyzers/javascript_analyzer.py
+import re
+from typing import List, Dict
+from .base_analyzer import BaseLanguageAnalyzer, CodeElement
+
+class JavaScriptAnalyzer(BaseLanguageAnalyzer):
+    """Analyzer for JavaScript/Node.js code."""
+    
+    @property
+    def supported_extensions(self) -> List[str]:
+        return ['.js', '.mjs', '.cjs']
+    
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        elements = []
+        
+        # Extract functions (regular, arrow, async)
+        func_patterns = [
+            # Regular function
+            r'(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)',
+            # Arrow function assigned to const/let
+            r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>',
+            # Method in object
+            r'(\w+)\s*:\s*(?:async\s+)?function\s*\(',
+            r'(\w+)\s*:\s*(?:async\s+)?\([^)]*\)\s*=>',
+        ]
+        
+        for pattern in func_patterns:
+            for match in re.finditer(pattern, content):
+                func_name = match.group(1)
+                start_line = content[:match.start()].count('\n') + 1
+                
+                elements.append(CodeElement(
+                    element_type='function',
+                    name=func_name,
+                    file_path=file_path,
+                    start_line=start_line,
+                    end_line=self._find_function_end(content, match.end()),
+                    content=self._extract_function_body(content, match.start()),
+                    signature=match.group(0),
+                    dependencies=[],
+                    metadata={'is_async': 'async' in match.group(0)}
+                ))
+        
+        # Extract Express routes
+        route_patterns = [
+            r"(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+        ]
+        
+        for pattern in route_patterns:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                elements.append(CodeElement(
+                    element_type='endpoint',
+                    name=match.group(2),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=content[:match.end()].count('\n') + 1,
+                    content=match.group(0),
+                    signature=match.group(0),
+                    dependencies=[],
+                    metadata={
+                        'method': match.group(1).upper(),
+                        'framework': 'express'
+                    }
+                ))
+        
+        # Extract class definitions
+        class_pattern = r'class\s+(\w+)(?:\s+extends\s+(\w+))?'
+        for match in re.finditer(class_pattern, content):
+            elements.append(CodeElement(
+                element_type='class',
+                name=match.group(1),
+                file_path=file_path,
+                start_line=content[:match.start()].count('\n') + 1,
+                end_line=self._find_block_end(content, match.end()),
+                content=self._extract_block(content, match.start()),
+                signature=match.group(0),
+                dependencies=[],
+                metadata={'extends': match.group(2)}
+            ))
+        
+        return elements
+    
+    def extract_dependencies(self, content: str) -> List[str]:
+        deps = []
+        
+        # require statements
+        require_pattern = r"require\s*\(\s*['\"]([^'\"]+)['\"]"
+        deps.extend(re.findall(require_pattern, content))
+        
+        # import statements
+        import_patterns = [
+            r"import\s+.*\s+from\s+['\"]([^'\"]+)['\"]",
+            r"import\s*['\"]([^'\"]+)['\"]",
+        ]
+        for pattern in import_patterns:
+            deps.extend(re.findall(pattern, content))
+        
+        return deps
+    
+    def extract_api_calls(self, content: str) -> List[Dict]:
+        calls = []
+        
+        # axios calls
+        axios_patterns = [
+            r"axios\.(get|post|put|patch|delete)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+            r"axios\s*\(\s*\{\s*(?:[^}]*url\s*:\s*['\"`]([^'\"`]+)['\"`])?",
+        ]
+        
+        # fetch calls
+        fetch_pattern = r"fetch\s*\(\s*['\"`]([^'\"`]+)['\"`]"
+        
+        for pattern in axios_patterns:
+            for match in re.finditer(pattern, content):
+                calls.append({
+                    'type': 'http',
+                    'library': 'axios',
+                    'url': match.group(2) if len(match.groups()) > 1 else match.group(1),
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        for match in re.finditer(fetch_pattern, content):
+            calls.append({
+                'type': 'http',
+                'library': 'fetch',
+                'url': match.group(1),
+                'line': content[:match.start()].count('\n') + 1
+            })
+        
+        return calls
+    
+    def extract_event_handlers(self, content: str) -> List[Dict]:
+        handlers = []
+        
+        patterns = [
+            # EventEmitter
+            r"\.on\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"\.addListener\s*\(\s*['\"]([^'\"]+)['\"]",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                handlers.append({
+                    'event': match.group(1),
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return handlers
+    
+    def extract_event_publishers(self, content: str) -> List[Dict]:
+        publishers = []
+        
+        patterns = [
+            r"\.emit\s*\(\s*['\"]([^'\"]+)['\"]",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                publishers.append({
+                    'event': match.group(1),
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return publishers
+    
+    def _find_function_end(self, content: str, start_pos: int) -> int:
+        return self._find_block_end(content, start_pos)
+    
+    def _find_block_end(self, content: str, start_pos: int) -> int:
+        brace_count = 0
+        started = False
+        for i, char in enumerate(content[start_pos:], start_pos):
+            if char == '{':
+                brace_count += 1
+                started = True
+            elif char == '}':
+                brace_count -= 1
+            if started and brace_count == 0:
+                return content[:i+1].count('\n') + 1
+        return content.count('\n') + 1
+    
+    def _extract_function_body(self, content: str, start_pos: int) -> str:
+        end_line = self._find_block_end(content, start_pos)
+        lines = content.split('\n')
+        start_line = content[:start_pos].count('\n')
+        return '\n'.join(lines[start_line:end_line])
+    
+    def _extract_block(self, content: str, start_pos: int) -> str:
+        return self._extract_function_body(content, start_pos)
+
+
+class TypeScriptAnalyzer(JavaScriptAnalyzer):
+    """Analyzer for TypeScript code (extends JavaScript analyzer)."""
+    
+    @property
+    def supported_extensions(self) -> List[str]:
+        return ['.ts', '.tsx']
+    
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        elements = super().extract_elements(content, file_path)
+        
+        # Extract interfaces
+        interface_pattern = r'(?:export\s+)?interface\s+(\w+)(?:\s+extends\s+([^{]+))?'
+        for match in re.finditer(interface_pattern, content):
+            elements.append(CodeElement(
+                element_type='interface',
+                name=match.group(1),
+                file_path=file_path,
+                start_line=content[:match.start()].count('\n') + 1,
+                end_line=self._find_block_end(content, match.end()),
+                content=self._extract_block(content, match.start()),
+                signature=match.group(0),
+                dependencies=[],
+                metadata={'extends': match.group(2).split(',') if match.group(2) else []}
+            ))
+        
+        # Extract type aliases
+        type_pattern = r'(?:export\s+)?type\s+(\w+)\s*=\s*([^;]+)'
+        for match in re.finditer(type_pattern, content):
+            elements.append(CodeElement(
+                element_type='type',
+                name=match.group(1),
+                file_path=file_path,
+                start_line=content[:match.start()].count('\n') + 1,
+                end_line=content[:match.end()].count('\n') + 1,
+                content=match.group(0),
+                signature=match.group(0),
+                dependencies=[],
+                metadata={'definition': match.group(2)}
+            ))
+        
+        return elements
+```
+
+#### NestJS Analyzer
+
+```python
+# pr_agent/tools/language_analyzers/nestjs_analyzer.py
+import re
+from typing import List, Dict
+from .typescript_analyzer import TypeScriptAnalyzer
+from .base_analyzer import CodeElement
+
+class NestJSAnalyzer(TypeScriptAnalyzer):
+    """Analyzer for NestJS applications."""
+    
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        elements = super().extract_elements(content, file_path)
+        
+        # Extract Controllers with routes
+        controller_match = re.search(r"@Controller\s*\(\s*['\"]?([^'\")]*)['\"]?\s*\)", content)
+        controller_prefix = controller_match.group(1) if controller_match else ''
+        
+        # Extract HTTP endpoints
+        http_methods = ['Get', 'Post', 'Put', 'Patch', 'Delete']
+        for method in http_methods:
+            pattern = rf"@{method}\s*\(\s*['\"]?([^'\")]*)['\"]?\s*\)"
+            for match in re.finditer(pattern, content):
+                route = f"/{controller_prefix}/{match.group(1)}".replace('//', '/')
+                # Find the method name after the decorator
+                method_match = re.search(r'(?:async\s+)?(\w+)\s*\(', content[match.end():match.end()+200])
+                method_name = method_match.group(1) if method_match else 'unknown'
+                
+                elements.append(CodeElement(
+                    element_type='endpoint',
+                    name=route,
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=content[:match.end()].count('\n') + 1,
+                    content=match.group(0),
+                    signature=f"{method.upper()} {route}",
+                    dependencies=[],
+                    metadata={
+                        'method': method.upper(),
+                        'route': route,
+                        'handler': method_name,
+                        'framework': 'nestjs'
+                    }
+                ))
+        
+        # Extract Injectable services
+        if '@Injectable' in content:
+            service_pattern = r'@Injectable\s*\(\s*\)\s*(?:export\s+)?class\s+(\w+)'
+            for match in re.finditer(service_pattern, content):
+                elements.append(CodeElement(
+                    element_type='service',
+                    name=match.group(1),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=self._find_block_end(content, match.end()),
+                    content=self._extract_block(content, match.start()),
+                    signature=match.group(0),
+                    dependencies=self._extract_di_dependencies(content),
+                    metadata={'framework': 'nestjs'}
+                ))
+        
+        # Extract DTOs
+        dto_patterns = [
+            r'(?:export\s+)?class\s+(\w+Dto)\b',
+            r'(?:export\s+)?class\s+(\w+DTO)\b',
+        ]
+        for pattern in dto_patterns:
+            for match in re.finditer(pattern, content):
+                elements.append(CodeElement(
+                    element_type='dto',
+                    name=match.group(1),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=self._find_block_end(content, match.end()),
+                    content=self._extract_block(content, match.start()),
+                    signature=match.group(0),
+                    dependencies=[],
+                    metadata={'framework': 'nestjs'}
+                ))
+        
+        return elements
+    
+    def extract_event_handlers(self, content: str) -> List[Dict]:
+        handlers = super().extract_event_handlers(content)
+        
+        # PubSub handlers (Google Cloud PubSub)
+        pubsub_patterns = [
+            r"@PubSubTopic\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"@PubSubEvent\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"@EventPattern\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"@MessagePattern\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"@OnEvent\s*\(\s*['\"]([^'\"]+)['\"]",
+        ]
+        
+        for pattern in pubsub_patterns:
+            for match in re.finditer(pattern, content):
+                handlers.append({
+                    'event': match.group(1),
+                    'type': 'pubsub' if 'PubSub' in pattern else 'event',
+                    'line': content[:match.start()].count('\n') + 1,
+                    'framework': 'nestjs'
+                })
+        
+        return handlers
+    
+    def extract_event_publishers(self, content: str) -> List[Dict]:
+        publishers = super().extract_event_publishers(content)
+        
+        # PubSub publishing patterns
+        pubsub_patterns = [
+            r"\.publish\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"eventEmitter\.emit\s*\(\s*['\"]([^'\"]+)['\"]",
+            r"this\.client\.emit\s*\(\s*['\"]([^'\"]+)['\"]",
+        ]
+        
+        for pattern in pubsub_patterns:
+            for match in re.finditer(pattern, content):
+                publishers.append({
+                    'event': match.group(1),
+                    'type': 'pubsub',
+                    'line': content[:match.start()].count('\n') + 1,
+                    'framework': 'nestjs'
+                })
+        
+        return publishers
+    
+    def _extract_di_dependencies(self, content: str) -> List[str]:
+        """Extract dependency injection from constructor."""
+        deps = []
+        constructor_pattern = r'constructor\s*\(([^)]+)\)'
+        match = re.search(constructor_pattern, content)
+        if match:
+            params = match.group(1)
+            # Extract type annotations
+            type_pattern = r'(?:private|public|readonly)\s+\w+\s*:\s*(\w+)'
+            deps = re.findall(type_pattern, params)
+        return deps
+```
+
+#### React Analyzer
+
+```python
+# pr_agent/tools/language_analyzers/react_analyzer.py
+import re
+from typing import List, Dict
+from .typescript_analyzer import TypeScriptAnalyzer
+from .base_analyzer import CodeElement
+
+class ReactAnalyzer(TypeScriptAnalyzer):
+    """Analyzer for React/TypeScript applications."""
+    
+    @property
+    def supported_extensions(self) -> List[str]:
+        return ['.tsx', '.jsx']
+    
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        elements = super().extract_elements(content, file_path)
+        
+        # Extract React functional components
+        component_patterns = [
+            # const Component = () => { ... }
+            r'(?:export\s+)?(?:const|function)\s+([A-Z]\w+)\s*(?::\s*React\.FC[^=]*)?=?\s*(?:\([^)]*\)\s*(?::\s*[^=]+)?)?=>',
+            # function Component() { ... }
+            r'(?:export\s+)?function\s+([A-Z]\w+)\s*\([^)]*\)',
+        ]
+        
+        for pattern in component_patterns:
+            for match in re.finditer(pattern, content):
+                comp_name = match.group(1)
+                # Skip if already captured as a regular function
+                if not any(e.name == comp_name and e.element_type == 'component' for e in elements):
+                    elements.append(CodeElement(
+                        element_type='component',
+                        name=comp_name,
+                        file_path=file_path,
+                        start_line=content[:match.start()].count('\n') + 1,
+                        end_line=self._find_block_end(content, match.end()),
+                        content=self._extract_block(content, match.start()),
+                        signature=match.group(0),
+                        dependencies=self._extract_component_deps(content, comp_name),
+                        metadata={
+                            'framework': 'react',
+                            'type': 'functional'
+                        }
+                    ))
+        
+        # Extract custom hooks
+        hook_pattern = r'(?:export\s+)?(?:const|function)\s+(use[A-Z]\w+)\s*'
+        for match in re.finditer(hook_pattern, content):
+            elements.append(CodeElement(
+                element_type='hook',
+                name=match.group(1),
+                file_path=file_path,
+                start_line=content[:match.start()].count('\n') + 1,
+                end_line=self._find_block_end(content, match.end()),
+                content=self._extract_block(content, match.start()),
+                signature=match.group(0),
+                dependencies=[],
+                metadata={'framework': 'react'}
+            ))
+        
+        # Extract Redux actions/reducers
+        if 'createSlice' in content or 'createAction' in content:
+            slice_pattern = r'createSlice\s*\(\s*\{\s*name\s*:\s*[\'"]([^\'"]+)[\'"]'
+            for match in re.finditer(slice_pattern, content):
+                elements.append(CodeElement(
+                    element_type='redux_slice',
+                    name=match.group(1),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=self._find_block_end(content, match.end()),
+                    content=self._extract_block(content, match.start()),
+                    signature=match.group(0),
+                    dependencies=[],
+                    metadata={'framework': 'redux'}
+                ))
+        
+        # Extract Context providers
+        context_pattern = r'(?:export\s+)?const\s+(\w+Context)\s*=\s*(?:React\.)?createContext'
+        for match in re.finditer(context_pattern, content):
+            elements.append(CodeElement(
+                element_type='context',
+                name=match.group(1),
+                file_path=file_path,
+                start_line=content[:match.start()].count('\n') + 1,
+                end_line=content[:match.end()].count('\n') + 1,
+                content=match.group(0),
+                signature=match.group(0),
+                dependencies=[],
+                metadata={'framework': 'react'}
+            ))
+        
+        return elements
+    
+    def extract_api_calls(self, content: str) -> List[Dict]:
+        calls = super().extract_api_calls(content)
+        
+        # React Query / TanStack Query
+        query_patterns = [
+            r"useQuery\s*\(\s*\[[^\]]*\]\s*,\s*\(\s*\)\s*=>\s*(?:fetch|axios)[^)]*\(['\"`]([^'\"`]+)['\"`]",
+            r"useMutation\s*\(\s*\(\s*\)\s*=>\s*(?:fetch|axios)[^)]*\(['\"`]([^'\"`]+)['\"`]",
+        ]
+        
+        for pattern in query_patterns:
+            for match in re.finditer(pattern, content):
+                calls.append({
+                    'type': 'http',
+                    'library': 'react-query',
+                    'url': match.group(1),
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return calls
+    
+    def _extract_component_deps(self, content: str, comp_name: str) -> List[str]:
+        """Extract component dependencies (props, hooks used)."""
+        deps = []
+        
+        # Find hooks used in component
+        hook_pattern = r'\buse[A-Z]\w+\b'
+        deps.extend(set(re.findall(hook_pattern, content)))
+        
+        return deps
+```
+
+#### Python Analyzer
+
+```python
+# pr_agent/tools/language_analyzers/python_analyzer.py
+import re
+from typing import List, Dict
+from .base_analyzer import BaseLanguageAnalyzer, CodeElement
+
+class PythonAnalyzer(BaseLanguageAnalyzer):
+    """Analyzer for Python code (FastAPI, Django, Flask, plain Python)."""
+    
+    @property
+    def supported_extensions(self) -> List[str]:
+        return ['.py']
+    
+    def extract_elements(self, content: str, file_path: str) -> List[CodeElement]:
+        elements = []
+        lines = content.split('\n')
+        
+        # Extract classes
+        class_pattern = r'^class\s+(\w+)(?:\(([^)]*)\))?:'
+        for match in re.finditer(class_pattern, content, re.MULTILINE):
+            class_name = match.group(1)
+            start_line = content[:match.start()].count('\n') + 1
+            end_line = self._find_block_end_python(lines, start_line)
+            
+            elements.append(CodeElement(
+                element_type='class',
+                name=class_name,
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                content='\n'.join(lines[start_line-1:end_line]),
+                signature=match.group(0),
+                dependencies=self._extract_class_dependencies(match.group(2) or ''),
+                metadata={
+                    'bases': [b.strip() for b in (match.group(2) or '').split(',') if b.strip()]
+                }
+            ))
+        
+        # Extract functions/methods
+        func_pattern = r'^(\s*)(?:async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^:]+))?:'
+        for match in re.finditer(func_pattern, content, re.MULTILINE):
+            indent = len(match.group(1))
+            func_name = match.group(2)
+            start_line = content[:match.start()].count('\n') + 1
+            end_line = self._find_function_end_python(lines, start_line, indent)
+            
+            elements.append(CodeElement(
+                element_type='function' if indent == 0 else 'method',
+                name=func_name,
+                file_path=file_path,
+                start_line=start_line,
+                end_line=end_line,
+                content='\n'.join(lines[start_line-1:end_line]),
+                signature=match.group(0).strip(),
+                dependencies=[],
+                metadata={
+                    'is_async': 'async' in match.group(0),
+                    'params': match.group(3),
+                    'return_type': match.group(4).strip() if match.group(4) else None
+                }
+            ))
+        
+        # Extract FastAPI endpoints
+        fastapi_patterns = [
+            r'@app\.(get|post|put|patch|delete)\s*\(\s*[\'"]([^\'"]+)[\'"]',
+            r'@router\.(get|post|put|patch|delete)\s*\(\s*[\'"]([^\'"]+)[\'"]',
+        ]
+        for pattern in fastapi_patterns:
+            for match in re.finditer(pattern, content):
+                elements.append(CodeElement(
+                    element_type='endpoint',
+                    name=match.group(2),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=content[:match.end()].count('\n') + 1,
+                    content=match.group(0),
+                    signature=f"{match.group(1).upper()} {match.group(2)}",
+                    dependencies=[],
+                    metadata={
+                        'method': match.group(1).upper(),
+                        'framework': 'fastapi'
+                    }
+                ))
+        
+        # Extract Django views
+        django_patterns = [
+            r'path\s*\(\s*[\'"]([^\'"]+)[\'"]',
+            r'@api_view\s*\(\s*\[([^\]]+)\]\s*\)',
+        ]
+        for pattern in django_patterns:
+            for match in re.finditer(pattern, content):
+                elements.append(CodeElement(
+                    element_type='endpoint',
+                    name=match.group(1),
+                    file_path=file_path,
+                    start_line=content[:match.start()].count('\n') + 1,
+                    end_line=content[:match.end()].count('\n') + 1,
+                    content=match.group(0),
+                    signature=match.group(0),
+                    dependencies=[],
+                    metadata={'framework': 'django'}
+                ))
+        
+        return elements
+    
+    def extract_dependencies(self, content: str) -> List[str]:
+        """Extract import statements."""
+        deps = []
+        
+        # import statements
+        import_pattern = r'^import\s+(\S+)'
+        deps.extend(re.findall(import_pattern, content, re.MULTILINE))
+        
+        # from ... import statements
+        from_pattern = r'^from\s+(\S+)\s+import'
+        deps.extend(re.findall(from_pattern, content, re.MULTILINE))
+        
+        return deps
+    
+    def extract_api_calls(self, content: str) -> List[Dict]:
+        """Extract HTTP client calls (requests, httpx, aiohttp)."""
+        calls = []
+        
+        # requests/httpx calls
+        patterns = [
+            r"requests\.(get|post|put|patch|delete)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+            r"httpx\.(get|post|put|patch|delete)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+            r"await\s+client\.(get|post|put|patch|delete)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                calls.append({
+                    'type': 'http',
+                    'method': match.group(1).upper(),
+                    'url': match.group(2),
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return calls
+    
+    def extract_event_handlers(self, content: str) -> List[Dict]:
+        """Extract event handlers (Celery tasks, etc.)."""
+        handlers = []
+        
+        patterns = [
+            r"@celery\.task",
+            r"@app\.task",
+            r"@shared_task",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                handlers.append({
+                    'type': 'celery_task',
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return handlers
+    
+    def extract_event_publishers(self, content: str) -> List[Dict]:
+        """Extract event publishing (Celery task calls, etc.)."""
+        publishers = []
+        
+        patterns = [
+            r"\.delay\s*\(",
+            r"\.apply_async\s*\(",
+        ]
+        
+        for pattern in patterns:
+            for match in re.finditer(pattern, content):
+                publishers.append({
+                    'type': 'celery_task_call',
+                    'line': content[:match.start()].count('\n') + 1
+                })
+        
+        return publishers
+    
+    def _find_block_end_python(self, lines: List[str], start_line: int) -> int:
+        """Find end of Python block by indentation."""
+        if start_line >= len(lines):
+            return start_line
+        
+        start_indent = len(lines[start_line - 1]) - len(lines[start_line - 1].lstrip())
+        
+        for i in range(start_line, len(lines)):
+            line = lines[i]
+            if line.strip() and not line.strip().startswith('#'):
+                current_indent = len(line) - len(line.lstrip())
+                if current_indent <= start_indent and i > start_line:
+                    return i
+        
+        return len(lines)
+    
+    def _find_function_end_python(self, lines: List[str], start_line: int, func_indent: int) -> int:
+        """Find end of Python function by indentation."""
+        for i in range(start_line, len(lines)):
+            line = lines[i]
+            if line.strip() and not line.strip().startswith('#'):
+                current_indent = len(line) - len(line.lstrip())
+                if current_indent <= func_indent and i > start_line:
+                    return i
+        return len(lines)
+    
+    def _extract_class_dependencies(self, bases_str: str) -> List[str]:
+        """Extract base classes as dependencies."""
+        if not bases_str:
+            return []
+        return [b.strip() for b in bases_str.split(',') if b.strip()]
+```
+
+#### Analyzer Factory
+
+```python
+# pr_agent/tools/language_analyzers/__init__.py
+from typing import Optional
+from .base_analyzer import BaseLanguageAnalyzer, CodeElement
+from .php_analyzer import PHPAnalyzer
+from .javascript_analyzer import JavaScriptAnalyzer, TypeScriptAnalyzer
+from .nestjs_analyzer import NestJSAnalyzer
+from .react_analyzer import ReactAnalyzer
+from .python_analyzer import PythonAnalyzer
+
+class AnalyzerFactory:
+    """Factory to get appropriate analyzer for a file."""
+    
+    _analyzers = {
+        '.php': PHPAnalyzer,
+        '.js': JavaScriptAnalyzer,
+        '.mjs': JavaScriptAnalyzer,
+        '.cjs': JavaScriptAnalyzer,
+        '.ts': TypeScriptAnalyzer,
+        '.tsx': ReactAnalyzer,
+        '.jsx': ReactAnalyzer,
+        '.py': PythonAnalyzer,
+    }
+    
+    @classmethod
+    def get_analyzer(cls, file_path: str) -> Optional[BaseLanguageAnalyzer]:
+        """Get appropriate analyzer based on file extension."""
+        import os
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        # Special case: detect NestJS by file naming convention
+        if ext in ['.ts'] and any(pattern in file_path for pattern in [
+            '.controller.', '.service.', '.module.', '.guard.', '.dto.'
+        ]):
+            return NestJSAnalyzer()
+        
+        analyzer_class = cls._analyzers.get(ext)
+        return analyzer_class() if analyzer_class else None
+    
+    @classmethod
+    def analyze_file(cls, content: str, file_path: str) -> list[CodeElement]:
+        """Analyze a file and return code elements."""
+        analyzer = cls.get_analyzer(file_path)
+        if analyzer:
+            return analyzer.extract_elements(content, file_path)
+        return []
+```
+
+---
+
+## Database Queries Support (MySQL, MongoDB, Elasticsearch)
+
+### Enhanced SQL Analyzer with MySQL Specifics
+
+Update: `pr_agent/tools/sql_analyzer.py`
+
+```python
+# Add to sql_analyzer.py
+
+class MySQLAnalyzer(SQLAnalyzer):
+    """MySQL-specific query analyzer."""
+    
+    def _check_mysql_specifics(self, query: str, line: int) -> List[SQLIssue]:
+        issues = []
+        query_upper = query.upper()
+        
+        # Check for MySQL-specific issues
+        
+        # Using LIMIT without ORDER BY
+        if 'LIMIT' in query_upper and 'ORDER BY' not in query_upper:
+            issues.append(SQLIssue(
+                query=query,
+                issue_type='mysql_specific',
+                message="LIMIT without ORDER BY may return inconsistent results",
+                severity='warning',
+                line_number=line,
+                suggestion="Add ORDER BY clause for deterministic results"
+            ))
+        
+        # Check for inefficient GROUP BY
+        if 'GROUP BY' in query_upper and 'ONLY_FULL_GROUP_BY' not in query_upper:
+            # Check if selecting columns not in GROUP BY
+            pass
+        
+        # Check for missing indexes on JOIN conditions
+        if 'JOIN' in query_upper and 'ON' in query_upper:
+            issues.append(SQLIssue(
+                query=query,
+                issue_type='mysql_performance',
+                message="Verify indexes exist on JOIN columns",
+                severity='info',
+                line_number=line,
+                suggestion="Run EXPLAIN to verify query execution plan"
+            ))
+        
+        # Check for deprecated MySQL syntax
+        deprecated = [
+            ('SQL_CALC_FOUND_ROWS', 'Use COUNT(*) in a separate query'),
+            ('FOUND_ROWS()', 'Use COUNT(*) in a separate query'),
+        ]
+        for deprecated_syntax, suggestion in deprecated:
+            if deprecated_syntax in query_upper:
+                issues.append(SQLIssue(
+                    query=query,
+                    issue_type='deprecated',
+                    message=f"{deprecated_syntax} is deprecated in MySQL 8.0",
+                    severity='warning',
+                    line_number=line,
+                    suggestion=suggestion
+                ))
+        
+        return issues
+
+
+class MongoDBAnalyzer:
+    """Analyzer for MongoDB queries."""
+    
+    def analyze_file(self, content: str, file_path: str) -> List[Dict]:
+        """Extract and analyze MongoDB operations."""
+        issues = []
+        
+        # Extract MongoDB operations
+        mongo_patterns = [
+            # Find operations
+            (r'\.find\s*\(\s*(\{[^}]*\})', 'find'),
+            (r'\.findOne\s*\(\s*(\{[^}]*\})', 'findOne'),
+            # Aggregation
+            (r'\.aggregate\s*\(\s*(\[[^\]]*\])', 'aggregate'),
+            # Updates
+            (r'\.updateOne\s*\(\s*(\{[^}]*\})\s*,\s*(\{[^}]*\})', 'updateOne'),
+            (r'\.updateMany\s*\(\s*(\{[^}]*\})\s*,\s*(\{[^}]*\})', 'updateMany'),
+            # Inserts
+            (r'\.insertOne\s*\(\s*(\{[^}]*\})', 'insertOne'),
+            (r'\.insertMany\s*\(\s*(\[[^\]]*\])', 'insertMany'),
+        ]
+        
+        for pattern, operation in mongo_patterns:
+            for match in re.finditer(pattern, content, re.DOTALL):
+                query = match.group(1)
+                line = content[:match.start()].count('\n') + 1
+                issues.extend(self._analyze_mongo_query(query, operation, line))
+        
+        return issues
+    
+    def _analyze_mongo_query(self, query: str, operation: str, line: int) -> List[Dict]:
+        issues = []
+        
+        # Check for queries without indexes (no _id, no indexed fields)
+        if operation in ['find', 'findOne'] and '_id' not in query:
+            issues.append({
+                'type': 'mongodb_performance',
+                'message': f'Query may not use index efficiently',
+                'severity': 'info',
+                'line': line,
+                'suggestion': 'Ensure query fields are indexed'
+            })
+        
+        # Check for $regex without anchors (performance issue)
+        if '$regex' in query and '^' not in query:
+            issues.append({
+                'type': 'mongodb_performance',
+                'message': '$regex without ^ anchor cannot use indexes',
+                'severity': 'warning',
+                'line': line,
+                'suggestion': 'Use anchored regex when possible: /^pattern/'
+            })
+        
+        # Check for large $in arrays
+        if '$in' in query:
+            issues.append({
+                'type': 'mongodb_performance',
+                'message': 'Large $in arrays can cause performance issues',
+                'severity': 'info',
+                'line': line,
+                'suggestion': 'Consider batching if array is large'
+            })
+        
+        # Check for updates without $set
+        if operation in ['updateOne', 'updateMany'] and '$set' not in query and '$' in query:
+            pass  # Ok, using another update operator
+        elif operation in ['updateOne', 'updateMany'] and '$' not in query:
+            issues.append({
+                'type': 'mongodb_warning',
+                'message': 'Update without operators will replace entire document',
+                'severity': 'warning',
+                'line': line,
+                'suggestion': 'Use $set or other update operators'
+            })
+        
+        return issues
+
+
+class ElasticsearchAnalyzer:
+    """Analyzer for Elasticsearch queries."""
+    
+    def analyze_file(self, content: str, file_path: str) -> List[Dict]:
+        issues = []
+        
+        # Extract Elasticsearch operations
+        es_patterns = [
+            (r'\.search\s*\(\s*(\{[^}]*\})', 'search'),
+            (r'\.index\s*\(\s*(\{[^}]*\})', 'index'),
+            (r'\.update\s*\(\s*(\{[^}]*\})', 'update'),
+            (r'\.bulk\s*\(\s*(\[[^\]]*\])', 'bulk'),
+        ]
+        
+        for pattern, operation in es_patterns:
+            for match in re.finditer(pattern, content, re.DOTALL):
+                query = match.group(1)
+                line = content[:match.start()].count('\n') + 1
+                issues.extend(self._analyze_es_query(query, operation, line))
+        
+        return issues
+    
+    def _analyze_es_query(self, query: str, operation: str, line: int) -> List[Dict]:
+        issues = []
+        
+        # Check for wildcard queries
+        if 'wildcard' in query.lower():
+            issues.append({
+                'type': 'elasticsearch_performance',
+                'message': 'Wildcard queries can be slow',
+                'severity': 'warning',
+                'line': line,
+                'suggestion': 'Consider using prefix queries or ngrams'
+            })
+        
+        # Check for script queries
+        if 'script' in query.lower():
+            issues.append({
+                'type': 'elasticsearch_performance',
+                'message': 'Script queries cannot be cached and may be slow',
+                'severity': 'warning',
+                'line': line,
+                'suggestion': 'Consider using runtime fields or pre-computed values'
+            })
+        
+        # Check for deep pagination
+        if '"from"' in query and '"size"' in query:
+            issues.append({
+                'type': 'elasticsearch_performance',
+                'message': 'Deep pagination (from + size > 10000) is inefficient',
+                'severity': 'info',
+                'line': line,
+                'suggestion': 'Use search_after for deep pagination'
+            })
+        
+        return issues
+```
+
+---
+
+## PubSub Events System
+
+### Google Cloud PubSub Analyzer
+
+Create: `pr_agent/tools/pubsub_analyzer.py`
+
+```python
+import re
+from typing import List, Dict
+from dataclasses import dataclass
+
+@dataclass
+class PubSubEvent:
+    topic: str
+    event_type: str  # 'publish' or 'subscribe'
+    file_path: str
+    line_number: int
+    handler_name: str
+    message_schema: str  # DTO class if detected
+
+class PubSubAnalyzer:
+    """Analyzer for Google Cloud PubSub patterns."""
+    
+    def extract_pubsub_topology(self, content: str, file_path: str) -> List[PubSubEvent]:
+        """Extract PubSub publishers and subscribers from code."""
+        events = []
+        
+        # NestJS PubSub decorators
+        subscriber_patterns = [
+            # @PubSubTopic('TOPIC_ENV_VAR', METADATA)
+            (r"@PubSubTopic\s*\(\s*['\"]([^'\"]+)['\"]", 'subscribe'),
+            # @PubSubEvent('EVENT_ENV_VAR', METADATA)
+            (r"@PubSubEvent\s*\(\s*['\"]([^'\"]+)['\"]", 'subscribe'),
+            # @EventPattern('topic')
+            (r"@EventPattern\s*\(\s*['\"]([^'\"]+)['\"]", 'subscribe'),
+        ]
+        
+        publisher_patterns = [
+            # pubsub.publish('topic', message)
+            (r"\.publish\s*\(\s*['\"]([^'\"]+)['\"]", 'publish'),
+            # client.emit('topic', message)
+            (r"\.emit\s*\(\s*['\"]([^'\"]+)['\"]", 'publish'),
+            # pubSubClient.topic('topic').publish()
+            (r"\.topic\s*\(\s*['\"]([^'\"]+)['\"]", 'publish'),
+        ]
+        
+        for pattern, event_type in subscriber_patterns + publisher_patterns:
+            for match in re.finditer(pattern, content):
+                line_num = content[:match.start()].count('\n') + 1
+                handler_name = self._find_handler_name(content, match.end())
+                message_schema = self._find_message_schema(content, match.end())
+                
+                events.append(PubSubEvent(
+                    topic=match.group(1),
+                    event_type=event_type,
+                    file_path=file_path,
+                    line_number=line_num,
+                    handler_name=handler_name,
+                    message_schema=message_schema
+                ))
+        
+        return events
+    
+    def _find_handler_name(self, content: str, position: int) -> str:
+        """Find the function/method name handling the event."""
+        # Look for function definition after the decorator
+        search_area = content[position:position+500]
+        func_match = re.search(r'(?:async\s+)?(\w+)\s*\(', search_area)
+        return func_match.group(1) if func_match else 'unknown'
+    
+    def _find_message_schema(self, content: str, position: int) -> str:
+        """Find the DTO/schema used for the message."""
+        search_area = content[position:position+500]
+        # Look for type annotation or decorator parameter
+        dto_patterns = [
+            r'@PubSubPayload\s*\(\s*(\w+)\s*\)',
+            r'message\s*:\s*(\w+Dto)',
+            r'data\s*:\s*(\w+)',
+        ]
+        for pattern in dto_patterns:
+            match = re.search(pattern, search_area)
+            if match:
+                return match.group(1)
+        return ''
+    
+    def analyze_pubsub_consistency(
+        self, 
+        publishers: List[PubSubEvent],
+        subscribers: List[PubSubEvent]
+    ) -> List[Dict]:
+        """Analyze PubSub topology for issues."""
+        issues = []
+        
+        publisher_topics = {p.topic for p in publishers}
+        subscriber_topics = {s.topic for s in subscribers}
+        
+        # Topics with no subscribers
+        orphan_publishers = publisher_topics - subscriber_topics
+        for topic in orphan_publishers:
+            issues.append({
+                'type': 'pubsub_topology',
+                'severity': 'warning',
+                'message': f"Topic '{topic}' has publishers but no subscribers found",
+                'suggestion': 'Verify subscriber exists or remove unused publisher'
+            })
+        
+        # Subscribers without publishers
+        orphan_subscribers = subscriber_topics - publisher_topics
+        for topic in orphan_subscribers:
+            issues.append({
+                'type': 'pubsub_topology',
+                'severity': 'info',
+                'message': f"Topic '{topic}' has subscribers but no publishers found in indexed repos",
+                'suggestion': 'Publisher may be external or in unindexed repo'
+            })
+        
+        return issues
+```
+
+---
+
+## Initial Data Population and Continuous Updates
+
+### Repository Indexing Service
+
+Create: `pr_agent/services/indexing_service.py`
+
+```python
+import asyncio
+import os
+import tempfile
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+import git
+
+from pr_agent.tools.language_analyzers import AnalyzerFactory
+from pr_agent.tools.pubsub_analyzer import PubSubAnalyzer
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.log import get_logger
+
+@dataclass
+class IndexingJob:
+    repository_url: str
+    branch: str
+    job_type: str  # 'full' or 'incremental'
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    status: str = 'pending'
+    error: Optional[str] = None
+    stats: Dict = None
+
+class RepositoryIndexingService:
+    """Service for initial and incremental repository indexing."""
+    
+    def __init__(self, db: DatabaseManager, github_token: str, embedding_handler):
+        self.db = db
+        self.github_token = github_token
+        self.embedder = embedding_handler
+        self.pubsub_analyzer = PubSubAnalyzer()
+    
+    async def index_all_repositories(self, repo_urls: List[str]) -> List[IndexingJob]:
+        """Initial full indexing of all repositories."""
+        jobs = []
+        
+        for repo_url in repo_urls:
+            job = await self.index_repository(repo_url, job_type='full')
+            jobs.append(job)
+        
+        return jobs
+    
+    async def index_repository(
+        self, 
+        repo_url: str, 
+        branch: str = 'main',
+        job_type: str = 'full'
+    ) -> IndexingJob:
+        """Index a single repository."""
+        job = IndexingJob(
+            repository_url=repo_url,
+            branch=branch,
+            job_type=job_type,
+            started_at=datetime.now()
+        )
+        
+        try:
+            get_logger().info(f"Starting {job_type} indexing for {repo_url}")
+            
+            # Clone repository to temp directory
+            with tempfile.TemporaryDirectory() as temp_dir:
+                repo = await self._clone_repository(repo_url, temp_dir, branch)
+                
+                # Get or create repository record
+                repo_id = await self._get_or_create_repo(repo_url)
+                
+                # Get last indexed commit for incremental
+                last_commit = None
+                if job_type == 'incremental':
+                    last_commit = await self._get_last_indexed_commit(repo_id)
+                
+                # Process all files
+                stats = await self._process_repository_files(
+                    repo, 
+                    temp_dir, 
+                    repo_id,
+                    last_commit
+                )
+                
+                # Update repository metadata
+                await self._update_repository_metadata(repo_id, repo.head.commit.hexsha)
+                
+                job.completed_at = datetime.now()
+                job.status = 'completed'
+                job.stats = stats
+                
+                get_logger().info(f"Completed indexing {repo_url}: {stats}")
+        
+        except Exception as e:
+            job.status = 'failed'
+            job.error = str(e)
+            get_logger().error(f"Failed to index {repo_url}: {e}")
+        
+        return job
+    
+    async def _clone_repository(
+        self, 
+        repo_url: str, 
+        target_dir: str,
+        branch: str
+    ) -> git.Repo:
+        """Clone repository with authentication."""
+        # Parse URL and add token
+        if 'github.com' in repo_url:
+            auth_url = repo_url.replace(
+                'https://github.com',
+                f'https://{self.github_token}@github.com'
+            )
+        else:
+            auth_url = repo_url
+        
+        # Clone with shallow history for speed
+        repo = git.Repo.clone_from(
+            auth_url,
+            target_dir,
+            branch=branch,
+            depth=1  # Shallow clone for indexing
+        )
+        
+        return repo
+    
+    async def _process_repository_files(
+        self,
+        repo: git.Repo,
+        repo_path: str,
+        repo_id: int,
+        since_commit: Optional[str] = None
+    ) -> Dict:
+        """Process all files in repository."""
+        stats = {
+            'files_processed': 0,
+            'elements_indexed': 0,
+            'pubsub_events': 0,
+            'api_calls': 0,
+            'errors': 0
+        }
+        
+        # Determine files to process
+        if since_commit:
+            # Get changed files since last index
+            files_to_process = self._get_changed_files(repo, since_commit)
+        else:
+            # Get all files
+            files_to_process = self._get_all_files(repo_path)
+        
+        # Process in batches for embeddings
+        batch_size = 50
+        elements_batch = []
+        
+        for file_path in files_to_process:
+            try:
+                full_path = os.path.join(repo_path, file_path)
+                if not os.path.exists(full_path):
+                    continue
+                
+                with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                
+                # Extract code elements
+                elements = AnalyzerFactory.analyze_file(content, file_path)
+                
+                # Extract PubSub events
+                pubsub_events = self.pubsub_analyzer.extract_pubsub_topology(content, file_path)
+                
+                # Extract API calls
+                analyzer = AnalyzerFactory.get_analyzer(file_path)
+                api_calls = analyzer.extract_api_calls(content) if analyzer else []
+                
+                # Prepare for batch embedding
+                for element in elements:
+                    elements_batch.append({
+                        'repo_id': repo_id,
+                        'element': element,
+                        'content_for_embedding': f"{element.element_type}: {element.name}\n{element.content[:2000]}"
+                    })
+                
+                stats['files_processed'] += 1
+                stats['elements_indexed'] += len(elements)
+                stats['pubsub_events'] += len(pubsub_events)
+                stats['api_calls'] += len(api_calls)
+                
+                # Process batch
+                if len(elements_batch) >= batch_size:
+                    await self._store_elements_batch(elements_batch)
+                    elements_batch = []
+            
+            except Exception as e:
+                stats['errors'] += 1
+                get_logger().warning(f"Error processing {file_path}: {e}")
+        
+        # Store remaining elements
+        if elements_batch:
+            await self._store_elements_batch(elements_batch)
+        
+        return stats
+    
+    async def _store_elements_batch(self, elements_batch: List[Dict]) -> None:
+        """Generate embeddings and store batch of elements."""
+        if not elements_batch:
+            return
+        
+        # Generate embeddings in batch
+        texts = [e['content_for_embedding'] for e in elements_batch]
+        embeddings = await self._generate_embeddings_batch(texts)
+        
+        # Store in database
+        async with self.db.connection() as conn:
+            for i, item in enumerate(elements_batch):
+                element = item['element']
+                embedding = embeddings[i] if i < len(embeddings) else None
+                
+                await conn.execute("""
+                    INSERT INTO code_chunks 
+                    (repository_id, file_path, chunk_content, chunk_type, 
+                     start_line, end_line, embedding, metadata, commit_sha)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (repository_id, file_path, start_line) 
+                    DO UPDATE SET 
+                        chunk_content = EXCLUDED.chunk_content,
+                        embedding = EXCLUDED.embedding,
+                        metadata = EXCLUDED.metadata,
+                        last_updated = CURRENT_TIMESTAMP
+                """,
+                    item['repo_id'],
+                    element.file_path,
+                    element.content,
+                    element.element_type,
+                    element.start_line,
+                    element.end_line,
+                    embedding,
+                    element.metadata,
+                    None  # commit_sha would come from repo
+                )
+    
+    async def _generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for a batch of texts."""
+        import openai
+        
+        # OpenAI batch embedding
+        response = await openai.Embedding.acreate(
+            input=texts,
+            model="text-embedding-ada-002"
+        )
+        
+        return [item['embedding'] for item in response['data']]
+    
+    def _get_all_files(self, repo_path: str) -> List[str]:
+        """Get all supported files in repository."""
+        supported_extensions = {'.php', '.js', '.ts', '.tsx', '.jsx', '.mjs'}
+        files = []
+        
+        for root, dirs, filenames in os.walk(repo_path):
+            # Skip common non-code directories
+            dirs[:] = [d for d in dirs if d not in {
+                'node_modules', 'vendor', '.git', 'dist', 'build', 
+                '__pycache__', '.next', 'coverage'
+            }]
+            
+            for filename in filenames:
+                ext = os.path.splitext(filename)[1].lower()
+                if ext in supported_extensions:
+                    rel_path = os.path.relpath(
+                        os.path.join(root, filename), 
+                        repo_path
+                    )
+                    files.append(rel_path)
+        
+        return files
+    
+    def _get_changed_files(self, repo: git.Repo, since_commit: str) -> List[str]:
+        """Get files changed since a specific commit."""
+        try:
+            diff = repo.git.diff('--name-only', since_commit, 'HEAD')
+            return diff.split('\n') if diff else []
+        except git.GitCommandError:
+            # If commit not found, return all files
+            return self._get_all_files(repo.working_dir)
+    
+    async def _get_or_create_repo(self, repo_url: str) -> int:
+        """Get or create repository record."""
+        # Parse org and repo name from URL
+        parts = repo_url.rstrip('/').split('/')
+        repo_name = parts[-1].replace('.git', '')
+        org_name = parts[-2]
+        
+        async with self.db.connection() as conn:
+            row = await conn.fetchrow("""
+                INSERT INTO repositories (org_name, repo_name, github_url)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (org_name, repo_name) 
+                DO UPDATE SET github_url = EXCLUDED.github_url
+                RETURNING id
+            """, org_name, repo_name, repo_url)
+            
+            return row['id']
+    
+    async def _get_last_indexed_commit(self, repo_id: int) -> Optional[str]:
+        """Get last indexed commit SHA."""
+        async with self.db.connection() as conn:
+            row = await conn.fetchrow("""
+                SELECT commit_sha FROM code_chunks 
+                WHERE repository_id = $1 
+                ORDER BY last_updated DESC 
+                LIMIT 1
+            """, repo_id)
+            
+            return row['commit_sha'] if row else None
+    
+    async def _update_repository_metadata(self, repo_id: int, commit_sha: str) -> None:
+        """Update repository last indexed timestamp."""
+        async with self.db.connection() as conn:
+            await conn.execute("""
+                UPDATE repositories 
+                SET last_indexed_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+            """, repo_id)
+
+
+class IncrementalUpdateService:
+    """Service for handling incremental updates from webhooks."""
+    
+    def __init__(self, indexing_service: RepositoryIndexingService):
+        self.indexing_service = indexing_service
+    
+    async def handle_push_webhook(self, payload: Dict) -> None:
+        """Handle GitHub push webhook for incremental indexing."""
+        repo_url = payload['repository']['clone_url']
+        branch = payload['ref'].split('/')[-1]
+        before_sha = payload['before']
+        
+        # Only index main/master branches
+        if branch not in ['main', 'master', 'develop']:
+            return
+        
+        # Queue incremental indexing job
+        await self.indexing_service.index_repository(
+            repo_url=repo_url,
+            branch=branch,
+            job_type='incremental'
+        )
+    
+    async def handle_pr_merged_webhook(self, payload: Dict) -> None:
+        """Handle PR merged webhook."""
+        if payload['action'] != 'closed' or not payload['pull_request']['merged']:
+            return
+        
+        repo_url = payload['repository']['clone_url']
+        target_branch = payload['pull_request']['base']['ref']
+        
+        await self.indexing_service.index_repository(
+            repo_url=repo_url,
+            branch=target_branch,
+            job_type='incremental'
+        )
+```
+
+### Jira Synchronization Service
+
+Create: `pr_agent/services/jira_sync_service.py`
+
+```python
+import asyncio
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional
+from pr_agent.integrations.jira_client import JiraClient
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.log import get_logger
+
+class JiraSyncService:
+    """Service for Jira data synchronization."""
+    
+    def __init__(
+        self, 
+        jira_client: JiraClient, 
+        db: DatabaseManager,
+        embedding_handler
+    ):
+        self.jira = jira_client
+        self.db = db
+        self.embedder = embedding_handler
+    
+    async def full_sync(self, project_keys: List[str]) -> Dict:
+        """Full synchronization of Jira tickets."""
+        stats = {
+            'projects': len(project_keys),
+            'tickets_synced': 0,
+            'errors': 0
+        }
+        
+        for project_key in project_keys:
+            try:
+                get_logger().info(f"Syncing Jira project: {project_key}")
+                count = await self._sync_project(project_key)
+                stats['tickets_synced'] += count
+            except Exception as e:
+                stats['errors'] += 1
+                get_logger().error(f"Error syncing project {project_key}: {e}")
+        
+        return stats
+    
+    async def _sync_project(self, project_key: str, since: Optional[datetime] = None) -> int:
+        """Sync all tickets from a Jira project."""
+        count = 0
+        start_at = 0
+        max_results = 100
+        
+        # Build JQL query
+        jql = f'project = {project_key}'
+        if since:
+            since_str = since.strftime('%Y-%m-%d %H:%M')
+            jql += f' AND updated >= "{since_str}"'
+        
+        while True:
+            issues = self.jira.jira.search_issues(
+                jql,
+                startAt=start_at,
+                maxResults=max_results,
+                expand='changelog'
+            )
+            
+            if not issues:
+                break
+            
+            # Process in batches
+            tickets_batch = []
+            for issue in issues:
+                ticket_data = self._extract_ticket_data(issue)
+                tickets_batch.append(ticket_data)
+            
+            # Generate embeddings and store
+            await self._store_tickets_batch(tickets_batch)
+            
+            count += len(issues)
+            start_at += max_results
+            
+            if len(issues) < max_results:
+                break
+        
+        return count
+    
+    def _extract_ticket_data(self, issue) -> Dict:
+        """Extract relevant data from Jira issue."""
+        return {
+            'ticket_key': issue.key,
+            'title': issue.fields.summary,
+            'description': issue.fields.description or '',
+            'status': issue.fields.status.name,
+            'ticket_type': issue.fields.issuetype.name,
+            'labels': [label for label in issue.fields.labels],
+            'acceptance_criteria': self._get_acceptance_criteria(issue),
+            'created': issue.fields.created,
+            'updated': issue.fields.updated,
+            'assignee': issue.fields.assignee.displayName if issue.fields.assignee else None,
+            'reporter': issue.fields.reporter.displayName if issue.fields.reporter else None,
+            'resolution': issue.fields.resolution.name if issue.fields.resolution else None,
+        }
+    
+    def _get_acceptance_criteria(self, issue) -> str:
+        """Extract acceptance criteria from custom fields."""
+        custom_field_names = ['customfield_10001', 'customfield_10002', 'acceptance_criteria']
+        for field_name in custom_field_names:
+            if hasattr(issue.fields, field_name):
+                value = getattr(issue.fields, field_name)
+                if value:
+                    return value
+        return ''
+    
+    async def _store_tickets_batch(self, tickets: List[Dict]) -> None:
+        """Generate embeddings and store tickets."""
+        # Create embedding text for each ticket
+        texts = [
+            f"{t['ticket_key']}: {t['title']}\n{t['description'][:2000]}"
+            for t in tickets
+        ]
+        
+        # Generate embeddings
+        embeddings = await self._generate_embeddings_batch(texts)
+        
+        # Store in database
+        async with self.db.connection() as conn:
+            for i, ticket in enumerate(tickets):
+                embedding = embeddings[i] if i < len(embeddings) else None
+                
+                await conn.execute("""
+                    INSERT INTO jira_tickets 
+                    (ticket_key, title, description, status, ticket_type,
+                     acceptance_criteria, labels, embedding, raw_data, last_synced)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+                    ON CONFLICT (ticket_key) 
+                    DO UPDATE SET 
+                        title = EXCLUDED.title,
+                        description = EXCLUDED.description,
+                        status = EXCLUDED.status,
+                        ticket_type = EXCLUDED.ticket_type,
+                        acceptance_criteria = EXCLUDED.acceptance_criteria,
+                        labels = EXCLUDED.labels,
+                        embedding = EXCLUDED.embedding,
+                        raw_data = EXCLUDED.raw_data,
+                        last_synced = CURRENT_TIMESTAMP
+                """,
+                    ticket['ticket_key'],
+                    ticket['title'],
+                    ticket['description'],
+                    ticket['status'],
+                    ticket['ticket_type'],
+                    ticket['acceptance_criteria'],
+                    ticket['labels'],
+                    embedding,
+                    ticket
+                )
+    
+    async def _generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for batch of texts."""
+        import openai
+        
+        response = await openai.Embedding.acreate(
+            input=texts,
+            model="text-embedding-ada-002"
+        )
+        
+        return [item['embedding'] for item in response['data']]
+    
+    async def incremental_sync(self, project_keys: List[str]) -> Dict:
+        """Incremental sync of recently updated tickets."""
+        since = datetime.now() - timedelta(hours=24)
+        stats = {'tickets_synced': 0, 'errors': 0}
+        
+        for project_key in project_keys:
+            try:
+                count = await self._sync_project(project_key, since=since)
+                stats['tickets_synced'] += count
+            except Exception as e:
+                stats['errors'] += 1
+                get_logger().error(f"Error in incremental sync for {project_key}: {e}")
+        
+        return stats
+
+
+class SyncScheduler:
+    """Scheduler for periodic sync jobs."""
+    
+    def __init__(
+        self,
+        indexing_service: RepositoryIndexingService,
+        jira_sync_service: JiraSyncService
+    ):
+        self.indexing_service = indexing_service
+        self.jira_sync_service = jira_sync_service
+        self._running = False
+    
+    async def start(self, repo_urls: List[str], jira_projects: List[str]) -> None:
+        """Start the sync scheduler."""
+        self._running = True
+        
+        # Initial full sync
+        get_logger().info("Starting initial full sync...")
+        await self.indexing_service.index_all_repositories(repo_urls)
+        await self.jira_sync_service.full_sync(jira_projects)
+        
+        # Periodic incremental sync
+        while self._running:
+            await asyncio.sleep(3600)  # Every hour
+            
+            get_logger().info("Running incremental sync...")
+            for repo_url in repo_urls:
+                await self.indexing_service.index_repository(
+                    repo_url, 
+                    job_type='incremental'
+                )
+            
+            await self.jira_sync_service.incremental_sync(jira_projects)
+    
+    def stop(self) -> None:
+        """Stop the scheduler."""
+        self._running = False
+```
+
+### CLI Commands for Data Management
+
+Create: `pr_agent/cli_admin.py`
+
+```python
+#!/usr/bin/env python3
+"""
+Admin CLI for managing PR Agent data.
+
+Usage:
+    python -m pr_agent.cli_admin index-repos --config repos.yaml
+    python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS
+    python -m pr_agent.cli_admin status
+"""
+
+import argparse
+import asyncio
+import yaml
+from pr_agent.services.indexing_service import RepositoryIndexingService
+from pr_agent.services.jira_sync_service import JiraSyncService, SyncScheduler
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.config_loader import get_settings
+from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+
+async def cmd_index_repos(args):
+    """Index repositories command."""
+    # Load repo config
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    repo_urls = config.get('repositories', [])
+    
+    # Initialize services
+    db = DatabaseManager(get_settings().workiz.database_url)
+    await db.initialize()
+    
+    ai_handler = LiteLLMAIHandler()
+    indexing_service = RepositoryIndexingService(
+        db=db,
+        github_token=get_settings().github.user_token,
+        embedding_handler=ai_handler
+    )
+    
+    print(f"Indexing {len(repo_urls)} repositories...")
+    jobs = await indexing_service.index_all_repositories(repo_urls)
+    
+    for job in jobs:
+        status = "✓" if job.status == 'completed' else "✗"
+        print(f"{status} {job.repository_url}: {job.stats}")
+    
+    await db.close()
+
+async def cmd_sync_jira(args):
+    """Sync Jira tickets command."""
+    projects = args.projects.split(',')
+    
+    db = DatabaseManager(get_settings().workiz.database_url)
+    await db.initialize()
+    
+    from pr_agent.integrations.jira_client import JiraClient
+    jira_client = JiraClient(
+        base_url=get_settings().jira.base_url,
+        email=get_settings().jira.email,
+        api_token=get_settings().jira.api_token
+    )
+    
+    ai_handler = LiteLLMAIHandler()
+    jira_sync = JiraSyncService(jira_client, db, ai_handler)
+    
+    print(f"Syncing Jira projects: {projects}")
+    
+    if args.full:
+        stats = await jira_sync.full_sync(projects)
+    else:
+        stats = await jira_sync.incremental_sync(projects)
+    
+    print(f"Sync complete: {stats}")
+    await db.close()
+
+async def cmd_status(args):
+    """Show indexing status."""
+    db = DatabaseManager(get_settings().workiz.database_url)
+    await db.initialize()
+    
+    async with db.connection() as conn:
+        # Repository stats
+        repos = await conn.fetch("""
+            SELECT r.org_name, r.repo_name, r.last_indexed_at,
+                   COUNT(cc.id) as chunk_count
+            FROM repositories r
+            LEFT JOIN code_chunks cc ON r.id = cc.repository_id
+            GROUP BY r.id
+            ORDER BY r.last_indexed_at DESC
+        """)
+        
+        print("\n=== Indexed Repositories ===")
+        for repo in repos:
+            print(f"  {repo['org_name']}/{repo['repo_name']}: "
+                  f"{repo['chunk_count']} chunks, "
+                  f"last indexed: {repo['last_indexed_at']}")
+        
+        # Jira stats
+        jira_stats = await conn.fetchrow("""
+            SELECT COUNT(*) as total,
+                   COUNT(CASE WHEN status = 'Done' THEN 1 END) as done
+            FROM jira_tickets
+        """)
+        
+        print(f"\n=== Jira Tickets ===")
+        print(f"  Total: {jira_stats['total']}, Resolved: {jira_stats['done']}")
+    
+    await db.close()
+
+def main():
+    parser = argparse.ArgumentParser(description='PR Agent Admin CLI')
+    subparsers = parser.add_subparsers(dest='command')
+    
+    # index-repos command
+    index_parser = subparsers.add_parser('index-repos', help='Index repositories')
+    index_parser.add_argument('--config', required=True, help='YAML config file with repo URLs')
+    
+    # sync-jira command
+    jira_parser = subparsers.add_parser('sync-jira', help='Sync Jira tickets')
+    jira_parser.add_argument('--projects', required=True, help='Comma-separated project keys')
+    jira_parser.add_argument('--full', action='store_true', help='Full sync instead of incremental')
+    
+    # status command
+    subparsers.add_parser('status', help='Show indexing status')
+    
+    args = parser.parse_args()
+    
+    if args.command == 'index-repos':
+        asyncio.run(cmd_index_repos(args))
+    elif args.command == 'sync-jira':
+        asyncio.run(cmd_sync_jira(args))
+    elif args.command == 'status':
+        asyncio.run(cmd_status(args))
+    else:
+        parser.print_help()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Repository Configuration Example
+
+Create: `repos.yaml` (example config)
+
+```yaml
+# Repository configuration for indexing
+repositories:
+  # PHP Services
+  - https://github.com/workiz/legacy-api.git
+  - https://github.com/workiz/billing-service.git
+  
+  # NodeJS Services
+  - https://github.com/workiz/notification-service.git
+  - https://github.com/workiz/scheduling-service.git
+  
+  # NestJS Services
+  - https://github.com/workiz/user-service.git
+  - https://github.com/workiz/job-service.git
+  - https://github.com/workiz/messaging-service.git
+  
+  # React Frontend
+  - https://github.com/workiz/web-app.git
+  - https://github.com/workiz/mobile-web.git
+
+# Indexing settings
+settings:
+  branch: main
+  exclude_paths:
+    - node_modules/
+    - vendor/
+    - dist/
+    - build/
+    - __tests__/
+    - test/
+  
+  # File patterns to index
+  include_patterns:
+    - "*.php"
+    - "*.js"
+    - "*.ts"
+    - "*.tsx"
+```
+
+---
+
+## Auto-Discovery of Repositories and Jira Projects
+
+### GitHub Organization Repository Discovery
+
+Create: `pr_agent/services/discovery_service.py`
+
+```python
+import asyncio
+from datetime import datetime, timedelta
+from typing import List, Dict, Set
+from dataclasses import dataclass
+import aiohttp
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.log import get_logger
+from pr_agent.config_loader import get_settings
+
+@dataclass
+class DiscoveredRepo:
+    org: str
+    name: str
+    url: str
+    default_branch: str
+    language: str
+    updated_at: datetime
+    is_archived: bool
+
+class GitHubDiscoveryService:
+    """Auto-discover repositories in GitHub organization."""
+    
+    def __init__(self, db: DatabaseManager, github_token: str):
+        self.db = db
+        self.github_token = github_token
+        self.base_url = "https://api.github.com"
+        self.headers = {
+            "Authorization": f"token {github_token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+    
+    async def discover_org_repos(self, org_name: str) -> List[DiscoveredRepo]:
+        """Discover all repositories in an organization."""
+        repos = []
+        page = 1
+        per_page = 100
+        
+        async with aiohttp.ClientSession() as session:
+            while True:
+                url = f"{self.base_url}/orgs/{org_name}/repos"
+                params = {
+                    "page": page,
+                    "per_page": per_page,
+                    "type": "all",
+                    "sort": "updated"
+                }
+                
+                async with session.get(url, headers=self.headers, params=params) as response:
+                    if response.status != 200:
+                        get_logger().error(f"Failed to fetch repos: {response.status}")
+                        break
+                    
+                    data = await response.json()
+                    if not data:
+                        break
+                    
+                    for repo in data:
+                        repos.append(DiscoveredRepo(
+                            org=org_name,
+                            name=repo['name'],
+                            url=repo['clone_url'],
+                            default_branch=repo['default_branch'],
+                            language=repo.get('language', 'unknown'),
+                            updated_at=datetime.fromisoformat(repo['updated_at'].replace('Z', '+00:00')),
+                            is_archived=repo['archived']
+                        ))
+                    
+                    page += 1
+        
+        return repos
+    
+    async def sync_repos_to_database(self, org_name: str) -> Dict:
+        """Sync discovered repos to database and identify new ones."""
+        discovered = await self.discover_org_repos(org_name)
+        
+        # Filter out archived repos
+        active_repos = [r for r in discovered if not r.is_archived]
+        
+        # Get existing repos from database
+        async with self.db.connection() as conn:
+            existing = await conn.fetch("""
+                SELECT org_name, repo_name FROM repositories 
+                WHERE org_name = $1
+            """, org_name)
+            existing_names = {(r['org_name'], r['repo_name']) for r in existing}
+        
+        # Identify new repos
+        new_repos = []
+        for repo in active_repos:
+            if (repo.org, repo.name) not in existing_names:
+                new_repos.append(repo)
+                
+                # Add to database
+                async with self.db.connection() as conn:
+                    await conn.execute("""
+                        INSERT INTO repositories 
+                        (org_name, repo_name, github_url, default_branch, primary_language)
+                        VALUES ($1, $2, $3, $4, $5)
+                        ON CONFLICT (org_name, repo_name) DO UPDATE SET
+                            github_url = EXCLUDED.github_url,
+                            default_branch = EXCLUDED.default_branch
+                    """, repo.org, repo.name, repo.url, repo.default_branch, repo.language)
+        
+        return {
+            'total_discovered': len(active_repos),
+            'new_repos': len(new_repos),
+            'new_repo_names': [r.name for r in new_repos]
+        }
+    
+    async def get_repos_needing_indexing(self) -> List[Dict]:
+        """Get repos that need indexing (new or updated)."""
+        async with self.db.connection() as conn:
+            # Repos never indexed or updated since last index
+            repos = await conn.fetch("""
+                SELECT id, org_name, repo_name, github_url, default_branch
+                FROM repositories
+                WHERE last_indexed_at IS NULL
+                   OR last_indexed_at < NOW() - INTERVAL '24 hours'
+                ORDER BY last_indexed_at NULLS FIRST
+            """)
+        return [dict(r) for r in repos]
+
+
+class JiraProjectDiscoveryService:
+    """Auto-discover Jira projects."""
+    
+    def __init__(self, db: DatabaseManager, jira_client):
+        self.db = db
+        self.jira = jira_client
+    
+    async def discover_projects(self) -> List[Dict]:
+        """Discover all accessible Jira projects."""
+        projects = self.jira.jira.projects()
+        
+        discovered = []
+        for project in projects:
+            discovered.append({
+                'key': project.key,
+                'name': project.name,
+                'project_type': getattr(project, 'projectTypeKey', 'software'),
+                'lead': getattr(project.lead, 'displayName', None) if hasattr(project, 'lead') else None
+            })
+        
+        return discovered
+    
+    async def sync_projects_to_database(self) -> Dict:
+        """Sync discovered Jira projects to database."""
+        discovered = await self.discover_projects()
+        
+        # Get existing projects
+        async with self.db.connection() as conn:
+            existing = await conn.fetch("SELECT project_key FROM jira_projects")
+            existing_keys = {r['project_key'] for r in existing}
+        
+        new_projects = []
+        for project in discovered:
+            if project['key'] not in existing_keys:
+                new_projects.append(project)
+                
+                async with self.db.connection() as conn:
+                    await conn.execute("""
+                        INSERT INTO jira_projects 
+                        (project_key, project_name, project_type, sync_enabled)
+                        VALUES ($1, $2, $3, TRUE)
+                        ON CONFLICT (project_key) DO UPDATE SET
+                            project_name = EXCLUDED.project_name
+                    """, project['key'], project['name'], project['project_type'])
+        
+        return {
+            'total_discovered': len(discovered),
+            'new_projects': len(new_projects),
+            'new_project_keys': [p['key'] for p in new_projects]
+        }
+    
+    async def get_projects_for_sync(self) -> List[str]:
+        """Get project keys that are enabled for sync."""
+        async with self.db.connection() as conn:
+            projects = await conn.fetch("""
+                SELECT project_key FROM jira_projects 
+                WHERE sync_enabled = TRUE
+            """)
+        return [p['project_key'] for p in projects]
+
+
+class AutoDiscoveryScheduler:
+    """Scheduler for automatic discovery and indexing."""
+    
+    def __init__(
+        self,
+        github_discovery: GitHubDiscoveryService,
+        jira_discovery: JiraProjectDiscoveryService,
+        indexing_service,  # RepositoryIndexingService
+        jira_sync_service  # JiraSyncService
+    ):
+        self.github_discovery = github_discovery
+        self.jira_discovery = jira_discovery
+        self.indexing_service = indexing_service
+        self.jira_sync = jira_sync_service
+        self._running = False
+    
+    async def run_discovery_cycle(self, org_names: List[str]) -> Dict:
+        """Run a full discovery and sync cycle."""
+        results = {
+            'github': {},
+            'jira': {},
+            'indexing': {}
+        }
+        
+        # Discover GitHub repos
+        for org in org_names:
+            get_logger().info(f"Discovering repos for org: {org}")
+            results['github'][org] = await self.github_discovery.sync_repos_to_database(org)
+        
+        # Discover Jira projects
+        get_logger().info("Discovering Jira projects")
+        results['jira'] = await self.jira_discovery.sync_projects_to_database()
+        
+        # Index new repositories
+        repos_to_index = await self.github_discovery.get_repos_needing_indexing()
+        get_logger().info(f"Found {len(repos_to_index)} repos needing indexing")
+        
+        for repo in repos_to_index:
+            job = await self.indexing_service.index_repository(
+                repo['github_url'],
+                repo['default_branch'],
+                'full'
+            )
+            results['indexing'][repo['repo_name']] = job.status
+        
+        # Sync new Jira projects
+        projects_to_sync = await self.jira_discovery.get_projects_for_sync()
+        await self.jira_sync.incremental_sync(projects_to_sync)
+        
+        return results
+    
+    async def start_scheduler(self, org_names: List[str], interval_hours: int = 6):
+        """Start the auto-discovery scheduler."""
+        self._running = True
+        
+        while self._running:
+            try:
+                get_logger().info("Running auto-discovery cycle")
+                results = await self.run_discovery_cycle(org_names)
+                get_logger().info(f"Discovery cycle complete: {results}")
+            except Exception as e:
+                get_logger().error(f"Discovery cycle failed: {e}")
+            
+            await asyncio.sleep(interval_hours * 3600)
+    
+    def stop(self):
+        """Stop the scheduler."""
+        self._running = False
+```
+
+### Database Schema for Auto-Discovery
+
+```sql
+-- Add to database schema
+
+-- Jira projects table
+CREATE TABLE jira_projects (
+    id SERIAL PRIMARY KEY,
+    project_key VARCHAR(50) UNIQUE NOT NULL,
+    project_name VARCHAR(255),
+    project_type VARCHAR(100),
+    sync_enabled BOOLEAN DEFAULT TRUE,
+    last_synced_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add primary language to repositories
+ALTER TABLE repositories ADD COLUMN IF NOT EXISTS primary_language VARCHAR(50);
+
+-- Discovery logs
+CREATE TABLE discovery_logs (
+    id SERIAL PRIMARY KEY,
+    discovery_type VARCHAR(50), -- 'github' or 'jira'
+    org_or_source VARCHAR(255),
+    items_discovered INT,
+    new_items INT,
+    details JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## NPM Package Management and Version Tracking
+
+### Internal Package Analyzer
+
+Create: `pr_agent/tools/npm_package_analyzer.py`
+
+```python
+import re
+import json
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from packaging import version
+import aiohttp
+from pr_agent.db.connection import DatabaseManager
+from pr_agent.log import get_logger
+
+@dataclass
+class PackageInfo:
+    name: str
+    current_version: str
+    latest_version: Optional[str]
+    is_internal: bool
+    is_outdated: bool
+    breaking_changes: bool
+    changelog_url: Optional[str]
+
+@dataclass
+class PackageDependencyIssue:
+    package_name: str
+    issue_type: str  # 'outdated', 'version_mismatch', 'breaking_change', 'deprecated'
+    message: str
+    severity: str
+    current_version: str
+    recommended_version: Optional[str]
+    affected_file: str
+
+class NPMPackageAnalyzer:
+    """Analyze NPM package dependencies in PRs."""
+    
+    def __init__(self, db: DatabaseManager, internal_packages: List[str] = None):
+        self.db = db
+        self.internal_packages = internal_packages or []
+        self.npm_registry = "https://registry.npmjs.org"
+        self._package_cache: Dict[str, Dict] = {}
+    
+    def set_internal_packages(self, packages: List[str]):
+        """Set list of internal package names/prefixes."""
+        self.internal_packages = packages
+    
+    def is_internal_package(self, package_name: str) -> bool:
+        """Check if package is internal (Workiz package)."""
+        for prefix in self.internal_packages:
+            if package_name.startswith(prefix):
+                return True
+        return False
+    
+    async def analyze_package_json_changes(
+        self, 
+        old_content: str, 
+        new_content: str,
+        file_path: str
+    ) -> List[PackageDependencyIssue]:
+        """Analyze changes to package.json."""
+        issues = []
+        
+        try:
+            old_pkg = json.loads(old_content) if old_content else {}
+            new_pkg = json.loads(new_content)
+        except json.JSONDecodeError:
+            return issues
+        
+        # Get dependencies from both versions
+        old_deps = {
+            **old_pkg.get('dependencies', {}),
+            **old_pkg.get('devDependencies', {})
+        }
+        new_deps = {
+            **new_pkg.get('dependencies', {}),
+            **new_pkg.get('devDependencies', {})
+        }
+        
+        # Check for added/changed packages
+        for pkg_name, new_version in new_deps.items():
+            old_version = old_deps.get(pkg_name)
+            
+            # New package added
+            if old_version is None:
+                if self.is_internal_package(pkg_name):
+                    # Check internal package version
+                    issue = await self._check_internal_package(pkg_name, new_version, file_path)
+                    if issue:
+                        issues.append(issue)
+                else:
+                    # Check external package
+                    issue = await self._check_external_package(pkg_name, new_version, file_path)
+                    if issue:
+                        issues.append(issue)
+            
+            # Version changed
+            elif old_version != new_version:
+                issues.extend(await self._check_version_change(
+                    pkg_name, old_version, new_version, file_path
+                ))
+        
+        # Check for removed packages
+        for pkg_name in old_deps:
+            if pkg_name not in new_deps:
+                if self.is_internal_package(pkg_name):
+                    issues.append(PackageDependencyIssue(
+                        package_name=pkg_name,
+                        issue_type='removed_internal',
+                        message=f"Internal package '{pkg_name}' removed - verify this doesn't break other services",
+                        severity='warning',
+                        current_version=old_deps[pkg_name],
+                        recommended_version=None,
+                        affected_file=file_path
+                    ))
+        
+        return issues
+    
+    async def _check_internal_package(
+        self, 
+        pkg_name: str, 
+        version_spec: str,
+        file_path: str
+    ) -> Optional[PackageDependencyIssue]:
+        """Check internal package for issues."""
+        # Get latest version from internal registry or database
+        latest = await self._get_internal_package_latest(pkg_name)
+        
+        if not latest:
+            return None
+        
+        current = self._parse_version(version_spec)
+        
+        # Check if using outdated version
+        if current and latest and version.parse(current) < version.parse(latest):
+            return PackageDependencyIssue(
+                package_name=pkg_name,
+                issue_type='outdated_internal',
+                message=f"Internal package '{pkg_name}' has newer version available: {latest}",
+                severity='info',
+                current_version=version_spec,
+                recommended_version=f"^{latest}",
+                affected_file=file_path
+            )
+        
+        return None
+    
+    async def _check_external_package(
+        self, 
+        pkg_name: str, 
+        version_spec: str,
+        file_path: str
+    ) -> Optional[PackageDependencyIssue]:
+        """Check external package for issues."""
+        pkg_info = await self._get_npm_package_info(pkg_name)
+        
+        if not pkg_info:
+            return None
+        
+        # Check if package is deprecated
+        if pkg_info.get('deprecated'):
+            return PackageDependencyIssue(
+                package_name=pkg_name,
+                issue_type='deprecated',
+                message=f"Package '{pkg_name}' is deprecated: {pkg_info.get('deprecated')}",
+                severity='warning',
+                current_version=version_spec,
+                recommended_version=None,
+                affected_file=file_path
+            )
+        
+        return None
+    
+    async def _check_version_change(
+        self, 
+        pkg_name: str, 
+        old_version: str, 
+        new_version: str,
+        file_path: str
+    ) -> List[PackageDependencyIssue]:
+        """Check if version change introduces issues."""
+        issues = []
+        
+        old_v = self._parse_version(old_version)
+        new_v = self._parse_version(new_version)
+        
+        if not old_v or not new_v:
+            return issues
+        
+        old_parsed = version.parse(old_v)
+        new_parsed = version.parse(new_v)
+        
+        # Check for major version bump (potential breaking changes)
+        if hasattr(old_parsed, 'major') and hasattr(new_parsed, 'major'):
+            if new_parsed.major > old_parsed.major:
+                severity = 'warning' if self.is_internal_package(pkg_name) else 'info'
+                issues.append(PackageDependencyIssue(
+                    package_name=pkg_name,
+                    issue_type='breaking_change',
+                    message=f"Major version bump for '{pkg_name}': {old_version} -> {new_version}. Review changelog for breaking changes.",
+                    severity=severity,
+                    current_version=old_version,
+                    recommended_version=new_version,
+                    affected_file=file_path
+                ))
+        
+        # Check for downgrade
+        if new_parsed < old_parsed:
+            issues.append(PackageDependencyIssue(
+                package_name=pkg_name,
+                issue_type='downgrade',
+                message=f"Package '{pkg_name}' downgraded: {old_version} -> {new_version}. Verify this is intentional.",
+                severity='warning',
+                current_version=old_version,
+                recommended_version=old_version,
+                affected_file=file_path
+            ))
+        
+        return issues
+    
+    async def check_version_consistency(self, repo_name: str, pkg_name: str, version_spec: str) -> List[PackageDependencyIssue]:
+        """Check if package version is consistent with other repos."""
+        issues = []
+        
+        if not self.is_internal_package(pkg_name):
+            return issues
+        
+        # Get versions used in other repos
+        async with self.db.connection() as conn:
+            other_versions = await conn.fetch("""
+                SELECT r.repo_name, pd.version_spec
+                FROM package_dependencies pd
+                JOIN repositories r ON pd.repository_id = r.id
+                WHERE pd.package_name = $1
+                  AND r.repo_name != $2
+            """, pkg_name, repo_name)
+        
+        if other_versions:
+            versions_set = {v['version_spec'] for v in other_versions}
+            if len(versions_set) > 1 or (versions_set and version_spec not in versions_set):
+                issues.append(PackageDependencyIssue(
+                    package_name=pkg_name,
+                    issue_type='version_mismatch',
+                    message=f"Version inconsistency for '{pkg_name}': this PR uses {version_spec}, other repos use: {', '.join(versions_set)}",
+                    severity='warning',
+                    current_version=version_spec,
+                    recommended_version=list(versions_set)[0] if versions_set else None,
+                    affected_file='package.json'
+                ))
+        
+        return issues
+    
+    async def _get_npm_package_info(self, pkg_name: str) -> Optional[Dict]:
+        """Get package info from NPM registry."""
+        if pkg_name in self._package_cache:
+            return self._package_cache[pkg_name]
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"{self.npm_registry}/{pkg_name}"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        self._package_cache[pkg_name] = data
+                        return data
+        except Exception as e:
+            get_logger().warning(f"Failed to fetch NPM info for {pkg_name}: {e}")
+        
+        return None
+    
+    async def _get_internal_package_latest(self, pkg_name: str) -> Optional[str]:
+        """Get latest version of internal package."""
+        # Check database first
+        async with self.db.connection() as conn:
+            row = await conn.fetchrow("""
+                SELECT latest_version FROM internal_packages
+                WHERE package_name = $1
+            """, pkg_name)
+            if row:
+                return row['latest_version']
+        
+        # Could also check private NPM registry here
+        return None
+    
+    def _parse_version(self, version_spec: str) -> Optional[str]:
+        """Parse version from spec (remove ^, ~, etc.)."""
+        if not version_spec:
+            return None
+        # Remove common prefixes
+        clean = re.sub(r'^[\^~>=<]+', '', version_spec)
+        # Remove any remaining non-version chars
+        clean = re.sub(r'[^0-9.].*$', '', clean)
+        return clean if clean else None
+
+
+class PackageVersionTracker:
+    """Track package versions across all repositories."""
+    
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+    
+    async def update_repo_dependencies(
+        self, 
+        repo_id: int, 
+        package_json_content: str
+    ) -> None:
+        """Update tracked dependencies for a repository."""
+        try:
+            pkg = json.loads(package_json_content)
+        except json.JSONDecodeError:
+            return
+        
+        deps = {
+            **pkg.get('dependencies', {}),
+            **pkg.get('devDependencies', {})
+        }
+        
+        async with self.db.connection() as conn:
+            # Clear existing dependencies for this repo
+            await conn.execute(
+                "DELETE FROM package_dependencies WHERE repository_id = $1",
+                repo_id
+            )
+            
+            # Insert new dependencies
+            for pkg_name, version_spec in deps.items():
+                await conn.execute("""
+                    INSERT INTO package_dependencies 
+                    (repository_id, package_name, version_spec, dep_type)
+                    VALUES ($1, $2, $3, $4)
+                """, repo_id, pkg_name, version_spec, 
+                    'dev' if pkg_name in pkg.get('devDependencies', {}) else 'prod')
+    
+    async def get_package_usage_report(self, pkg_name: str) -> List[Dict]:
+        """Get report of where a package is used and at what versions."""
+        async with self.db.connection() as conn:
+            rows = await conn.fetch("""
+                SELECT r.org_name, r.repo_name, pd.version_spec, pd.dep_type
+                FROM package_dependencies pd
+                JOIN repositories r ON pd.repository_id = r.id
+                WHERE pd.package_name = $1
+                ORDER BY r.org_name, r.repo_name
+            """, pkg_name)
+        
+        return [dict(r) for r in rows]
+    
+    async def find_version_inconsistencies(self) -> List[Dict]:
+        """Find packages with inconsistent versions across repos."""
+        async with self.db.connection() as conn:
+            rows = await conn.fetch("""
+                SELECT package_name, 
+                       COUNT(DISTINCT version_spec) as version_count,
+                       array_agg(DISTINCT version_spec) as versions,
+                       array_agg(DISTINCT r.repo_name) as repos
+                FROM package_dependencies pd
+                JOIN repositories r ON pd.repository_id = r.id
+                GROUP BY package_name
+                HAVING COUNT(DISTINCT version_spec) > 1
+                ORDER BY version_count DESC
+            """)
+        
+        return [dict(r) for r in rows]
+
+
+class InternalPackageRegistry:
+    """Manage registry of internal Workiz packages."""
+    
+    def __init__(self, db: DatabaseManager):
+        self.db = db
+    
+    async def register_package(
+        self, 
+        name: str, 
+        latest_version: str,
+        repo_url: str,
+        changelog_url: Optional[str] = None
+    ) -> None:
+        """Register or update an internal package."""
+        async with self.db.connection() as conn:
+            await conn.execute("""
+                INSERT INTO internal_packages 
+                (package_name, latest_version, repo_url, changelog_url)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (package_name) DO UPDATE SET
+                    latest_version = EXCLUDED.latest_version,
+                    updated_at = CURRENT_TIMESTAMP
+            """, name, latest_version, repo_url, changelog_url)
+    
+    async def get_all_internal_packages(self) -> List[Dict]:
+        """Get list of all internal packages."""
+        async with self.db.connection() as conn:
+            rows = await conn.fetch("""
+                SELECT package_name, latest_version, repo_url, changelog_url, updated_at
+                FROM internal_packages
+                ORDER BY package_name
+            """)
+        return [dict(r) for r in rows]
+    
+    async def sync_from_npm_org(self, npm_org: str) -> Dict:
+        """Sync internal packages from NPM organization."""
+        # Query NPM for packages under organization
+        async with aiohttp.ClientSession() as session:
+            url = f"https://registry.npmjs.org/-/v1/search?text=scope:{npm_org}&size=250"
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return {'error': f"Failed to fetch from NPM: {response.status}"}
+                
+                data = await response.json()
+                packages = data.get('objects', [])
+                
+                synced = 0
+                for pkg in packages:
+                    pkg_info = pkg.get('package', {})
+                    name = pkg_info.get('name')
+                    version = pkg_info.get('version')
+                    
+                    if name and version:
+                        await self.register_package(
+                            name=name,
+                            latest_version=version,
+                            repo_url=pkg_info.get('links', {}).get('repository', ''),
+                            changelog_url=pkg_info.get('links', {}).get('homepage', '')
+                        )
+                        synced += 1
+                
+                return {'synced': synced, 'total_found': len(packages)}
+```
+
+### Database Schema for NPM Packages
+
+```sql
+-- Package dependencies tracking
+CREATE TABLE package_dependencies (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    package_name VARCHAR(255) NOT NULL,
+    version_spec VARCHAR(100),
+    dep_type VARCHAR(20), -- 'prod' or 'dev'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repository_id, package_name)
+);
+
+-- Internal packages registry
+CREATE TABLE internal_packages (
+    id SERIAL PRIMARY KEY,
+    package_name VARCHAR(255) UNIQUE NOT NULL,
+    latest_version VARCHAR(100),
+    repo_url TEXT,
+    changelog_url TEXT,
+    deprecated BOOLEAN DEFAULT FALSE,
+    deprecation_message TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Package update history
+CREATE TABLE package_updates (
+    id SERIAL PRIMARY KEY,
+    package_name VARCHAR(255) NOT NULL,
+    old_version VARCHAR(100),
+    new_version VARCHAR(100),
+    update_type VARCHAR(50), -- 'major', 'minor', 'patch'
+    breaking_changes TEXT[],
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_package_deps_pkg ON package_dependencies(package_name);
+CREATE INDEX idx_package_deps_repo ON package_dependencies(repository_id);
+CREATE INDEX idx_internal_packages_name ON internal_packages(package_name);
+```
+
+### Integration with PR Review
+
+Update: `pr_agent/tools/pr_reviewer.py`
+
+```python
+# Add to PRReviewer class
+
+async def _check_package_dependencies(self) -> List[Dict]:
+    """Check package.json changes in PR."""
+    issues = []
+    
+    npm_analyzer = NPMPackageAnalyzer(
+        db=self.db,
+        internal_packages=['@workiz/', 'workiz-']
+    )
+    
+    for file in self.git_provider.get_diff_files():
+        if file.filename.endswith('package.json'):
+            # Get old and new content
+            old_content = file.base_file or ''
+            new_content = file.head_file or ''
+            
+            file_issues = await npm_analyzer.analyze_package_json_changes(
+                old_content, 
+                new_content,
+                file.filename
+            )
+            issues.extend(file_issues)
+            
+            # Check version consistency across repos
+            if new_content:
+                try:
+                    pkg = json.loads(new_content)
+                    all_deps = {**pkg.get('dependencies', {}), **pkg.get('devDependencies', {})}
+                    
+                    for pkg_name, version_spec in all_deps.items():
+                        if npm_analyzer.is_internal_package(pkg_name):
+                            consistency_issues = await npm_analyzer.check_version_consistency(
+                                self.git_provider.repo,
+                                pkg_name,
+                                version_spec
+                            )
+                            issues.extend(consistency_issues)
+                except json.JSONDecodeError:
+                    pass
+    
+    return issues
+```
+
+---
+
+## Deployment Guide
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Google Cloud Platform                      │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐ │
+│  │  Cloud Run  │    │  Cloud SQL  │    │  Secret Manager     │ │
+│  │  PR Agent   │◄──►│  PostgreSQL │    │  API Keys/Tokens    │ │
+│  │  Container  │    │  + pgvector │    └─────────────────────┘ │
+│  └──────┬──────┘    └─────────────┘                            │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────┐    ┌─────────────┐                            │
+│  │   Pub/Sub   │    │   GCS       │                            │
+│  │   Events    │    │   (Logs)    │                            │
+│  └─────────────┘    └─────────────┘                            │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                       External Services                          │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌──────────────┐ │
+│  │  GitHub   │  │   Jira    │  │  OpenAI   │  │ NPM Registry │ │
+│  │  API      │  │   API     │  │   API     │  │   (Private)  │ │
+│  └───────────┘  └───────────┘  └───────────┘  └──────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Local Development Setup (Step-by-Step)
+
+#### Step 1: Prerequisites
+
+```bash
+# 1. Install Python 3.12+
+brew install python@3.12
+
+# 2. Install Docker Desktop
+brew install --cask docker
+
+# 3. Install Google Cloud SDK
+brew install google-cloud-sdk
+
+# 4. Install PostgreSQL client (for debugging)
+brew install postgresql@16
+
+# 5. Install ngrok for webhook testing
+brew install ngrok
+```
+
+#### Step 2: Clone and Setup Project
+
+```bash
+# Clone repository
+cd ~/Documents/Github
+git clone https://github.com/workiz/workiz-pr-agent.git
+cd workiz-pr-agent
+
+# Create virtual environment
+python3.12 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install additional Workiz dependencies
+pip install asyncpg jira pgvector aiohttp gitpython pyyaml packaging
+```
+
+#### Step 3: Start Local Database
+
+```bash
+# Create docker-compose.local.yml (if not exists)
+cat > docker-compose.local.yml << 'EOF'
+version: '3.8'
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pr-agent-db
+    environment:
+      POSTGRES_DB: pr_agent
+      POSTGRES_USER: pr_agent
+      POSTGRES_PASSWORD: pr_agent_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pr_agent_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+
+volumes:
+  pr_agent_data:
+EOF
+
+# Create database init directory
+mkdir -p db/init
+
+# Copy schema file
+# (Use the 01_schema.sql from this document)
+
+# Start database
+docker-compose -f docker-compose.local.yml up -d
+
+# Verify database is running
+docker logs pr-agent-db
+```
+
+#### Step 4: Configure Secrets for Local Development
+
+```bash
+# Create secrets file
+cp pr_agent/settings/.secrets_template.toml pr_agent/settings/.secrets.toml
+
+# Edit with your credentials
+nano pr_agent/settings/.secrets.toml
+```
+
+Content of `.secrets.toml`:
+
+```toml
+[openai]
+key = "sk-your-openai-key"
+
+[github]
+user_token = "ghp_your-github-token"
+# For GitHub App (optional for local dev)
+# private_key = """-----BEGIN RSA PRIVATE KEY-----
+# ...
+# -----END RSA PRIVATE KEY-----"""
+# app_id = "123456"
+# webhook_secret = "your-webhook-secret"
+
+[jira]
+api_token = "your-jira-api-token"
+email = "your-email@workiz.com"
+
+[workiz]
+database_url = "postgresql://pr_agent:pr_agent_dev@localhost:5432/pr_agent"
+
+# Internal packages (Workiz NPM organization)
+npm_org = "@workiz"
+internal_package_prefixes = ["@workiz/", "workiz-"]
+```
+
+#### Step 5: Configure Main Settings
+
+Edit `pr_agent/settings/configuration.toml`:
+
+```toml
+[config]
+model = "gpt-4o"
+fallback_models = ["gpt-4o-mini"]
+git_provider = "github"
+
+[workiz]
+enable_cross_repo_context = true
+enable_jira_integration = true
+enable_custom_rules = true
+enable_sql_review = true
+enable_enhanced_security = true
+enable_npm_analysis = true
+
+# RAG settings
+rag_similarity_threshold = 0.75
+rag_max_chunks = 10
+
+# Review settings
+max_review_comments = 15
+
+# Auto-discovery
+auto_discovery_enabled = true
+github_orgs = ["workiz"]
+
+[jira]
+base_url = "https://workiz.atlassian.net"
+
+[pr_reviewer]
+num_max_findings = 15
+require_security_review = true
+```
+
+#### Step 6: Initialize Database and Index Data
+
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Set environment variables
+export WORKIZ_DATABASE_URL="postgresql://pr_agent:pr_agent_dev@localhost:5432/pr_agent"
+export GITHUB_USER_TOKEN="ghp_your_token"
+export OPENAI_KEY="sk-your_key"
+export JIRA_BASE_URL="https://workiz.atlassian.net"
+export JIRA_API_TOKEN="your_jira_token"
+export JIRA_EMAIL="your_email@workiz.com"
+
+# Run auto-discovery (will find all repos and projects)
+python -m pr_agent.cli_admin discover --orgs workiz
+
+# Or manually index specific repos
+python -m pr_agent.cli_admin index-repos --config repos.yaml
+
+# Sync Jira
+python -m pr_agent.cli_admin sync-jira --full
+
+# Check status
+python -m pr_agent.cli_admin status
+```
+
+#### Step 7: Start Local Server
+
+```bash
+# Terminal 1: Start the server
+source venv/bin/activate
+python -m uvicorn pr_agent.servers.github_app:app --host 0.0.0.0 --port 3000 --reload
+
+# Terminal 2: Start ngrok tunnel
+ngrok http 3000
+
+# Note the ngrok URL (e.g., https://abc123.ngrok.io)
+```
+
+#### Step 8: Configure GitHub Webhook (for testing)
+
+1. Go to your test repository Settings → Webhooks
+2. Add webhook:
+   - **Payload URL**: `https://your-ngrok-url.ngrok.io/api/v1/github_webhooks`
+   - **Content type**: `application/json`
+   - **Secret**: (generate and save to `.secrets.toml`)
+   - **Events**: Select:
+     - Pull requests
+     - Pull request reviews
+     - Issue comments
+     - Push
+
+#### Step 9: Test PR Review
+
+```bash
+# Create a test PR in your repository
+# Or use CLI to test directly:
+python pr_agent/cli.py --pr_url="https://github.com/workiz/test-repo/pull/1" review
+```
+
+---
+
+### Production Deployment (Google Cloud)
+
+#### Step 1: GCloud Project Setup
+
+```bash
+# Set your project
+export PROJECT_ID="workiz-pr-agent"
+export REGION="us-central1"
+
+# Login to GCloud
+gcloud auth login
+gcloud config set project $PROJECT_ID
+
+# Enable required APIs
+gcloud services enable \
+    run.googleapis.com \
+    secretmanager.googleapis.com \
+    sqladmin.googleapis.com \
+    cloudbuild.googleapis.com \
+    artifactregistry.googleapis.com
+```
+
+#### Step 2: Create Cloud SQL Instance
+
+```bash
+# Create PostgreSQL instance
+gcloud sql instances create pr-agent-db \
+    --database-version=POSTGRES_16 \
+    --tier=db-g1-small \
+    --region=$REGION \
+    --storage-auto-increase \
+    --backup-start-time=03:00
+
+# Create database
+gcloud sql databases create pr_agent --instance=pr-agent-db
+
+# Create user
+gcloud sql users create pr_agent \
+    --instance=pr-agent-db \
+    --password="$(openssl rand -base64 24)"
+
+# Enable pgvector extension
+gcloud sql connect pr-agent-db --user=postgres
+# In psql:
+# CREATE EXTENSION vector;
+# \q
+```
+
+#### Step 3: Configure Secrets in Google Secret Manager
+
+```bash
+# Create secrets
+echo -n "sk-your-openai-key" | gcloud secrets create openai-key --data-file=-
+
+echo -n "ghp_your-github-token" | gcloud secrets create github-token --data-file=-
+
+# For GitHub App (store private key)
+gcloud secrets create github-app-private-key --data-file=private-key.pem
+
+echo -n "123456" | gcloud secrets create github-app-id --data-file=-
+
+echo -n "your-webhook-secret" | gcloud secrets create github-webhook-secret --data-file=-
+
+echo -n "your-jira-token" | gcloud secrets create jira-api-token --data-file=-
+
+echo -n "your-email@workiz.com" | gcloud secrets create jira-email --data-file=-
+
+# Database password (use the one from Step 2)
+echo -n "database-password" | gcloud secrets create db-password --data-file=-
+
+# List secrets to verify
+gcloud secrets list
+```
+
+#### Step 4: Create Service Account
+
+```bash
+# Create service account
+gcloud iam service-accounts create pr-agent-sa \
+    --display-name="PR Agent Service Account"
+
+# Grant Secret Manager access
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+
+# Grant Cloud SQL access
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/cloudsql.client"
+```
+
+#### Step 5: Update Code for GCloud Secrets Manager
+
+Create: `pr_agent/secret_providers/gcloud_secret_manager.py`
+
+```python
+from google.cloud import secretmanager
+from pr_agent.secret_providers.secret_provider import SecretProvider
+from pr_agent.log import get_logger
+
+class GCloudSecretManagerProvider(SecretProvider):
+    """Secret provider using Google Cloud Secret Manager."""
+    
+    def __init__(self, project_id: str):
+        self.project_id = project_id
+        self.client = secretmanager.SecretManagerServiceClient()
+        self._cache = {}
+    
+    def get_secret(self, secret_name: str, version: str = "latest") -> str:
+        """Get secret from Secret Manager."""
+        cache_key = f"{secret_name}:{version}"
+        
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        
+        try:
+            name = f"projects/{self.project_id}/secrets/{secret_name}/versions/{version}"
+            response = self.client.access_secret_version(name=name)
+            secret_value = response.payload.data.decode("UTF-8")
+            
+            self._cache[cache_key] = secret_value
+            return secret_value
+        
+        except Exception as e:
+            get_logger().error(f"Failed to get secret {secret_name}: {e}")
+            raise
+    
+    def get_all_secrets(self) -> dict:
+        """Get all required secrets."""
+        return {
+            'openai_key': self.get_secret('openai-key'),
+            'github_token': self.get_secret('github-token'),
+            'github_app_private_key': self.get_secret('github-app-private-key'),
+            'github_app_id': self.get_secret('github-app-id'),
+            'github_webhook_secret': self.get_secret('github-webhook-secret'),
+            'jira_api_token': self.get_secret('jira-api-token'),
+            'jira_email': self.get_secret('jira-email'),
+            'db_password': self.get_secret('db-password'),
+        }
+```
+
+Update: `pr_agent/config_loader.py`
+
+```python
+# Add to config_loader.py
+
+import os
+
+def load_secrets_from_gcloud():
+    """Load secrets from GCloud Secret Manager if in production."""
+    if os.environ.get('GCLOUD_PROJECT'):
+        from pr_agent.secret_providers.gcloud_secret_manager import GCloudSecretManagerProvider
+        
+        provider = GCloudSecretManagerProvider(os.environ['GCLOUD_PROJECT'])
+        secrets = provider.get_all_secrets()
+        
+        # Set as environment variables
+        os.environ['OPENAI_KEY'] = secrets['openai_key']
+        os.environ['GITHUB_USER_TOKEN'] = secrets['github_token']
+        os.environ['GITHUB_APP_PRIVATE_KEY'] = secrets['github_app_private_key']
+        os.environ['GITHUB_APP_ID'] = secrets['github_app_id']
+        os.environ['GITHUB_WEBHOOK_SECRET'] = secrets['github_webhook_secret']
+        os.environ['JIRA_API_TOKEN'] = secrets['jira_api_token']
+        os.environ['JIRA_EMAIL'] = secrets['jira_email']
+        
+        # Build database URL
+        db_password = secrets['db_password']
+        db_instance = os.environ.get('CLOUD_SQL_INSTANCE', '')
+        os.environ['WORKIZ_DATABASE_URL'] = f"postgresql://pr_agent:{db_password}@/{db_instance}?host=/cloudsql/{db_instance}"
+
+# Call at startup
+if os.environ.get('GCLOUD_PROJECT'):
+    load_secrets_from_gcloud()
+```
+
+#### Step 6: Create Dockerfile for Production
+
+```dockerfile
+# Dockerfile.production
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir asyncpg jira pgvector aiohttp gitpython pyyaml packaging google-cloud-secret-manager
+
+# Copy application
+COPY pr_agent/ ./pr_agent/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Run with gunicorn
+CMD exec gunicorn --bind :$PORT --workers 2 --threads 4 --timeout 300 pr_agent.servers.github_app:app -k uvicorn.workers.UvicornWorker
+```
+
+#### Step 7: Deploy to Cloud Run
+
+```bash
+# Build and push image
+gcloud builds submit \
+    --tag gcr.io/$PROJECT_ID/pr-agent:latest \
+    -f Dockerfile.production .
+
+# Deploy to Cloud Run
+gcloud run deploy pr-agent \
+    --image gcr.io/$PROJECT_ID/pr-agent:latest \
+    --platform managed \
+    --region $REGION \
+    --service-account pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com \
+    --set-env-vars "GCLOUD_PROJECT=$PROJECT_ID" \
+    --set-env-vars "CLOUD_SQL_INSTANCE=$PROJECT_ID:$REGION:pr-agent-db" \
+    --set-env-vars "JIRA_BASE_URL=https://workiz.atlassian.net" \
+    --set-env-vars "GITHUB_ORGS=workiz" \
+    --add-cloudsql-instances $PROJECT_ID:$REGION:pr-agent-db \
+    --memory 2Gi \
+    --cpu 2 \
+    --timeout 300 \
+    --max-instances 10 \
+    --allow-unauthenticated
+
+# Get the deployed URL
+gcloud run services describe pr-agent --region $REGION --format='value(status.url)'
+```
+
+#### Step 8: Configure GitHub App (Production)
+
+1. Go to GitHub Organization Settings → Developer Settings → GitHub Apps
+2. Create new GitHub App:
+   - **Name**: Workiz PR Agent
+   - **Homepage URL**: Your Cloud Run URL
+   - **Webhook URL**: `https://your-cloud-run-url/api/v1/github_webhooks`
+   - **Webhook secret**: (store in Secret Manager)
+   - **Permissions**:
+     - Repository:
+       - Contents: Read
+       - Issues: Read & Write
+       - Pull requests: Read & Write
+       - Commit statuses: Read & Write
+     - Organization:
+       - Members: Read
+   - **Events**:
+     - Issue comment
+     - Pull request
+     - Pull request review
+     - Push
+
+3. Generate and download private key
+4. Store private key in Secret Manager:
+   ```bash
+   gcloud secrets versions add github-app-private-key --data-file=downloaded-key.pem
+   ```
+
+5. Install the GitHub App to your organization
+
+#### Step 9: Configure Jira Webhook (Production)
+
+1. Go to Jira Settings → System → Webhooks
+2. Create webhook:
+   - **URL**: `https://your-cloud-run-url/api/v1/webhooks/jira`
+   - **Events**:
+     - Issue: created, updated, deleted
+
+#### Step 10: Initialize Production Database
+
+```bash
+# Connect to Cloud SQL
+gcloud sql connect pr-agent-db --user=pr_agent
+
+# In psql, run the schema
+\i 01_schema.sql
+
+# Enable pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+# Exit
+\q
+```
+
+#### Step 11: Run Initial Indexing (Production)
+
+```bash
+# Option 1: Use Cloud Run Jobs
+gcloud run jobs create pr-agent-indexing \
+    --image gcr.io/$PROJECT_ID/pr-agent:latest \
+    --region $REGION \
+    --service-account pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com \
+    --set-env-vars "GCLOUD_PROJECT=$PROJECT_ID" \
+    --add-cloudsql-instances $PROJECT_ID:$REGION:pr-agent-db \
+    --command "python" \
+    --args="-m,pr_agent.cli_admin,discover,--orgs,workiz"
+
+# Execute the job
+gcloud run jobs execute pr-agent-indexing --region $REGION
+
+# Option 2: Use Admin API
+curl -X POST "https://your-cloud-run-url/api/v1/admin/discovery" \
+    -H "Content-Type: application/json" \
+    -d '{"org_names": ["workiz"]}'
+```
+
+#### Step 12: Set Up Scheduled Jobs
+
+```bash
+# Create Cloud Scheduler for periodic sync
+gcloud scheduler jobs create http pr-agent-sync \
+    --location $REGION \
+    --schedule "0 */6 * * *" \
+    --uri "https://your-cloud-run-url/api/v1/admin/sync/all" \
+    --http-method POST \
+    --oidc-service-account-email pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com
+
+# Create job for Jira sync
+gcloud scheduler jobs create http jira-sync \
+    --location $REGION \
+    --schedule "0 */2 * * *" \
+    --uri "https://your-cloud-run-url/api/v1/admin/sync/jira" \
+    --http-method POST \
+    --oidc-service-account-email pr-agent-sa@$PROJECT_ID.iam.gserviceaccount.com
+```
+
+---
+
+### Monitoring and Logging
+
+#### Cloud Logging Setup
+
+```bash
+# View logs
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=pr-agent" \
+    --limit 100 \
+    --format="table(timestamp,textPayload)"
+
+# Create log-based metric for errors
+gcloud logging metrics create pr-agent-errors \
+    --description="PR Agent error count" \
+    --filter='resource.type="cloud_run_revision" AND resource.labels.service_name="pr-agent" AND severity>=ERROR'
+```
+
+#### Cloud Monitoring Alerts
+
+```bash
+# Create alert policy for high error rate
+gcloud alpha monitoring policies create \
+    --display-name="PR Agent High Error Rate" \
+    --condition-display-name="Error rate > 5%" \
+    --condition-filter='metric.type="logging.googleapis.com/user/pr-agent-errors" AND resource.type="cloud_run_revision"' \
+    --condition-threshold-value=0.05 \
+    --condition-threshold-duration=300s \
+    --notification-channels=your-channel-id
+```
+
+---
+
+## Updated Database Schema
+
+Add to the database schema in the main plan:
+
+```sql
+-- Additional tables for multi-database support
+
+-- Track database queries found in code
+CREATE TABLE database_queries (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    file_path TEXT NOT NULL,
+    line_number INT,
+    query_type VARCHAR(50), -- 'mysql', 'mongodb', 'elasticsearch'
+    operation VARCHAR(50), -- 'select', 'insert', 'update', 'delete', 'find', 'aggregate'
+    query_content TEXT,
+    tables_collections TEXT[], -- Tables or collections involved
+    potential_issues JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- PubSub topology tracking
+CREATE TABLE pubsub_events (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    file_path TEXT NOT NULL,
+    line_number INT,
+    topic VARCHAR(255) NOT NULL,
+    event_type VARCHAR(50), -- 'publish' or 'subscribe'
+    handler_name VARCHAR(255),
+    message_schema VARCHAR(255), -- DTO class name
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexing jobs history
+CREATE TABLE indexing_jobs (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    job_type VARCHAR(50), -- 'full', 'incremental'
+    status VARCHAR(50), -- 'pending', 'running', 'completed', 'failed'
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    stats JSONB,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create indexes
+CREATE INDEX idx_database_queries_repo ON database_queries(repository_id);
+CREATE INDEX idx_pubsub_events_topic ON pubsub_events(topic);
+CREATE INDEX idx_pubsub_events_type ON pubsub_events(event_type);
+CREATE INDEX idx_indexing_jobs_status ON indexing_jobs(status);
+```
+
+---
+
 ## Appendix: Key Existing Code References
 
 ### Command Routing (`pr_agent/agent/pr_agent.py`)
@@ -2168,12 +7052,201 @@ Extra instructions:
 
 ---
 
+## Summary: Addressing All Requirements
+
+### ✅ Languages and Frameworks Covered
+
+| Stack | Analyzer | Rules | Notes |
+|-------|----------|-------|-------|
+| **PHP** | `PHPAnalyzer` | php_avoid_raw_sql, php_no_dd, eloquent_n_plus_one, mass_assignment, env_in_code | Laravel patterns, routes, event handlers |
+| **NodeJS (JS)** | `JavaScriptAnalyzer` | js_no_console, callback_hell, no_var, mutation_in_reduce | Express routes, EventEmitter patterns |
+| **NodeJS (TS)** | `TypeScriptAnalyzer` | ts_no_any, ts_no_ignore, prefer_readonly | Extends JS analyzer, adds interfaces/types |
+| **NestJS (TS)** | `NestJSAnalyzer` | nestjs_di_injection, nestjs_controller_logic, nestjs_async_handler, nestjs_no_logger_context, nestjs_pubsub_no_ack | Controllers, Services, Modules, DTOs, PubSub handlers |
+| **React (TS)** | `ReactAnalyzer` | react_inline_styles, react_missing_key, react_index_as_key, react_useeffect_no_deps, react_class_component | Components, Hooks, Context, Redux |
+| **Python** | `PythonAnalyzer` | py_no_print, py_type_hints, py_docstrings, py_exception_handling | FastAPI, Django, Flask patterns |
+
+### ✅ Databases Covered
+
+| Database | Analyzer | Key Checks |
+|----------|----------|------------|
+| **MySQL** | `MySQLAnalyzer` in `sql_analyzer.py` | SELECT *, LIMIT without ORDER BY, missing indexes, N+1 queries, SQL injection |
+| **MongoDB** | `MongoDBAnalyzer` | Queries without indexes, $regex without anchor, large $in arrays, updates without operators |
+| **Elasticsearch** | `ElasticsearchAnalyzer` | Wildcard queries, script queries, deep pagination |
+
+### ✅ NPM Package Management
+
+| Feature | Implementation | Description |
+|---------|----------------|-------------|
+| **Version tracking** | `PackageVersionTracker` | Tracks all package versions across repos |
+| **Internal packages** | `InternalPackageRegistry` | Registry of @workiz/* packages with latest versions |
+| **Outdated detection** | `NPMPackageAnalyzer` | Flags outdated internal packages in PRs |
+| **Version consistency** | `check_version_consistency()` | Alerts when same package has different versions across repos |
+| **Breaking changes** | Major version detection | Warns on major version bumps |
+| **Deprecation check** | NPM registry query | Warns if using deprecated packages |
+
+### ✅ Auto-Discovery
+
+| Component | Service | Automation |
+|-----------|---------|------------|
+| **GitHub Repos** | `GitHubDiscoveryService` | Auto-discovers all repos in organization |
+| **Jira Projects** | `JiraProjectDiscoveryService` | Auto-discovers all accessible Jira projects |
+| **New repo indexing** | `AutoDiscoveryScheduler` | Automatically indexes newly discovered repos |
+| **Scheduled discovery** | Cloud Scheduler | Runs every 6 hours to find new repos/projects |
+
+### ✅ PubSub Events System
+
+- **`PubSubAnalyzer`**: Extracts publishers and subscribers from code
+- **Topology tracking**: Database table `pubsub_events` stores all event relationships
+- **Cross-repo analysis**: Identifies orphan publishers/subscribers across repositories
+- **NestJS patterns**: Detects `@PubSubTopic`, `@PubSubEvent`, `@EventPattern`, `@OnEvent`
+- **Message schema detection**: Links events to DTOs
+
+### ✅ Initial Data Population
+
+| Command | Purpose |
+|---------|---------|
+| `python -m pr_agent.cli_admin index-repos --config repos.yaml` | Full repository indexing |
+| `python -m pr_agent.cli_admin sync-jira --projects WORK,DEVOPS --full` | Full Jira sync |
+| `python -m pr_agent.cli_admin status` | Check indexing status |
+| Docker Compose + `db/init/01_schema.sql` | Database schema creation |
+
+### ✅ Continuous Updates
+
+| Method | Trigger | Action |
+|--------|---------|--------|
+| **GitHub Webhook** | Push to main/develop | Incremental repo indexing |
+| **GitHub Webhook** | PR merged | Incremental repo indexing |
+| **Jira Webhook** | Issue created/updated | Single ticket sync |
+| **Cron Job** | Scheduled (hourly) | Incremental sync all repos + Jira |
+| **Admin API** | Manual trigger | On-demand indexing via `/api/v1/admin/*` |
+
+### Files to Create (Summary)
+
+```
+pr_agent/
+├── db/
+│   ├── __init__.py
+│   └── connection.py                    # PostgreSQL connection manager
+├── integrations/
+│   ├── __init__.py
+│   └── jira_client.py                   # Jira API integration
+├── services/
+│   ├── __init__.py
+│   ├── indexing_service.py              # Repository indexing
+│   ├── jira_sync_service.py             # Jira synchronization
+│   └── discovery_service.py             # Auto-discovery for repos/Jira
+├── servers/
+│   └── admin_api.py                     # Admin endpoints (add to existing)
+├── secret_providers/
+│   └── gcloud_secret_manager.py         # GCloud Secrets Manager integration
+├── tools/
+│   ├── global_context_provider.py       # RAG for cross-repo context
+│   ├── jira_context_provider.py         # RAG for Jira tickets
+│   ├── custom_rules_engine.py           # Custom review rules
+│   ├── custom_rules_loader.py           # Load rules from TOML/DB
+│   ├── sql_analyzer.py                  # MySQL/MongoDB/ES analyzer
+│   ├── pubsub_analyzer.py               # PubSub topology analyzer
+│   ├── security_analyzer.py             # Deep security checks
+│   ├── npm_package_analyzer.py          # NPM package version management
+│   └── language_analyzers/
+│       ├── __init__.py
+│       ├── base_analyzer.py
+│       ├── php_analyzer.py
+│       ├── javascript_analyzer.py
+│       ├── typescript_analyzer.py
+│       ├── nestjs_analyzer.py
+│       ├── react_analyzer.py
+│       └── python_analyzer.py           # Python/FastAPI/Django support
+├── settings/
+│   └── workiz_rules.toml                # Custom rules configuration
+├── cli_admin.py                         # Admin CLI for data management
+db/
+└── init/
+    └── 01_schema.sql                    # PostgreSQL schema
+docker-compose.local.yml                  # Local DB setup
+Dockerfile.production                     # Production Docker image
+repos.yaml                                # Repository configuration
+```
+
+### Quick Start Checklist (Local Development)
+
+1. [ ] Clone the repository
+2. [ ] Set up Python 3.12 virtual environment
+3. [ ] Install dependencies: `pip install -r requirements.txt asyncpg jira pgvector gitpython aiohttp packaging`
+4. [ ] Start PostgreSQL: `docker-compose -f docker-compose.local.yml up -d`
+5. [ ] Create `.secrets.toml` with credentials (GitHub, OpenAI, Jira)
+6. [ ] Run auto-discovery: `python -m pr_agent.cli_admin discover --orgs workiz`
+7. [ ] Run Jira sync: `python -m pr_agent.cli_admin sync-jira --full`
+8. [ ] Sync internal NPM packages: `python -m pr_agent.cli_admin sync-npm --org @workiz`
+9. [ ] Start server: `python -m uvicorn pr_agent.servers.github_app:app --port 3000`
+10. [ ] Start ngrok: `ngrok http 3000`
+11. [ ] Configure GitHub webhook with ngrok URL
+12. [ ] Test with a PR review: `/review`
+
+### Production Deployment Checklist (GCloud)
+
+1. [ ] **GCloud Setup**
+   - [ ] Set project: `gcloud config set project workiz-pr-agent`
+   - [ ] Enable APIs: Cloud Run, Secret Manager, Cloud SQL, Cloud Build
+   
+2. [ ] **Database**
+   - [ ] Create Cloud SQL PostgreSQL instance
+   - [ ] Enable pgvector extension
+   - [ ] Run schema migration
+
+3. [ ] **Secrets (GCloud Secret Manager)**
+   - [ ] `openai-key` - OpenAI API key
+   - [ ] `github-token` - GitHub personal access token
+   - [ ] `github-app-private-key` - GitHub App private key
+   - [ ] `github-app-id` - GitHub App ID
+   - [ ] `github-webhook-secret` - Webhook secret
+   - [ ] `jira-api-token` - Jira API token
+   - [ ] `jira-email` - Jira email
+   - [ ] `db-password` - Database password
+
+4. [ ] **Service Account**
+   - [ ] Create service account: `pr-agent-sa`
+   - [ ] Grant Secret Manager access
+   - [ ] Grant Cloud SQL Client access
+
+5. [ ] **Deploy**
+   - [ ] Build container: `gcloud builds submit`
+   - [ ] Deploy to Cloud Run
+   - [ ] Note the service URL
+
+6. [ ] **GitHub App Configuration**
+   - [ ] Create GitHub App in organization
+   - [ ] Set webhook URL to Cloud Run service
+   - [ ] Configure permissions (Contents, Issues, PRs, Commit statuses)
+   - [ ] Install App to organization
+
+7. [ ] **Jira Webhook**
+   - [ ] Create webhook in Jira settings
+   - [ ] Point to `{service-url}/api/v1/webhooks/jira`
+
+8. [ ] **Scheduled Jobs**
+   - [ ] Create Cloud Scheduler for discovery (every 6 hours)
+   - [ ] Create Cloud Scheduler for Jira sync (every 2 hours)
+
+9. [ ] **Monitoring**
+   - [ ] Set up Cloud Logging
+   - [ ] Create error rate alerts
+   - [ ] Set up uptime checks
+
+10. [ ] **Initial Data**
+    - [ ] Run discovery job
+    - [ ] Verify repos are indexed
+    - [ ] Verify Jira projects synced
+
+---
+
 ## Next Steps
 
 1. **Review this document** with the team
 2. **Set up local development environment** following the guide above
 3. **Create the database schema** in a local PostgreSQL instance
-4. **Start Phase 1** implementation
+4. **Configure repos.yaml** with your actual repository URLs
+5. **Start Phase 1** implementation (database setup + global context)
 
 For questions or clarifications, refer to the original qodo-ai/pr-agent documentation at https://qodo-merge-docs.qodo.ai/
 
