@@ -1,8 +1,6 @@
 # Workiz PR Agent - Local Development Setup
 # Usage: docker-compose up -d db
 
-version: '3.8'
-
 services:
   db:
     image: pgvector/pgvector:pg16
