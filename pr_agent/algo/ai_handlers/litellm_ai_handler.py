@@ -353,6 +353,11 @@ class LiteLLMAIHandler(BaseAiHandler):
                     reasoning_effort = config_effort
                 except (ValueError, TypeError):
                     reasoning_effort = ReasoningEffort.MEDIUM.value
+                    if config_effort is not None:
+                        get_logger().warning(
+                            f"Invalid reasoning_effort '{config_effort}' in config. "
+                            f"Using default '{reasoning_effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
+                        )
 
                 get_logger().info(f"Adding reasoning_effort with value {reasoning_effort} to model {model}.")
                 kwargs["reasoning_effort"] = reasoning_effort
