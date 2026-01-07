@@ -140,10 +140,10 @@ def run_migrations():
             logger.info("Running migration", extra={"context": {"file": migration_file.name}})
             try:
                 with open(migration_file) as f:
-                    sql = f.read()
+                    migration_sql = f.read()
                 
                 with conn.transaction():
-                    conn.execute(sql)
+                    conn.execute(migration_sql)
                     conn.execute(
                         "INSERT INTO schema_migrations (filename) VALUES (%s)",
                         (migration_file.name,)
