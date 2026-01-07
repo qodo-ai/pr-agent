@@ -4,6 +4,7 @@ Following the same pattern as spam-detect service.
 """
 import logging
 import os
+import threading
 from contextlib import contextmanager
 
 from pgvector.psycopg import register_vector
@@ -15,15 +16,22 @@ dsn = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5
 
 pool = ConnectionPool(dsn, min_size=1, max_size=10)
 
+_vector_lock = threading.Lock()
 _vector_registered = False
 _vector_registration_failed = False
 
 
 def _register_vector_once(conn):
-    """Register pgvector extension on first connection."""
+    """Register pgvector extension on first connection (thread-safe)."""
     global _vector_registered, _vector_registration_failed
     
-    if not _vector_registered and not _vector_registration_failed:
+    if _vector_registered or _vector_registration_failed:
+        return
+    
+    with _vector_lock:
+        if _vector_registered or _vector_registration_failed:
+            return
+        
         try:
             register_vector(conn)
             _vector_registered = True
