@@ -82,7 +82,23 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **Auto-Fix Agent** | AI-powered automatic code fixes | ✅ Planned |
 | **Auto-Discovery** | Automatic repo/project detection | ✅ Planned |
 | **Admin UI** | Web dashboard for management | ✅ Planned |
+| **🤖 Knowledge Assistant** | Ask questions about your codebase | ✅ Planned |
 | **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
+
+### 🤖 Knowledge Assistant (NEW!)
+
+Ask questions about your entire codebase in natural language:
+
+```
+"How does the notification service communicate with users-service?"
+"Who has been working on the checkout flow recently?"
+"What PRs were merged to payments this month?"
+"What bugs were reported for the mobile app?"
+"Which services subscribe to USER_CREATED event?"
+"Where is the payment processing logic?"
+```
+
+Uses RAG to search across code, architecture (RepoSwarm), Jira tickets, commits, PRs, and contributor history. Available in the Admin UI.
 
 ### Automation Summary (100% Webhook-Driven)
 

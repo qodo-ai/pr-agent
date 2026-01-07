@@ -986,6 +986,78 @@ def sync_npm():
             click.echo(f"  Synced {result.get('synced', 0)} packages")
 
 
+@cli.command('sync-github-activity')
+@click.option('--days', default=90, help='Number of days to sync')
+@click.option('--repo', '-r', help='Specific repository (default: all)')
+def sync_github_activity(days, repo):
+    """Sync GitHub commits, PRs, and contributor activity for Knowledge Assistant."""
+    import requests
+    from datetime import datetime, timedelta
+    
+    github_token = os.environ.get('GITHUB_USER_TOKEN')
+    headers = {'Authorization': f'token {github_token}'}
+    since = (datetime.now() - timedelta(days=days)).isoformat()
+    
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            # Get repos to sync
+            if repo:
+                cur.execute("SELECT id, repo_name FROM repositories WHERE repo_name = %s", (repo,))
+            else:
+                cur.execute("SELECT id, repo_name FROM repositories WHERE active = TRUE")
+            
+            repos = cur.fetchall()
+            
+            for repo_id, repo_name in repos:
+                click.echo(f"Syncing activity for {repo_name}...")
+                
+                # Sync commits
+                commits_url = f"https://api.github.com/repos/Workiz/{repo_name}/commits"
+                resp = requests.get(commits_url, headers=headers, params={'since': since, 'per_page': 100})
+                if resp.status_code == 200:
+                    for commit in resp.json():
+                        cur.execute("""
+                            INSERT INTO github_activity 
+                            (repository_id, activity_type, github_id, author, title, description, created_at)
+                            VALUES (%s, 'commit', %s, %s, %s, %s, %s)
+                            ON CONFLICT (repository_id, activity_type, github_id) DO UPDATE
+                            SET title = EXCLUDED.title
+                        """, (
+                            repo_id,
+                            commit['sha'][:12],
+                            commit['commit']['author']['name'],
+                            commit['commit']['message'].split('\n')[0][:200],
+                            commit['commit']['message'],
+                            commit['commit']['author']['date']
+                        ))
+                    click.echo(f"  Synced {len(resp.json())} commits")
+                
+                # Sync PRs
+                prs_url = f"https://api.github.com/repos/Workiz/{repo_name}/pulls"
+                resp = requests.get(prs_url, headers=headers, params={'state': 'all', 'per_page': 100})
+                if resp.status_code == 200:
+                    for pr in resp.json():
+                        cur.execute("""
+                            INSERT INTO github_activity 
+                            (repository_id, activity_type, github_id, author, title, description, created_at)
+                            VALUES (%s, 'pr', %s, %s, %s, %s, %s)
+                            ON CONFLICT (repository_id, activity_type, github_id) DO UPDATE
+                            SET title = EXCLUDED.title
+                        """, (
+                            repo_id,
+                            str(pr['number']),
+                            pr['user']['login'],
+                            pr['title'],
+                            pr.get('body', ''),
+                            pr['created_at']
+                        ))
+                    click.echo(f"  Synced {len(resp.json())} PRs")
+            
+            conn.commit()
+    
+    click.echo("GitHub activity sync complete!")
+
+
 @cli.command('analyze-repos')
 @click.option('--repo', '-r', help='Specific repository to analyze')
 @click.option('--all', 'analyze_all', is_flag=True, help='Analyze all repositories')
@@ -1100,7 +1172,10 @@ python scripts/cli_admin.py sync-jira --full
 # 6. Sync internal @workiz packages from GitHub Packages
 python scripts/cli_admin.py sync-npm
 
-# 7. Check status
+# 7. Sync GitHub activity (commits, PRs) for Knowledge Assistant
+python scripts/cli_admin.py sync-github-activity --days 90
+
+# 8. Check status
 python scripts/cli_admin.py status
 ```
 
@@ -1111,7 +1186,10 @@ PR Agent Status
 Repositories: 50+
 Code Chunks: 10000+
 Jira Tickets: 500+
+GitHub Activity: 5000+ commits, 500+ PRs
 Reviews: 0  (none yet, webhooks will populate)
+
+Knowledge Assistant ready! 🤖
 ```
 
 **After bootstrap, webhooks take over!** All future updates happen automatically via real-time webhooks.
@@ -1136,13 +1214,15 @@ All updates are triggered by **webhooks** in real-time. CronJobs are only used a
 │  │ pull_request       │───────► WorkizPRReviewer                                     │
 │  │ (opened/updated)   │         ├─► Load context (RepoSwarm, Jira)                   │
 │  └────────────────────┘         ├─► Apply rules & analyzers                          │
-│                                 └─► Post review ──────────────────► GitHub           │
+│                        ───────► └─► Post review ──────────────────► GitHub           │
+│                        ───────► store_pr_activity() → github_activity (Knowledge)    │
 │                                                                                       │
 │  ┌────────────────────┐                                                              │
 │  │ push               │───────► index_repository_incremental()                       │
 │  │ (to main branch)   │         └─► Update code_chunks ───────────► PostgreSQL       │
 │  └────────────────────┘───────► run_reposwarm_analysis()                             │
 │                                 └─► Update repo_analysis_cache ───► PostgreSQL       │
+│                        ───────► store_push_commits() → github_activity (Knowledge)   │
 │                                                                                       │
 │  ┌────────────────────┐                                                              │
 │  │ repository.created │───────► discover_and_register_repo()                         │
@@ -1203,7 +1283,7 @@ from pr_agent.tools.reposwarm.investigator import RepositoryInvestigator
 
 @router.post("/api/v1/webhooks/push")
 async def handle_push_webhook(request: Request):
-    """Handle push events for incremental indexing and RepoSwarm analysis."""
+    """Handle push events for incremental indexing, RepoSwarm analysis, and activity tracking."""
     payload = await request.json()
     
     # Only process pushes to main branches
@@ -1215,6 +1295,7 @@ async def handle_push_webhook(request: Request):
         return {"status": "skipped", "reason": "not a main branch"}
     
     repo_url = payload.get('repository', {}).get('html_url')
+    repo_name = payload.get('repository', {}).get('name')
     
     # Trigger incremental indexing for code chunks
     asyncio.create_task(index_repository_incremental(repo_url, branch))
@@ -1222,7 +1303,44 @@ async def handle_push_webhook(request: Request):
     # Trigger RepoSwarm analysis (runs in background)
     asyncio.create_task(run_reposwarm_analysis(repo_url, branch))
     
+    # Store commits for Knowledge Assistant (from webhook payload)
+    commits = payload.get('commits', [])
+    asyncio.create_task(store_push_commits(repo_name, commits))
+    
     return {"status": "indexing_started"}
+
+
+async def store_push_commits(repo_name: str, commits: list):
+    """Store commits from push webhook for Knowledge Assistant."""
+    from pr_agent.db.conn import get_conn, put_conn
+    
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            # Get repository ID
+            cur.execute("SELECT id FROM repositories WHERE repo_name = %s", (repo_name,))
+            row = cur.fetchone()
+            if not row:
+                return
+            repo_id = row[0]
+            
+            for commit in commits:
+                cur.execute("""
+                    INSERT INTO github_activity 
+                    (repository_id, activity_type, github_id, author, title, description, created_at)
+                    VALUES (%s, 'commit', %s, %s, %s, %s, %s)
+                    ON CONFLICT (repository_id, activity_type, github_id) DO NOTHING
+                """, (
+                    repo_id,
+                    commit.get('id', '')[:12],
+                    commit.get('author', {}).get('name', 'unknown'),
+                    commit.get('message', '').split('\n')[0][:200],
+                    commit.get('message', ''),
+                    commit.get('timestamp')
+                ))
+            conn.commit()
+    finally:
+        put_conn(conn)
 
 
 async def run_reposwarm_analysis(repo_url: str, branch: str):

@@ -291,12 +291,43 @@ CREATE TABLE internal_packages (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- GitHub activity for Knowledge Assistant
+CREATE TABLE github_activity (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    activity_type VARCHAR(50),  -- 'commit', 'pr', 'review'
+    github_id VARCHAR(100),     -- SHA for commits, PR number for PRs
+    author VARCHAR(255),
+    title TEXT,
+    description TEXT,
+    files_changed JSONB,
+    created_at TIMESTAMP,
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repository_id, activity_type, github_id)
+);
+
+-- Conversation history for Knowledge Assistant
+CREATE TABLE assistant_conversations (
+    id SERIAL PRIMARY KEY,
+    session_id UUID NOT NULL,
+    user_id VARCHAR(255),
+    role VARCHAR(20) NOT NULL,  -- 'user' or 'assistant'
+    content TEXT NOT NULL,
+    context_used JSONB,         -- Sources used for the answer
+    tokens_used INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX idx_code_chunks_embedding ON code_chunks USING ivfflat (embedding vector_cosine_ops);
 CREATE INDEX idx_jira_tickets_embedding ON jira_tickets USING ivfflat (embedding vector_cosine_ops);
 CREATE INDEX idx_code_chunks_repo ON code_chunks(repository_id);
 CREATE INDEX idx_pubsub_events_topic ON pubsub_events(topic);
 CREATE INDEX idx_api_usage_timestamp ON api_usage(timestamp);
+CREATE INDEX idx_github_activity_author ON github_activity(author);
+CREATE INDEX idx_github_activity_created ON github_activity(created_at);
+CREATE INDEX idx_github_activity_repo ON github_activity(repository_id);
+CREATE INDEX idx_assistant_conversations_session ON assistant_conversations(session_id);
 ```
 
 ---
@@ -2662,6 +2693,11 @@ class InternalPackageRegistry:
 │   │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │   │
 │   │  │Dashboard │ │  Repos   │ │  Rules   │ │ Analytics│ │ Settings │  │   │
 │   │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │   │
+│   │                                                                      │   │
+│   │  ┌──────────────────────────────────────────────────────────────┐   │   │
+│   │  │                   🤖 Knowledge Assistant                      │   │   │
+│   │  │  "Ask anything about your codebase, PRs, tickets..."         │   │   │
+│   │  └──────────────────────────────────────────────────────────────┘   │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 │                                    │                                         │
 │                                    │ REST API                                │
@@ -2671,6 +2707,7 @@ class InternalPackageRegistry:
 │   │  /api/admin/dashboard    /api/admin/repositories                     │   │
 │   │  /api/admin/rules        /api/admin/analytics                        │   │
 │   │  /api/admin/costs        /api/admin/settings                         │   │
+│   │  /api/admin/ask          ← NEW: Knowledge Assistant                  │   │
 │   └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -2683,6 +2720,7 @@ class InternalPackageRegistry:
 4. **Analytics**: Review quality, auto-fix success, API costs
 5. **RepoSwarm Status**: Architecture analysis status
 6. **Settings**: Model configuration, thresholds, team management
+7. **🤖 Knowledge Assistant**: Ask questions about your codebase (NEW!)
 
 ### Admin API Endpoints
 
@@ -2727,6 +2765,858 @@ async def get_analytics(start_date: str, end_date: str):
 @admin_router.get("/costs")
 async def get_costs(period: str = "month"):
     pass
+```
+
+---
+
+## 12.1 Knowledge Assistant
+
+A ChatGPT-like interface that lets developers ask questions about the entire codebase using RAG.
+
+### What Can You Ask?
+
+| Category | Example Questions |
+|----------|-------------------|
+| **Architecture** | "How does the notification service communicate with the user service?" |
+| **Code** | "Where is the payment processing logic?" |
+| **APIs** | "What endpoints does the auth service expose?" |
+| **PubSub** | "Which services subscribe to the USER_CREATED event?" |
+| **Developers** | "Who worked on the checkout flow recently?" |
+| **PRs** | "What PRs were merged to the payments service this month?" |
+| **Commits** | "What changed in the auth service last week?" |
+| **Jira** | "What bugs were reported for the mobile app?" |
+| **Dependencies** | "Which services use @workiz/config-loader?" |
+| **Reviews** | "What are the common issues found in code reviews?" |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        Knowledge Assistant Flow                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  User Question                                                               │
+│  "Which services call the users API?"                                        │
+│       │                                                                      │
+│       ▼                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Question Classifier                               │    │
+│  │  Determines which data sources to query:                            │    │
+│  │  • code_chunks (RAG)                                                │    │
+│  │  • repo_analysis_cache (RepoSwarm)                                  │    │
+│  │  • jira_tickets                                                     │    │
+│  │  • review_history                                                   │    │
+│  │  • GitHub API (commits, PRs, contributors)                          │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│       │                                                                      │
+│       ▼                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Context Retrieval                                 │    │
+│  │                                                                      │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │    │
+│  │  │ Vector Search│  │ SQL Queries  │  │ GitHub API   │               │    │
+│  │  │ (pgvector)   │  │ (metadata)   │  │ (real-time)  │               │    │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘               │    │
+│  │         │                 │                 │                        │    │
+│  │         └─────────────────┼─────────────────┘                        │    │
+│  │                           ▼                                          │    │
+│  │                    Combined Context                                  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│       │                                                                      │
+│       ▼                                                                      │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                         LLM (Claude)                                 │    │
+│  │  System: "You are a helpful assistant with access to Workiz         │    │
+│  │          codebase knowledge. Answer based on the context below."    │    │
+│  │                                                                      │    │
+│  │  Context: [Retrieved chunks, analysis, tickets, commits...]         │    │
+│  │                                                                      │    │
+│  │  Question: "Which services call the users API?"                     │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│       │                                                                      │
+│       ▼                                                                      │
+│  Answer with sources:                                                        │
+│  "Based on the RepoSwarm analysis, the following services call the          │
+│   users API:                                                                 │
+│   - notifications-service (GET /users/:id) - src/services/user.service.ts  │
+│   - payments-service (GET /users/:id/billing) - src/api/users.ts           │
+│   - auth-service (POST /users) - src/controllers/auth.controller.ts"       │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Database Schema Addition
+
+```sql
+-- Conversation history for Knowledge Assistant
+CREATE TABLE IF NOT EXISTS assistant_conversations (
+    id SERIAL PRIMARY KEY,
+    session_id UUID NOT NULL,
+    user_id VARCHAR(255),
+    role VARCHAR(20) NOT NULL,  -- 'user' or 'assistant'
+    content TEXT NOT NULL,
+    context_used JSONB,         -- Sources used for the answer
+    tokens_used INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_assistant_conversations_session 
+    ON assistant_conversations(session_id);
+
+-- Track which commits/PRs we've indexed for contributor queries
+CREATE TABLE IF NOT EXISTS github_activity (
+    id SERIAL PRIMARY KEY,
+    repository_id INT REFERENCES repositories(id),
+    activity_type VARCHAR(50),  -- 'commit', 'pr', 'review'
+    github_id VARCHAR(100),     -- SHA for commits, PR number for PRs
+    author VARCHAR(255),
+    title TEXT,
+    description TEXT,
+    files_changed JSONB,
+    created_at TIMESTAMP,
+    synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(repository_id, activity_type, github_id)
+);
+
+CREATE INDEX idx_github_activity_author ON github_activity(author);
+CREATE INDEX idx_github_activity_created ON github_activity(created_at);
+```
+
+### API Implementation
+
+```python
+# pr_agent/servers/admin_api.py
+
+from pydantic import BaseModel
+from typing import List, Optional
+import uuid
+
+class AskRequest(BaseModel):
+    question: str
+    session_id: Optional[str] = None
+    include_sources: bool = True
+
+class Source(BaseModel):
+    type: str  # 'code', 'architecture', 'jira', 'commit', 'pr', 'review'
+    title: str
+    url: Optional[str]
+    snippet: Optional[str]
+
+class AskResponse(BaseModel):
+    answer: str
+    sources: List[Source]
+    session_id: str
+
+
+@admin_router.post("/ask", response_model=AskResponse)
+async def ask_knowledge_assistant(request: AskRequest):
+    """
+    Ask questions about your codebase, PRs, tickets, commits, etc.
+    Uses RAG to find relevant context and LLM to generate answer.
+    """
+    from pr_agent.tools.knowledge_assistant import KnowledgeAssistant
+    
+    session_id = request.session_id or str(uuid.uuid4())
+    
+    assistant = KnowledgeAssistant(
+        db=get_db_connection(),
+        ai_handler=get_ai_handler(),
+        github_token=os.environ.get('GITHUB_USER_TOKEN')
+    )
+    
+    result = await assistant.ask(
+        question=request.question,
+        session_id=session_id,
+        include_sources=request.include_sources
+    )
+    
+    return AskResponse(
+        answer=result['answer'],
+        sources=result['sources'],
+        session_id=session_id
+    )
+
+
+@admin_router.get("/ask/history/{session_id}")
+async def get_conversation_history(session_id: str):
+    """Get conversation history for a session."""
+    conn = get_db_connection()
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT role, content, context_used, created_at
+            FROM assistant_conversations
+            WHERE session_id = %s
+            ORDER BY created_at ASC
+        """, (session_id,))
+        rows = cur.fetchall()
+    
+    return [
+        {
+            "role": row[0],
+            "content": row[1],
+            "sources": row[2],
+            "timestamp": row[3]
+        }
+        for row in rows
+    ]
+```
+
+### Knowledge Assistant Core
+
+```python
+# pr_agent/tools/knowledge_assistant.py
+
+from typing import Dict, List, Optional
+from dataclasses import dataclass
+import json
+
+
+@dataclass
+class RetrievedContext:
+    type: str
+    content: str
+    metadata: Dict
+    relevance_score: float
+
+
+class KnowledgeAssistant:
+    """
+    RAG-based assistant for answering questions about the codebase.
+    Combines multiple data sources: code, architecture, Jira, GitHub activity.
+    """
+    
+    def __init__(self, db, ai_handler, github_token: str):
+        self.db = db
+        self.ai_handler = ai_handler
+        self.github_token = github_token
+    
+    async def ask(
+        self, 
+        question: str, 
+        session_id: str,
+        include_sources: bool = True
+    ) -> Dict:
+        """Answer a question using RAG."""
+        
+        # 1. Classify the question to determine which sources to query
+        query_plan = await self._classify_question(question)
+        
+        # 2. Retrieve relevant context from each source
+        contexts = await self._retrieve_context(question, query_plan)
+        
+        # 3. Build the prompt with context
+        prompt = self._build_prompt(question, contexts)
+        
+        # 4. Get answer from LLM
+        answer, tokens = await self.ai_handler.chat_completion(
+            model="claude-sonnet-4-20250514",
+            system=self._get_system_prompt(),
+            user=prompt
+        )
+        
+        # 5. Extract sources from contexts
+        sources = self._format_sources(contexts) if include_sources else []
+        
+        # 6. Save to conversation history
+        await self._save_conversation(session_id, question, answer, sources, tokens)
+        
+        return {
+            'answer': answer,
+            'sources': sources
+        }
+    
+    async def _classify_question(self, question: str) -> Dict:
+        """Determine which data sources to query based on the question."""
+        
+        # Use LLM to classify
+        classification_prompt = f"""
+        Classify this question about a codebase. Return JSON with boolean fields:
+        - needs_code_search: true if question is about specific code/implementation
+        - needs_architecture: true if question is about service structure/APIs/events
+        - needs_jira: true if question is about tickets/bugs/features
+        - needs_commits: true if question is about recent changes/who changed what
+        - needs_prs: true if question is about pull requests/reviews
+        - needs_contributors: true if question is about who works on what
+        
+        Question: {question}
+        
+        Return only valid JSON, no explanation.
+        """
+        
+        response, _ = await self.ai_handler.chat_completion(
+            model="claude-sonnet-4-20250514",
+            system="You classify questions. Return only JSON.",
+            user=classification_prompt
+        )
+        
+        try:
+            return json.loads(response)
+        except:
+            # Default to searching everything
+            return {
+                'needs_code_search': True,
+                'needs_architecture': True,
+                'needs_jira': False,
+                'needs_commits': False,
+                'needs_prs': False,
+                'needs_contributors': False
+            }
+    
+    async def _retrieve_context(
+        self, 
+        question: str, 
+        query_plan: Dict
+    ) -> List[RetrievedContext]:
+        """Retrieve relevant context from multiple sources."""
+        contexts = []
+        
+        # 1. Code chunks (vector search)
+        if query_plan.get('needs_code_search'):
+            code_contexts = await self._search_code_chunks(question)
+            contexts.extend(code_contexts)
+        
+        # 2. RepoSwarm architecture analysis
+        if query_plan.get('needs_architecture'):
+            arch_contexts = await self._search_architecture(question)
+            contexts.extend(arch_contexts)
+        
+        # 3. Jira tickets
+        if query_plan.get('needs_jira'):
+            jira_contexts = await self._search_jira(question)
+            contexts.extend(jira_contexts)
+        
+        # 4. GitHub commits
+        if query_plan.get('needs_commits'):
+            commit_contexts = await self._search_commits(question)
+            contexts.extend(commit_contexts)
+        
+        # 5. Pull requests
+        if query_plan.get('needs_prs'):
+            pr_contexts = await self._search_prs(question)
+            contexts.extend(pr_contexts)
+        
+        # 6. Contributors
+        if query_plan.get('needs_contributors'):
+            contributor_contexts = await self._search_contributors(question)
+            contexts.extend(contributor_contexts)
+        
+        # Sort by relevance and limit
+        contexts.sort(key=lambda x: x.relevance_score, reverse=True)
+        return contexts[:10]  # Top 10 most relevant
+    
+    async def _search_code_chunks(self, question: str) -> List[RetrievedContext]:
+        """Vector search in code_chunks table."""
+        # Generate embedding for question
+        embedding = await self._get_embedding(question)
+        
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    c.file_path,
+                    c.chunk_content,
+                    c.chunk_type,
+                    r.repo_name,
+                    1 - (c.embedding <=> %s::vector) as similarity
+                FROM code_chunks c
+                JOIN repositories r ON c.repository_id = r.id
+                WHERE c.embedding IS NOT NULL
+                ORDER BY c.embedding <=> %s::vector
+                LIMIT 5
+            """, (embedding, embedding))
+            
+            rows = cur.fetchall()
+        
+        return [
+            RetrievedContext(
+                type='code',
+                content=row[1],
+                metadata={
+                    'file_path': row[0],
+                    'chunk_type': row[2],
+                    'repo': row[3]
+                },
+                relevance_score=row[4]
+            )
+            for row in rows
+        ]
+    
+    async def _search_architecture(self, question: str) -> List[RetrievedContext]:
+        """Search RepoSwarm analysis results."""
+        # Simple text search in JSONB
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    repo_url,
+                    repo_type,
+                    analysis_result
+                FROM repo_analysis_cache
+                WHERE analysis_result::text ILIKE %s
+                LIMIT 5
+            """, (f'%{question.split()[0]}%',))  # Simple keyword match
+            
+            rows = cur.fetchall()
+        
+        contexts = []
+        for row in rows:
+            analysis = row[2] if isinstance(row[2], dict) else json.loads(row[2])
+            for key, value in analysis.items():
+                if isinstance(value, str) and len(value) > 50:
+                    contexts.append(RetrievedContext(
+                        type='architecture',
+                        content=f"## {key}\n{value[:2000]}",
+                        metadata={
+                            'repo_url': row[0],
+                            'repo_type': row[1],
+                            'analysis_type': key
+                        },
+                        relevance_score=0.7
+                    ))
+        
+        return contexts[:3]
+    
+    async def _search_jira(self, question: str) -> List[RetrievedContext]:
+        """Search Jira tickets."""
+        embedding = await self._get_embedding(question)
+        
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    ticket_key,
+                    summary,
+                    description,
+                    status,
+                    issue_type,
+                    1 - (embedding <=> %s::vector) as similarity
+                FROM jira_tickets
+                WHERE embedding IS NOT NULL
+                ORDER BY embedding <=> %s::vector
+                LIMIT 5
+            """, (embedding, embedding))
+            
+            rows = cur.fetchall()
+        
+        return [
+            RetrievedContext(
+                type='jira',
+                content=f"[{row[0]}] {row[1]}\n{row[2][:500] if row[2] else ''}",
+                metadata={
+                    'ticket_key': row[0],
+                    'status': row[3],
+                    'type': row[4]
+                },
+                relevance_score=row[5]
+            )
+            for row in rows
+        ]
+    
+    async def _search_commits(self, question: str) -> List[RetrievedContext]:
+        """Search recent commits."""
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    g.author,
+                    g.title,
+                    g.description,
+                    g.created_at,
+                    r.repo_name,
+                    g.files_changed
+                FROM github_activity g
+                JOIN repositories r ON g.repository_id = r.id
+                WHERE g.activity_type = 'commit'
+                AND (g.title ILIKE %s OR g.description ILIKE %s)
+                ORDER BY g.created_at DESC
+                LIMIT 5
+            """, (f'%{question}%', f'%{question}%'))
+            
+            rows = cur.fetchall()
+        
+        return [
+            RetrievedContext(
+                type='commit',
+                content=f"Commit by {row[0]} in {row[4]}: {row[1]}",
+                metadata={
+                    'author': row[0],
+                    'repo': row[4],
+                    'date': str(row[3]),
+                    'files': row[5]
+                },
+                relevance_score=0.6
+            )
+            for row in rows
+        ]
+    
+    async def _search_prs(self, question: str) -> List[RetrievedContext]:
+        """Search pull requests."""
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    g.github_id,
+                    g.author,
+                    g.title,
+                    g.description,
+                    g.created_at,
+                    r.repo_name
+                FROM github_activity g
+                JOIN repositories r ON g.repository_id = r.id
+                WHERE g.activity_type = 'pr'
+                AND (g.title ILIKE %s OR g.description ILIKE %s)
+                ORDER BY g.created_at DESC
+                LIMIT 5
+            """, (f'%{question}%', f'%{question}%'))
+            
+            rows = cur.fetchall()
+        
+        return [
+            RetrievedContext(
+                type='pr',
+                content=f"PR #{row[0]} by {row[1]} in {row[5]}: {row[2]}",
+                metadata={
+                    'pr_number': row[0],
+                    'author': row[1],
+                    'repo': row[5],
+                    'date': str(row[4])
+                },
+                relevance_score=0.6
+            )
+            for row in rows
+        ]
+    
+    async def _search_contributors(self, question: str) -> List[RetrievedContext]:
+        """Search for contributor information."""
+        with self.db.cursor() as cur:
+            cur.execute("""
+                SELECT 
+                    author,
+                    r.repo_name,
+                    COUNT(*) as activity_count,
+                    MAX(g.created_at) as last_active
+                FROM github_activity g
+                JOIN repositories r ON g.repository_id = r.id
+                WHERE g.author ILIKE %s
+                GROUP BY author, r.repo_name
+                ORDER BY activity_count DESC
+                LIMIT 10
+            """, (f'%{question}%',))
+            
+            rows = cur.fetchall()
+        
+        return [
+            RetrievedContext(
+                type='contributor',
+                content=f"{row[0]} - {row[2]} activities in {row[1]}, last active: {row[3]}",
+                metadata={
+                    'author': row[0],
+                    'repo': row[1],
+                    'activity_count': row[2]
+                },
+                relevance_score=0.5
+            )
+            for row in rows
+        ]
+    
+    def _get_system_prompt(self) -> str:
+        return """You are a helpful assistant with deep knowledge of the Workiz codebase.
+        
+You have access to:
+- Code from all repositories
+- Architecture analysis (APIs, events, dependencies)
+- Jira tickets (bugs, features, tasks)
+- Recent commits and PRs
+- Developer activity
+
+When answering:
+1. Be specific and cite sources (file paths, ticket numbers, PR numbers)
+2. If you find relevant code, include snippets
+3. If asked about who worked on something, mention the developer names
+4. If you don't have enough information, say so
+5. Format your answer with markdown for readability
+"""
+    
+    def _build_prompt(self, question: str, contexts: List[RetrievedContext]) -> str:
+        context_text = "\n\n---\n\n".join([
+            f"**[{ctx.type.upper()}]** {ctx.metadata.get('repo', '')}\n{ctx.content}"
+            for ctx in contexts
+        ])
+        
+        return f"""Based on the following context from the codebase, answer the question.
+
+## Context
+
+{context_text}
+
+## Question
+
+{question}
+
+## Answer
+"""
+    
+    def _format_sources(self, contexts: List[RetrievedContext]) -> List[Dict]:
+        sources = []
+        for ctx in contexts:
+            source = {
+                'type': ctx.type,
+                'title': '',
+                'url': None,
+                'snippet': ctx.content[:200] if ctx.content else None
+            }
+            
+            if ctx.type == 'code':
+                source['title'] = f"{ctx.metadata.get('repo')}/{ctx.metadata.get('file_path')}"
+                source['url'] = f"https://github.com/Workiz/{ctx.metadata.get('repo')}/blob/main/{ctx.metadata.get('file_path')}"
+            elif ctx.type == 'architecture':
+                source['title'] = f"Architecture: {ctx.metadata.get('repo_type')}"
+            elif ctx.type == 'jira':
+                source['title'] = ctx.metadata.get('ticket_key')
+                source['url'] = f"https://workiz.atlassian.net/browse/{ctx.metadata.get('ticket_key')}"
+            elif ctx.type == 'pr':
+                source['title'] = f"PR #{ctx.metadata.get('pr_number')} in {ctx.metadata.get('repo')}"
+                source['url'] = f"https://github.com/Workiz/{ctx.metadata.get('repo')}/pull/{ctx.metadata.get('pr_number')}"
+            elif ctx.type == 'commit':
+                source['title'] = f"Commit in {ctx.metadata.get('repo')} by {ctx.metadata.get('author')}"
+            elif ctx.type == 'contributor':
+                source['title'] = ctx.metadata.get('author')
+            
+            sources.append(source)
+        
+        return sources
+    
+    async def _get_embedding(self, text: str) -> List[float]:
+        """Get embedding for text using OpenAI."""
+        import openai
+        
+        client = openai.OpenAI()
+        response = client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
+    
+    async def _save_conversation(
+        self, 
+        session_id: str, 
+        question: str, 
+        answer: str, 
+        sources: List[Dict],
+        tokens: int
+    ):
+        """Save conversation to history."""
+        with self.db.cursor() as cur:
+            # Save user question
+            cur.execute("""
+                INSERT INTO assistant_conversations 
+                (session_id, role, content, tokens_used)
+                VALUES (%s, 'user', %s, 0)
+            """, (session_id, question))
+            
+            # Save assistant answer
+            cur.execute("""
+                INSERT INTO assistant_conversations 
+                (session_id, role, content, context_used, tokens_used)
+                VALUES (%s, 'assistant', %s, %s, %s)
+            """, (session_id, answer, json.dumps(sources), tokens))
+        
+        self.db.commit()
+```
+
+### Frontend Component (React)
+
+```tsx
+// admin-ui/src/components/KnowledgeAssistant.tsx
+
+import { useState, useRef, useEffect } from 'react';
+import { Send, Bot, User, ExternalLink } from 'lucide-react';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+}
+
+interface Source {
+  type: string;
+  title: string;
+  url?: string;
+  snippet?: string;
+}
+
+export function KnowledgeAssistant() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+
+    const question = input;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: question }]);
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/admin/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          session_id: sessionId,
+          include_sources: true
+        })
+      });
+
+      const data = await response.json();
+      setSessionId(data.session_id);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: data.answer,
+        sources: data.sources
+      }]);
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.'
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-200px)] bg-gray-900 rounded-lg">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-700">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Bot className="w-6 h-6 text-blue-400" />
+          Knowledge Assistant
+        </h2>
+        <p className="text-sm text-gray-400">
+          Ask anything about code, PRs, tickets, commits, and more
+        </p>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="text-center text-gray-500 mt-8">
+            <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
+            <p>Ask me anything about your codebase!</p>
+            <div className="mt-4 grid grid-cols-2 gap-2 max-w-md mx-auto text-sm">
+              {[
+                "How does auth work?",
+                "Who worked on payments?",
+                "Recent bugs in mobile app",
+                "What APIs does users-service expose?"
+              ].map((suggestion, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInput(suggestion)}
+                  className="p-2 bg-gray-800 rounded hover:bg-gray-700 text-left"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}
+          >
+            {msg.role === 'assistant' && (
+              <Bot className="w-8 h-8 text-blue-400 shrink-0" />
+            )}
+            <div
+              className={`max-w-[80%] rounded-lg p-3 ${
+                msg.role === 'user'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-100'
+              }`}
+            >
+              <div className="prose prose-invert prose-sm">
+                {msg.content}
+              </div>
+              
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <p className="text-xs text-gray-400 mb-2">Sources:</p>
+                  <div className="space-y-1">
+                    {msg.sources.map((source, j) => (
+                      <a
+                        key={j}
+                        href={source.url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs text-blue-400 hover:underline"
+                      >
+                        <span className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">
+                          {source.type}
+                        </span>
+                        {source.title}
+                        {source.url && <ExternalLink className="w-3 h-3" />}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            {msg.role === 'user' && (
+              <User className="w-8 h-8 text-gray-400 shrink-0" />
+            )}
+          </div>
+        ))}
+
+        {loading && (
+          <div className="flex gap-3">
+            <Bot className="w-8 h-8 text-blue-400 shrink-0" />
+            <div className="bg-gray-800 rounded-lg p-3">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
+                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-100" />
+                <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-200" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <form onSubmit={handleSubmit} className="p-4 border-t border-gray-700">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about code, PRs, tickets, commits..."
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={loading}
+          />
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg px-4 py-2"
+          >
+            <Send className="w-5 h-5" />
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 ```
 
 ---
