@@ -394,3 +394,13 @@ pr_commands = [
     "/review",
     "/improve",
 ]
+
+# Generic push outputs configuration (disabled by default). This allows emitting PR outputs
+# to stdout, a local file, or a generic webhook without calling provider-specific APIs.
+# To enable, set enable=true and choose one or more channels.
+[push_outputs]
+enable = false
+channels = ["stdout"]
+file_path = "pr-agent-outputs/reviews.jsonl"
+webhook_url = ""
+presentation = "markdown"

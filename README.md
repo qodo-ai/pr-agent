@@ -227,6 +227,33 @@ ___
 </div>
 <hr>
 
+## Provider-agnostic push outputs and Slack relay
+
+PR-Agent can optionally emit review results to external sinks without calling git provider APIs.
+This is disabled by default. To enable and forward to Slack via a lightweight relay:
+
+1) Start the relay (in a separate shell):
+   - Set an Incoming Webhook URL for Slack:
+     - CMD:  set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/TXXXX/BXXXX/XXXXXXXX
+     - PS:   $env:SLACK_WEBHOOK_URL="https://hooks.slack.com/services/TXXXX/BXXXX/XXXXXXXX"
+   - Run:
+     uvicorn pr_agent.servers.push_outputs_relay:app --host 0.0.0.0 --port 8000
+
+2) In your repository, configure PR-Agent to emit to the relay by creating .pr_agent.toml:
+
+```
+[push_outputs]
+enable = true
+channels = ["webhook"]
+webhook_url = "http://localhost:8000/relay"
+presentation = "markdown"
+```
+
+Notes:
+- This mechanism is provider-agnostic and uses minimal API calls.
+- You can also use the "file" channel to append JSONL records locally.
+- The relay transforms the generic payload into Slack’s Incoming Webhook schema.
+
 ## Try It Now
 
 Try the GPT-5 powered PR-Agent instantly on _your public GitHub repository_. Just mention `@CodiumAI-Agent` and add the desired command in any PR comment. The agent will generate a response based on your command.
