@@ -785,9 +785,6 @@ class GitLabProvider(GitProvider):
     def get_pr_description_full(self):
         return self.mr.description
 
-    def get_issue_comments(self):
-        return self.mr.notes.list(get_all=True)[::-1]
-
     def get_repo_settings(self):
         try:
             main_branch = self.gl.projects.get(self.id_project).default_branch
@@ -875,6 +872,38 @@ class GitLabProvider(GitProvider):
     def _get_merge_request(self):
         mr = self.gl.projects.get(self.id_project).mergerequests.get(self.id_mr)
         return mr
+
+<<<<<<< HEAD
+=======
+    def _get_project(self, project_path: str):
+        try:
+            encoded = urllib.parse.quote_plus(project_path)
+            return self.gl.projects.get(encoded)
+        except Exception:
+            return self._project_by_path(project_path)
+
+    def get_issue(self, issue_iid: int, project_path: Optional[str] = None):
+        project = self._get_project(project_path or self.id_project)
+        if project is None:
+            raise GitlabGetError("Project not found")
+        return project.issues.get(issue_iid)
+
+    def list_issues(self, project_path: Optional[str] = None, state: str = "all"):
+        project = self._get_project(project_path or self.id_project)
+        if project is None:
+            raise GitlabGetError("Project not found")
+        return project.issues.list(state=state, iterator=True)
+
+    def get_issue_comments(self, issue=None):
+        if issue is None:
+            try:
+                return self.mr.notes.list(get_all=True)[::-1]
+            except Exception:
+                return []
+        return list(issue.notes.list(iterator=True))
+
+    def create_issue_comment(self, issue, body: str):
+        return issue.notes.create({"body": body})
 
     def get_user_id(self):
         return None
