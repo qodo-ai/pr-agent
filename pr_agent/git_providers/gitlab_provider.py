@@ -969,21 +969,30 @@ class GitLabProvider(GitProvider):
                     raise ValueError("missing scheme or host")
                 netloc = parsed.netloc.split("@")[-1]
                 return f"{parsed.scheme}://oauth2:{access_token}@{netloc}{parsed.path}"
-            except Exception as exc:
+            except Exception as e:
                 get_logger().error(
                     f"Repo URL: {repo_url_to_clone} could not be parsed for clone.",
-                    artifact={"error": str(exc)},
+                    artifact={"error": str(e)},
                 )
                 return None
 
-        # Fallback to legacy gitlab.* parsing when a raw URL is provided.
-        if "gitlab." not in repo_url_to_clone:
-            get_logger().error(f"Repo URL: {repo_url_to_clone} is not a valid gitlab URL.")
-            return None
-        scheme, base_url = repo_url_to_clone.split("gitlab.")
-        if not all([scheme, base_url]):
+        # Fallback for non-HTTP URLs (e.g., ssh or scp-style).
+        try:
+            if "@" in repo_url_to_clone and ":" in repo_url_to_clone and not repo_url_to_clone.startswith("ssh://"):
+                # Handle SCP-like URLs: git@gitlab.com:group/repo.git
+                repo_url_to_clone = "ssh://" + repo_url_to_clone.replace(":", "/", 1)
+
+            from urllib.parse import urlparse
+            parsed = urlparse(repo_url_to_clone)
+            if not parsed.netloc:
+                raise ValueError("missing host")
+
+            netloc = parsed.netloc.split("@")[-1]
+            scheme = parsed.scheme if parsed.scheme else "https"
+            return f"{scheme}://oauth2:{access_token}@{netloc}{parsed.path}"
+        except Exception as e:
             get_logger().error(
-                f"Repo URL: {repo_url_to_clone} is missing prefix: {scheme} and/or base URL: {base_url}."
+                f"Repo URL: {repo_url_to_clone} could not be parsed for clone.",
+                artifact={"error": str(e)},
             )
             return None
-        return f"{scheme}oauth2:{access_token}@gitlab.{base_url}"

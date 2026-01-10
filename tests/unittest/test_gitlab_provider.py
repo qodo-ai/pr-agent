@@ -217,3 +217,19 @@ class TestGitLabProvider:
         result = gitlab_provider._prepare_clone_url_with_token(repo_url)
 
         assert result is None
+
+    def test_prepare_clone_url_with_token_scp_style(self, gitlab_provider):
+        gitlab_provider.gl.oauth_token = "token123"
+        repo_url = "git@gitlab.example.com:group/repo.git"
+
+        result = gitlab_provider._prepare_clone_url_with_token(repo_url)
+
+        assert result == "ssh://oauth2:token123@gitlab.example.com/group/repo.git"
+
+    def test_prepare_clone_url_with_token_ssh_url(self, gitlab_provider):
+        gitlab_provider.gl.oauth_token = "token123"
+        repo_url = "ssh://git@gitlab.example.com/group/repo.git"
+
+        result = gitlab_provider._prepare_clone_url_with_token(repo_url)
+
+        assert result == "ssh://oauth2:token123@gitlab.example.com/group/repo.git"
