@@ -963,7 +963,6 @@ class GitLabProvider(GitProvider):
         # Build a clone URL that works with any host (e.g., gitlab.example.com).
         if repo_url_to_clone.startswith(("http://", "https://")):
             try:
-                from urllib.parse import urlparse
                 parsed = urlparse(repo_url_to_clone)
                 if not parsed.scheme or not parsed.netloc:
                     raise ValueError("missing scheme or host")
@@ -982,7 +981,6 @@ class GitLabProvider(GitProvider):
                 # Handle SCP-like URLs: git@gitlab.com:group/repo.git
                 repo_url_to_clone = "ssh://" + repo_url_to_clone.replace(":", "/", 1)
 
-            from urllib.parse import urlparse
             parsed = urlparse(repo_url_to_clone)
             if not parsed.netloc:
                 raise ValueError("missing host")
