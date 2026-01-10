@@ -40,10 +40,10 @@ class JiraIssueProvider(IssueProvider):
             "maxResults": self.issue_max_results,
             "fields": "summary,description,created,reporter,labels,subtasks",
         }
-        data = self._request_json("search", params, api_version=self.api_version)
+        data = self._request_json("search", params, api_version=self.api_version, suppress_warning=True)
         issues = data.get("issues", []) if isinstance(data, dict) else []
         if not issues and self.api_version < 3:
-            data = self._request_json("search/jql", params, api_version=3)
+            data = self._request_json("search/jql", params, api_version=3, suppress_warning=False)
             issues = data.get("issues", []) if isinstance(data, dict) else []
         return [self._issue_from_payload(item) for item in issues]
 
@@ -79,7 +79,7 @@ class JiraIssueProvider(IssueProvider):
             keys = [key for key in keys if key in self.valid_project_keys]
         return keys
 
-    def _request_json(self, path: str, params: dict, api_version: Optional[int] = None) -> dict:
+    def _request_json(self, path: str, params: dict, api_version: Optional[int] = None, suppress_warning: bool = False) -> dict:
         if not self.is_configured():
             get_logger().warning("Jira client is not configured; skipping issue fetch")
             return {}
@@ -97,7 +97,8 @@ class JiraIssueProvider(IssueProvider):
                 payload = response.read().decode("utf-8")
                 return json.loads(payload)
         except Exception as exc:
-            get_logger().warning("Failed to fetch Jira issues", artifact={"error": str(exc), "url": url})
+            if not suppress_warning:
+                get_logger().warning("Failed to fetch Jira issues", artifact={"error": str(exc), "url": url})
             return {}
 
     def _issue_from_payload(self, issue: dict) -> Issue:
