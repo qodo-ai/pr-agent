@@ -20,3 +20,15 @@ def test_start_uses_port_env(monkeypatch):
     args, kwargs = mock_run.call_args
     assert kwargs["port"] == 4567
     assert kwargs["host"] == "0.0.0.0"
+
+
+def test_start_invalid_port_env(monkeypatch):
+    monkeypatch.setenv("GITLAB__URL", "https://gitlab.example.com")
+    monkeypatch.setenv("PORT", "not-a-number")
+    module = _load_module()
+
+    with mock.patch.object(module.uvicorn, "run") as mock_run:
+        module.start()
+
+    _, kwargs = mock_run.call_args
+    assert kwargs["port"] == 3000

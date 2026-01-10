@@ -310,7 +310,11 @@ app.include_router(router)
 
 
 def start():
-    port = int(os.environ.get("PORT", "3000"))
+    try:
+        port = int(os.environ.get("PORT", "3000"))
+    except ValueError:
+        get_logger().warning("Invalid PORT environment variable, using default port 3000")
+        port = 3000
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 
