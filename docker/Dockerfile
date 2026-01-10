@@ -1,4 +1,5 @@
-FROM python:3.12.10-slim AS base
+ARG BASE_IMAGE=python:3.12.10-slim
+FROM ${BASE_IMAGE} AS base
 
 RUN apt update && apt install --no-install-recommends -y git curl && apt-get clean && rm -rf /var/lib/apt/lists/*
 

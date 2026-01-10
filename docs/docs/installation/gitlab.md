@@ -79,6 +79,13 @@ docker build . -t gitlab_pr_agent --target gitlab_webhook -f docker/Dockerfile
 docker push codiumai/pr-agent:gitlab_webhook  # Push to your Docker repository
 ```
 
+To build from a custom base image (e.g., an internal registry mirror), pass `BASE_IMAGE`:
+
+```bash
+docker build --build-arg BASE_IMAGE=python:3.12.10-slim \
+  -t gitlab_pr_agent --target gitlab_webhook -f docker/Dockerfile
+```
+
 7. Set the environmental variables, the method depends on your docker runtime. Skip this step if you included your secrets/configuration directly in the Docker image.
 
 ```bash
