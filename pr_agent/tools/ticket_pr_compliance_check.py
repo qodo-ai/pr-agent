@@ -11,27 +11,6 @@ GITHUB_TICKET_PATTERN = re.compile(
      r'(https://github[^/]+/[^/]+/[^/]+/issues/\d+)|(\b(\w+)/(\w+)#(\d+)\b)|(#\d+)'
 )
 
-def find_jira_tickets(text):
-    # Regular expression patterns for JIRA tickets
-    patterns = [
-        r'\b[A-Z]{2,10}-\d{1,7}\b',  # Standard JIRA ticket format (e.g., PROJ-123)
-        r'(?:https?://[^\s/]+/browse/)?([A-Z]{2,10}-\d{1,7})\b'  # JIRA URL or just the ticket
-    ]
-
-    tickets = set()
-    for pattern in patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            if isinstance(match, tuple):
-                # If it's a tuple (from the URL pattern), take the last non-empty group
-                ticket = next((m for m in reversed(match) if m), None)
-            else:
-                ticket = match
-            if ticket:
-                tickets.add(ticket)
-
-    return list(tickets)
-
 
 def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url_html='https://github.com'):
     """
