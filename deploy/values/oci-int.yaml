@@ -28,3 +28,12 @@ qdrant:
   enabled: true
   persistence:
     enabled: false
+
+# Override resources for pr-agent to avoid OOM during /similar_issue
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1
+    memory: 1Gi

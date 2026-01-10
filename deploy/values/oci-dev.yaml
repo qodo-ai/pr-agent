@@ -28,3 +28,12 @@ qdrant:
   enabled: true
   persistence:
     enabled: false
+
+# Override resources for pr-agent (default 512Mi limit was too low for /similar_issue)
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1
+    memory: 1Gi
