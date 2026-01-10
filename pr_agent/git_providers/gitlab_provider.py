@@ -71,7 +71,8 @@ class GitLabProvider(GitProvider):
         self.temp_comments = []
         self._submodule_cache: dict[tuple[str, str, str], list[dict]] = {}
         self.pr_url = merge_request_url
-        self._set_merge_request(merge_request_url)
+        if merge_request_url and self._is_merge_request_url(merge_request_url):
+            self._set_merge_request(merge_request_url)
         self.RE_HUNK_HEADER = re.compile(
             r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@[ ]?(.*)")
         self.incremental = incremental
@@ -844,6 +845,13 @@ class GitLabProvider(GitProvider):
             get_logger().warning(f"Failed to remove reaction, error: {e}")
             return False
 
+    def _is_merge_request_url(self, url: str) -> bool:
+        try:
+            path_parts = urlparse(url).path.strip('/').split('/')
+        except Exception:
+            return False
+        return "merge_requests" in path_parts
+
     def _parse_merge_request_url(self, merge_request_url: str) -> Tuple[str, int]:
         parsed_url = urlparse(merge_request_url)
 
@@ -869,12 +877,34 @@ class GitLabProvider(GitProvider):
         # Return the path before 'merge_requests' and the ID
         return project_path, mr_id
 
+    def _parse_issue_url(self, issue_url: str) -> Tuple[str, int]:
+        parsed_url = urlparse(issue_url)
+
+        path_parts = parsed_url.path.strip('/').split('/')
+        if 'issues' not in path_parts:
+            raise ValueError("The provided URL does not appear to be a GitLab issue URL")
+
+        issues_index = path_parts.index('issues')
+        if len(path_parts) <= issues_index + 1:
+            raise ValueError("The provided URL does not contain an issue IID")
+
+        try:
+            issue_iid = int(path_parts[issues_index + 1])
+        except ValueError as e:
+            raise ValueError("Unable to convert issue IID to integer") from e
+
+        project_parts = path_parts[:issues_index]
+        if project_parts and project_parts[-1] == '-':
+            project_parts = project_parts[:-1]
+        project_path = "/".join(project_parts)
+        if project_path.endswith('/-'):
+            project_path = project_path[:-2]
+        return project_path, issue_iid
+
     def _get_merge_request(self):
         mr = self.gl.projects.get(self.id_project).mergerequests.get(self.id_mr)
         return mr
 
-<<<<<<< HEAD
-=======
     def _get_project(self, project_path: str):
         try:
             encoded = urllib.parse.quote_plus(project_path)
@@ -983,22 +1013,36 @@ class GitLabProvider(GitProvider):
         return ""
     #Clone related
     def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        access_token = getattr(self.gl, 'oauth_token', None) or getattr(self.gl, 'private_token', None)
+        if not access_token:
+            get_logger().error("No access token found for GitLab clone.")
+            return None
+
+        # Note: GitLab instances are not always hosted under a gitlab.* domain.
+        # Build a clone URL that works with any host (e.g., git.labs.hosting.cerence.net).
+        if repo_url_to_clone.startswith(("http://", "https://")):
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(repo_url_to_clone)
+                if not parsed.scheme or not parsed.netloc:
+                    raise ValueError("missing scheme or host")
+                netloc = parsed.netloc.split("@")[-1]
+                return f"{parsed.scheme}://oauth2:{access_token}@{netloc}{parsed.path}"
+            except Exception as exc:
+                get_logger().error(
+                    f"Repo URL: {repo_url_to_clone} could not be parsed for clone.",
+                    artifact={"error": str(exc)},
+                )
+                return None
+
+        # Fallback to legacy gitlab.* parsing when a raw URL is provided.
         if "gitlab." not in repo_url_to_clone:
             get_logger().error(f"Repo URL: {repo_url_to_clone} is not a valid gitlab URL.")
             return None
-        (scheme, base_url) = repo_url_to_clone.split("gitlab.")
-        access_token = getattr(self.gl, 'oauth_token', None) or getattr(self.gl, 'private_token', None)
-        if not all([scheme, access_token, base_url]):
-            get_logger().error(f"Either no access token found, or repo URL: {repo_url_to_clone} "
-                               f"is missing prefix: {scheme} and/or base URL: {base_url}.")
+        scheme, base_url = repo_url_to_clone.split("gitlab.")
+        if not all([scheme, base_url]):
+            get_logger().error(
+                f"Repo URL: {repo_url_to_clone} is missing prefix: {scheme} and/or base URL: {base_url}."
+            )
             return None
-
-        #Note that the ""official"" method found here:
-        # https://docs.gitlab.com/user/profile/personal_access_tokens/#clone-repository-using-personal-access-token
-        # requires a username, which may not be applicable.
-        # The following solution is taken from: https://stackoverflow.com/questions/25409700/using-gitlab-token-to-clone-without-authentication/35003812#35003812
-        # For example: For repo url: https://gitlab.codium-inc.com/qodo/autoscraper.git
-        # Then to clone one will issue: 'git clone https://oauth2:<access token>@gitlab.codium-inc.com/qodo/autoscraper.git'
-
-        clone_url = f"{scheme}oauth2:{access_token}@gitlab.{base_url}"
-        return clone_url
+        return f"{scheme}oauth2:{access_token}@gitlab.{base_url}"
