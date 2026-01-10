@@ -18,7 +18,7 @@ class JiraIssueProvider(IssueProvider):
         self.base_url = (jira_settings.get("BASE_URL") or "").rstrip("/")
         self.api_email = jira_settings.get("API_EMAIL") or ""
         self.api_token = jira_settings.get("API_TOKEN") or ""
-        self.api_version = jira_settings.get("API_VERSION", 2)
+        self.api_version = _coerce_int(jira_settings.get("API_VERSION", 2), default=2)
         self.issue_jql = (jira_settings.get("ISSUE_JQL") or "").strip()
         self.issue_projects = _normalize_list(jira_settings.get("ISSUE_PROJECTS", []))
         self.issue_project_map = jira_settings.get("ISSUE_PROJECT_MAP", {}) or {}
@@ -143,6 +143,13 @@ def _normalize_list(value: object) -> List[str]:
     if isinstance(value, str):
         return [item.strip().upper() for item in value.split(",") if item.strip()]
     return [str(item).strip().upper() for item in value if str(item).strip()]
+
+
+def _coerce_int(value: object, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize_project_map(value: object) -> dict:

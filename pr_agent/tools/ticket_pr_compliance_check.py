@@ -1,15 +1,58 @@
 import re
 import traceback
 
+from pr_agent.algo.ticket_utils import find_jira_keys
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers import GithubProvider
-from pr_agent.git_providers import AzureDevopsProvider
+from pr_agent.git_providers import AzureDevopsProvider, GithubProvider
+from pr_agent.issue_providers import get_issue_provider, resolve_issue_provider_name
 from pr_agent.log import get_logger
 
 # Compile the regex pattern once, outside the function
 GITHUB_TICKET_PATTERN = re.compile(
      r'(https://github[^/]+/[^/]+/[^/]+/issues/\d+)|(\b(\w+)/(\w+)#(\d+)\b)|(#\d+)'
 )
+
+
+def _get_pr_title(git_provider) -> str:
+    for attr in ("mr", "pr"):
+        pr_obj = getattr(git_provider, attr, None)
+        title = getattr(pr_obj, "title", None)
+        if title:
+            return title
+    return ""
+
+
+def _build_jira_context_text(git_provider) -> str:
+    parts = []
+    try:
+        title = _get_pr_title(git_provider)
+        if title:
+            parts.append(title)
+    except Exception:
+        pass
+    try:
+        description = git_provider.get_user_description() or ""
+        if description:
+            parts.append(description)
+    except Exception:
+        pass
+    try:
+        branch = git_provider.get_pr_branch() or ""
+        if branch:
+            parts.append(branch)
+    except Exception:
+        pass
+    try:
+        commit_messages = git_provider.get_commit_messages() or ""
+        if commit_messages:
+            parts.append(commit_messages)
+    except Exception:
+        pass
+    return "\n".join(parts)
+
+
+def _resolve_issue_provider_project_path(git_provider) -> str | None:
+    return getattr(git_provider, "id_project", None) or getattr(git_provider, "repo", None)
 
 
 def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url_html='https://github.com'):
@@ -46,6 +89,41 @@ def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url
 async def extract_tickets(git_provider):
     MAX_TICKET_CHARACTERS = 10000
     try:
+        issue_provider_name = resolve_issue_provider_name(
+            get_settings().get("CONFIG.ISSUE_PROVIDER", "auto"),
+            get_settings().config.git_provider,
+        )
+        if issue_provider_name == "jira":
+            jira_context = _build_jira_context_text(git_provider)
+            jira_keys = find_jira_keys(jira_context)
+            if len(jira_keys) > 3:
+                get_logger().info(f"Too many Jira keys found in PR context: {len(jira_keys)}")
+                jira_keys = jira_keys[:3]
+            tickets_content = []
+            if jira_keys:
+                project_path = _resolve_issue_provider_project_path(git_provider)
+                issue_provider = get_issue_provider("jira", project_path=project_path)
+                for jira_key in jira_keys:
+                    try:
+                        issue_main = issue_provider.get_issue(jira_key, project_path)
+                    except Exception as e:
+                        get_logger().warning(f"Failed to fetch Jira issue {jira_key}: {e}")
+                        continue
+                    if not issue_main:
+                        continue
+                    issue_body_str = issue_main.body or ""
+                    if len(issue_body_str) > MAX_TICKET_CHARACTERS:
+                        issue_body_str = issue_body_str[:MAX_TICKET_CHARACTERS] + "..."
+                    tickets_content.append({
+                        "ticket_id": issue_main.key,
+                        "ticket_url": issue_main.url,
+                        "title": issue_main.title,
+                        "body": issue_body_str,
+                        "labels": "",
+                        "sub_issues": [],
+                    })
+            return tickets_content
+
         if isinstance(git_provider, GithubProvider):
             user_description = git_provider.get_user_description()
             tickets = extract_ticket_links_from_pr_description(user_description, git_provider.repo, git_provider.base_url_html)

@@ -8,10 +8,27 @@ from pr_agent.issue_providers.gitlab_issue_provider import GitlabIssueProvider
 from pr_agent.issue_providers.jira_issue_provider import JiraIssueProvider
 
 
-def resolve_issue_provider_name(config_value: Optional[str], git_provider_name: Optional[str]) -> str:
-    value = (config_value or "auto").strip().lower()
+def _normalize_provider_name(value: Optional[object]) -> Optional[str]:
+    if value is None:
+        return None
+    if callable(value):
+        try:
+            value = value()
+        except Exception:
+            return None
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+    else:
+        value = str(value).strip()
+    return value.lower() if value else None
+
+
+def resolve_issue_provider_name(config_value: Optional[str], git_provider_name: Optional[object]) -> str:
+    value = _normalize_provider_name(config_value) or "auto"
     if value == "auto":
-        return (git_provider_name or "gitlab").strip().lower()
+        return _normalize_provider_name(git_provider_name) or "gitlab"
     return value
 
 
