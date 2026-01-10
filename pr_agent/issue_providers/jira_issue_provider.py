@@ -35,15 +35,16 @@ class JiraIssueProvider(IssueProvider):
         if not jql:
             get_logger().warning("Jira issue provider has no JQL or project keys; skipping issue listing.")
             return []
-        data = self._request_json(
-            "search",
-            {
-                "jql": jql,
-                "maxResults": self.issue_max_results,
-                "fields": "summary,description,created,reporter",
-            },
-        )
+        params = {
+            "jql": jql,
+            "maxResults": self.issue_max_results,
+            "fields": "summary,description,created,reporter",
+        }
+        data = self._request_json("search", params, api_version=self.api_version)
         issues = data.get("issues", []) if isinstance(data, dict) else []
+        if not issues and self.api_version < 3:
+            data = self._request_json("search/jql", params, api_version=3)
+            issues = data.get("issues", []) if isinstance(data, dict) else []
         return [self._issue_from_payload(item) for item in issues]
 
     def get_issue(self, issue_id: str, project_path: Optional[str] = None) -> Optional[Issue]:
@@ -53,6 +54,7 @@ class JiraIssueProvider(IssueProvider):
         data = self._request_json(
             f"issue/{urllib.parse.quote(issue_key)}",
             {"fields": "summary,description,created,reporter"},
+            api_version=self.api_version,
         )
         if not data:
             return None
@@ -77,12 +79,13 @@ class JiraIssueProvider(IssueProvider):
             keys = [key for key in keys if key in self.valid_project_keys]
         return keys
 
-    def _request_json(self, path: str, params: dict) -> dict:
+    def _request_json(self, path: str, params: dict, api_version: Optional[int] = None) -> dict:
         if not self.is_configured():
             get_logger().warning("Jira client is not configured; skipping issue fetch")
             return {}
         query = urllib.parse.urlencode(params)
-        url = f"{self.base_url}/rest/api/{self.api_version}/{path}"
+        version = api_version or self.api_version
+        url = f"{self.base_url}/rest/api/{version}/{path}"
         if query:
             url = f"{url}?{query}"
         auth_token = base64.b64encode(f"{self.api_email}:{self.api_token}".encode("utf-8")).decode("utf-8")
