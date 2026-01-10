@@ -956,8 +956,7 @@ class GitLabProvider(GitProvider):
     def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
         access_token = getattr(self.gl, 'oauth_token', None) or getattr(self.gl, 'private_token', None)
         if not access_token:
-            get_logger().error("No access token found for GitLab clone.")
-            return None
+            return self._log_missing_clone_token()
 
         # Note: GitLab instances are not always hosted under a gitlab.* domain.
         # Build a clone URL that works with any host (e.g., gitlab.example.com).
@@ -994,3 +993,8 @@ class GitLabProvider(GitProvider):
                 artifact={"error": str(e)},
             )
             return None
+
+    @staticmethod
+    def _log_missing_clone_token() -> None:
+        get_logger().error("No access token found for GitLab clone.")
+        return None
