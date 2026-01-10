@@ -310,10 +310,21 @@ app.include_router(router)
 
 
 def start():
+    """
+    Start the GitLab webhook server.
+
+    The server port can be configured via the PORT environment variable.
+    Defaults to 3000 if PORT is not set or invalid.
+    """
+    raw_port = os.environ.get("PORT")
     try:
-        port = int(os.environ.get("PORT", "3000"))
-    except ValueError:
-        get_logger().warning("Invalid PORT environment variable, using default port 3000")
+        port = int(raw_port) if raw_port else 3000
+        if not (1 <= port <= 65535):
+            raise ValueError(f"Port {port} is out of valid range")
+        if raw_port:
+            get_logger().info(f"Using custom PORT from environment: {port}")
+    except ValueError as e:
+        get_logger().warning(f"Invalid PORT environment variable ({e}), using default port 3000")
         port = 3000
     uvicorn.run(app, host="0.0.0.0", port=port)
 
