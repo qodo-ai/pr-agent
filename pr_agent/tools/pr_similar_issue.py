@@ -96,6 +96,8 @@ class PRSimilarIssue:
             repo_name_for_index = getattr(self.repo_obj, "path_with_namespace", self.project_path)
 
         repo_name_for_index = repo_name_for_index.lower().replace('/', '-').replace('_/', '-')
+        if self.issue_provider_name == "jira":
+            repo_name_for_index = f"{repo_name_for_index}-jira"
         self.repo_name_for_index = repo_name_for_index
         self.issue_provider = get_issue_provider(
             self.issue_provider_name,
