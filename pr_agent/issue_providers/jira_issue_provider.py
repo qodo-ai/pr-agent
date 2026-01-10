@@ -7,7 +7,7 @@ import urllib.request
 from typing import Iterable, List, Optional
 
 from pr_agent.config_loader import get_settings
-from pr_agent.issue_providers.base import Issue, IssueProvider
+from pr_agent.issue_providers.base import Issue, IssueComment, IssueProvider
 from pr_agent.log import get_logger
 
 
@@ -38,7 +38,7 @@ class JiraIssueProvider(IssueProvider):
         params = {
             "jql": jql,
             "maxResults": self.issue_max_results,
-            "fields": "summary,description,created,reporter",
+            "fields": "summary,description,created,reporter,labels,subtasks",
         }
         data = self._request_json("search", params, api_version=self.api_version)
         issues = data.get("issues", []) if isinstance(data, dict) else []
@@ -53,7 +53,7 @@ class JiraIssueProvider(IssueProvider):
             return None
         data = self._request_json(
             f"issue/{urllib.parse.quote(issue_key)}",
-            {"fields": "summary,description,created,reporter"},
+            {"fields": "summary,description,created,reporter,labels,subtasks"},
             api_version=self.api_version,
         )
         if not data:
@@ -108,6 +108,8 @@ class JiraIssueProvider(IssueProvider):
         created_at = fields.get("created") or ""
         reporter = fields.get("reporter") or {}
         author = {"username": reporter.get("displayName") or reporter.get("name") or reporter.get("emailAddress") or ""}
+        labels = fields.get("labels") or []
+        labels = labels if isinstance(labels, list) else []
         return Issue(
             key=key,
             title=summary,
@@ -115,7 +117,43 @@ class JiraIssueProvider(IssueProvider):
             url=f"{self.base_url}/browse/{key}" if self.base_url else "",
             created_at=created_at,
             author=author,
+            labels=labels,
         )
+
+    def get_issue_comments(self, issue) -> List[IssueComment]:
+        issue_key = getattr(issue, "key", None) or getattr(issue, "id", None)
+        if not issue_key:
+            return []
+        data = self._request_json(
+            f"issue/{urllib.parse.quote(str(issue_key))}/comment",
+            {},
+            api_version=self.api_version,
+        )
+        comments = data.get("comments", []) if isinstance(data, dict) else []
+        results = []
+        for comment in comments:
+            body = comment.get("body") or ""
+            if not body:
+                continue
+            author_obj = comment.get("author") or {}
+            author = ""
+            if isinstance(author_obj, dict):
+                author = author_obj.get("displayName") or author_obj.get("name") or author_obj.get("emailAddress") or ""
+            cid = str(comment.get("id") or "")
+            results.append(
+                IssueComment(
+                    body=body,
+                    url=self._build_comment_url(issue_key, cid),
+                    id=cid,
+                    author=author,
+                )
+            )
+        return results
+
+    def _build_comment_url(self, issue_key: str, comment_id: str) -> str:
+        if not self.base_url or not issue_key or not comment_id:
+            return ""
+        return f"{self.base_url}/browse/{issue_key}?focusedCommentId={comment_id}"
 
     @staticmethod
     def _normalize_description(description: object) -> str:

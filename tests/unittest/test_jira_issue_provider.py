@@ -56,3 +56,39 @@ def test_list_issues_parses_payload():
     assert issues[0].key == "ABC-1"
     assert issues[0].title == "Test issue"
     assert issues[0].description == "Body text"
+
+
+def test_get_issue_comments_parses_payload():
+    issue_payload = {
+        "key": "ABC-1",
+        "fields": {"summary": "Test issue", "description": "Body", "created": "2025-01-01"},
+    }
+    comments_payload = {
+        "comments": [
+            {
+                "id": "200",
+                "body": "First comment",
+                "author": {"displayName": "Bob"},
+            }
+        ]
+    }
+    provider = JiraIssueProvider(
+        settings={
+            "JIRA": {
+                "BASE_URL": "https://jira.example.com",
+                "API_EMAIL": "user@example.com",
+                "API_TOKEN": "token",
+            }
+        },
+        project_path="org/repo",
+    )
+    with patch(
+        "pr_agent.issue_providers.jira_issue_provider.urllib.request.urlopen",
+        side_effect=[_mock_response(issue_payload), _mock_response(comments_payload)],
+    ):
+        issue = provider.get_issue("ABC-1")
+        comments = provider.get_issue_comments(issue)
+    assert len(comments) == 1
+    assert comments[0].body == "First comment"
+    assert comments[0].author == "Bob"
+    assert comments[0].url.endswith("focusedCommentId=200")

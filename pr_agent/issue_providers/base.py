@@ -22,6 +22,7 @@ class Issue:
     created_at: Optional[str] = None
     author: Optional[dict] = None
     comments: List[IssueComment] = field(default_factory=list)
+    labels: List[str] = field(default_factory=list)
 
     @property
     def body(self) -> str:
