@@ -55,45 +55,9 @@ class PRSimilarIssue:
         self.issue_provider = None
         self.jira_keys = []
         if self.provider_name == "github":
-            repo_name, _ = self.git_provider._parse_issue_url(self.resource_url)
-            self.git_provider.repo = repo_name
-            self.repo_obj = self.git_provider.github_client.get_repo(repo_name)
-            self.git_provider.repo_obj = self.repo_obj
-            repo_name_for_index = self.repo_obj.full_name
+            repo_name_for_index = self._init_github_context()
         else:
-            if self.issue_provider_name != "jira" and self._is_issue_url(self.resource_url):
-                self.issue_context = True
-                self.project_path, self.issue_iid = self.git_provider._parse_issue_url(self.resource_url)
-                self.repo_obj = self.git_provider._get_project(self.project_path)
-                if self.repo_obj is None:
-                    raise Exception(f"GitLab project not found: {self.project_path}")
-                self.git_provider.id_project = self.project_path
-                self.git_provider.repo_obj = self.repo_obj
-            else:
-                self.issue_context = False
-                if not getattr(self.git_provider, "mr", None):
-                    raise Exception("GitLab merge request context is required for /similar_issue")
-                self.output_target = self.git_provider.mr
-                self.project_path = self.git_provider.id_project
-                self.repo_obj = self.git_provider.gl.projects.get(self.project_path)
-                self.git_provider.repo_obj = self.repo_obj
-                if self.issue_provider_name == "jira":
-                    self.jira_keys = find_jira_keys(self.resource_url)
-                    if not self.jira_keys:
-                        self.jira_keys = self._extract_jira_keys_from_mr(self.git_provider.mr)
-                    if self.jira_keys:
-                        self.issue_context = True
-                        self.issue_iid = self.jira_keys[0]
-                else:
-                    issue_iid = self._extract_issue_iid_from_text(self._build_query_from_mr(self.git_provider.mr))
-                    if issue_iid:
-                        try:
-                            self._get_issue_by_number(issue_iid)
-                            self.issue_context = True
-                            self.issue_iid = issue_iid
-                        except Exception:
-                            get_logger().debug("Issue reference not found or inaccessible; falling back to MR context.")
-            repo_name_for_index = getattr(self.repo_obj, "path_with_namespace", self.project_path)
+            repo_name_for_index = self._init_gitlab_context()
 
         repo_name_for_index = repo_name_for_index.lower().replace('/', '-').replace('_/', '-')
         if self.issue_provider_name == "jira":
@@ -634,6 +598,57 @@ class PRSimilarIssue:
                     return int(value_str)
                 return value_str
         raise ValueError("Issue number is missing")
+
+    def _init_github_context(self) -> str:
+        repo_name, _ = self.git_provider._parse_issue_url(self.resource_url)
+        self.git_provider.repo = repo_name
+        self.repo_obj = self.git_provider.github_client.get_repo(repo_name)
+        self.git_provider.repo_obj = self.repo_obj
+        return self.repo_obj.full_name
+
+    def _init_gitlab_context(self) -> str:
+        # Issue URL path (non-Jira) – treat it as issue context
+        if self.issue_provider_name != "jira" and self._is_issue_url(self.resource_url):
+            self.issue_context = True
+            self.project_path, self.issue_iid = self.git_provider._parse_issue_url(self.resource_url)
+            self.repo_obj = self.git_provider._get_project(self.project_path)
+            if self.repo_obj is None:
+                raise Exception(f"GitLab project not found: {self.project_path}")
+            self.git_provider.id_project = self.project_path
+            self.git_provider.repo_obj = self.repo_obj
+            return getattr(self.repo_obj, "path_with_namespace", self.project_path)
+
+        # MR context is required from here on
+        if not getattr(self.git_provider, "mr", None):
+            raise Exception("GitLab merge request context is required for /similar_issue")
+
+        self.issue_context = False
+        self.output_target = self.git_provider.mr
+        self.project_path = self.git_provider.id_project
+        self.repo_obj = self.git_provider.gl.projects.get(self.project_path)
+        self.git_provider.repo_obj = self.repo_obj
+
+        if self.issue_provider_name == "jira":
+            self.jira_keys = find_jira_keys(self.resource_url)
+            if not self.jira_keys:
+                self.jira_keys = self._extract_jira_keys_from_mr(self.git_provider.mr)
+            if self.jira_keys:
+                self.issue_context = True
+                self.issue_iid = self.jira_keys[0]
+                return getattr(self.repo_obj, "path_with_namespace", self.project_path)
+
+        issue_iid = self._extract_issue_iid_from_text(self._build_query_from_mr(self.git_provider.mr))
+        if issue_iid:
+            try:
+                self._get_issue_by_number(issue_iid)
+                self.issue_context = True
+                self.issue_iid = issue_iid
+            except Exception as exc:
+                get_logger().debug(
+                    "Issue reference not found or inaccessible; falling back to MR context.",
+                    artifact={"error": str(exc)},
+                )
+        return getattr(self.repo_obj, "path_with_namespace", self.project_path)
 
     def _get_issue_username(self, issue) -> str:
         user = getattr(issue, "user", None)
