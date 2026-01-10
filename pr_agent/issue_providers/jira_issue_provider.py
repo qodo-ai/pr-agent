@@ -162,6 +162,22 @@ class JiraIssueProvider(IssueProvider):
             return ""
         if isinstance(description, str):
             return description
+
+        # Handle Atlassian Document Format (ADF)
+        if isinstance(description, dict) and description.get("type") == "doc":
+            texts: list[str] = []
+
+            def extract_text(node):
+                if isinstance(node, dict):
+                    if node.get("type") == "text" and "text" in node:
+                        texts.append(node["text"])
+                    if "content" in node and isinstance(node["content"], list):
+                        for child in node["content"]:
+                            extract_text(child)
+
+            extract_text(description)
+            return " ".join(texts)
+
         try:
             return str(description)
         except Exception:

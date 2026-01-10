@@ -32,21 +32,7 @@ class PRSimilarIssue:
         if not self.supported:
             return
 
-        self.cli_mode = get_settings().CONFIG.CLI_MODE
-        self.max_issues_to_scan = get_settings().pr_similar_issue.max_issues_to_scan
-        self.token_handler = TokenHandler()
-        self.embedding_model = get_settings().pr_similar_issue.get("embedding_model", DEFAULT_EMBEDDING_MODEL)
-        self.embedding_base_url = get_settings().pr_similar_issue.get("embedding_base_url", "")
-        self.embedding_api_key = get_settings().pr_similar_issue.get("embedding_api_key", "")
-        self.embedding_dim = get_settings().pr_similar_issue.get("embedding_dim", 1536)
-        self.embedding_max_tokens = get_settings().pr_similar_issue.get("embedding_max_tokens", 8000)
-        self.embedding_client = None
-        if self.embedding_base_url:
-            self.embedding_client = EmbeddingClient(
-                self.embedding_base_url,
-                self.embedding_model,
-                api_key=self.embedding_api_key or None,
-            )
+        self._init_embedding_settings()
         self.repo_obj = None
         self.issue_iid = None
         self.project_path = None
@@ -54,11 +40,8 @@ class PRSimilarIssue:
         self.output_target = None
         self.issue_provider = None
         self.jira_keys = []
-        if self.provider_name == "github":
-            repo_name_for_index = self._init_github_context()
-        else:
-            repo_name_for_index = self._init_gitlab_context()
 
+        repo_name_for_index = self._init_repo_context()
         repo_name_for_index = repo_name_for_index.lower().replace('/', '-').replace('_/', '-')
         if self.issue_provider_name == "jira":
             repo_name_for_index = f"{repo_name_for_index}-jira"
@@ -486,18 +469,20 @@ class PRSimilarIssue:
         res = openai.Embedding.create(input=list_to_encode, engine=self.embedding_model)
         return [record['embedding'] for record in res['data']]
 
-    def _embed_texts_with_fallback(self, list_to_encode: list[str]) -> list[list[float]]:
+    def _embed_texts_with_fallback(self, list_to_encode: list[str]) -> tuple[list[list[float]], list[int]]:
         try:
-            return self._embed_texts(list_to_encode)
+            return self._embed_texts(list_to_encode), list(range(len(list_to_encode)))
         except Exception:
             get_logger().error('Failed to embed entire list, embedding one by one...')
             embeds = []
-            for text in list_to_encode:
+            successful_indices = []
+            for idx, text in enumerate(list_to_encode):
                 try:
                     embeds.append(self._embed_texts([text])[0])
+                    successful_indices.append(idx)
                 except Exception:
-                    embeds.append([0] * self.embedding_dim)
-            return embeds
+                    get_logger().warning("Failed to embed text segment; skipping.", artifact={"index": idx})
+            return embeds, successful_indices
 
     def _get_qdrant_vector_size(self) -> int | None:
         try:
@@ -908,10 +893,16 @@ class PRSimilarIssue:
 
         get_logger().info('Embedding...')
         list_to_encode = [doc["text"] for doc in documents]
-        embeds = self._embed_texts_with_fallback(list_to_encode)
+        embeds, successful_indices = self._embed_texts_with_fallback(list_to_encode)
+        if len(successful_indices) != len(documents):
+            documents = [documents[i] for i in successful_indices]
         for doc, vector in zip(documents, embeds):
             doc["vector"] = vector
         get_logger().info('Done')
+
+        if not documents:
+            get_logger().info('No documents to upsert into Qdrant.')
+            return
 
         get_logger().info('Upserting into Qdrant...')
         points = []
