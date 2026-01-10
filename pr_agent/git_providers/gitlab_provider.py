@@ -954,22 +954,36 @@ class GitLabProvider(GitProvider):
         return ""
     #Clone related
     def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
+        access_token = getattr(self.gl, 'oauth_token', None) or getattr(self.gl, 'private_token', None)
+        if not access_token:
+            get_logger().error("No access token found for GitLab clone.")
+            return None
+
+        # Note: GitLab instances are not always hosted under a gitlab.* domain.
+        # Build a clone URL that works with any host (e.g., gitlab.example.com).
+        if repo_url_to_clone.startswith(("http://", "https://")):
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(repo_url_to_clone)
+                if not parsed.scheme or not parsed.netloc:
+                    raise ValueError("missing scheme or host")
+                netloc = parsed.netloc.split("@")[-1]
+                return f"{parsed.scheme}://oauth2:{access_token}@{netloc}{parsed.path}"
+            except Exception as exc:
+                get_logger().error(
+                    f"Repo URL: {repo_url_to_clone} could not be parsed for clone.",
+                    artifact={"error": str(exc)},
+                )
+                return None
+
+        # Fallback to legacy gitlab.* parsing when a raw URL is provided.
         if "gitlab." not in repo_url_to_clone:
             get_logger().error(f"Repo URL: {repo_url_to_clone} is not a valid gitlab URL.")
             return None
-        (scheme, base_url) = repo_url_to_clone.split("gitlab.")
-        access_token = getattr(self.gl, 'oauth_token', None) or getattr(self.gl, 'private_token', None)
-        if not all([scheme, access_token, base_url]):
-            get_logger().error(f"Either no access token found, or repo URL: {repo_url_to_clone} "
-                               f"is missing prefix: {scheme} and/or base URL: {base_url}.")
+        scheme, base_url = repo_url_to_clone.split("gitlab.")
+        if not all([scheme, base_url]):
+            get_logger().error(
+                f"Repo URL: {repo_url_to_clone} is missing prefix: {scheme} and/or base URL: {base_url}."
+            )
             return None
-
-        #Note that the ""official"" method found here:
-        # https://docs.gitlab.com/user/profile/personal_access_tokens/#clone-repository-using-personal-access-token
-        # requires a username, which may not be applicable.
-        # The following solution is taken from: https://stackoverflow.com/questions/25409700/using-gitlab-token-to-clone-without-authentication/35003812#35003812
-        # For example: For repo url: https://gitlab.codium-inc.com/qodo/autoscraper.git
-        # Then to clone one will issue: 'git clone https://oauth2:<access token>@gitlab.codium-inc.com/qodo/autoscraper.git'
-
-        clone_url = f"{scheme}oauth2:{access_token}@gitlab.{base_url}"
-        return clone_url
+        return f"{scheme}oauth2:{access_token}@gitlab.{base_url}"
