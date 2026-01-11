@@ -96,6 +96,8 @@ MAX_TOKENS = {
     'gemini/gemini-2.5-pro-preview-05-06': 1048576,
     'gemini/gemini-2.5-pro-preview-06-05': 1048576,
     'gemini/gemini-2.5-pro': 1048576,
+    'gemini/gemini-3-pro-preview': 1048576,  # Gemini 3 Pro preview - 1M context
+    'gemini/gemini-3-flash-preview': 1048576,  # Gemini 3 Flash preview - 1M context
     'codechat-bison': 6144,
     'codechat-bison-32k': 32000,
     'anthropic.claude-instant-v1': 100000,

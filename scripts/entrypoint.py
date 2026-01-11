@@ -83,7 +83,9 @@ key = "{secrets.get("ANTHROPIC_API_KEY", "")}"
 
 [github]
 deployment_type = "app"
-app_id = {secrets.get("GITHUB_APP_ID", "0")}
+app_id = {secrets.get("GITHUB_APP_ID", "0") or "0"}
+# Installation ID should be set via env var or will be looked up from GitHub
+installation_id = {secrets.get("GITHUB_INSTALLATION_ID", "0") or "0"}
 webhook_secret = "{secrets.get("GITHUB_WEBHOOK_SECRET", "")}"
 private_key = """
 {github_private_key}
