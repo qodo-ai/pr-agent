@@ -276,5 +276,86 @@ def sync_github_activity(ctx, days):
     click.echo(f"    Days to sync: {days}")
 
 
+@cli.command("model-pricing")
+@click.option("--model", "-m", help="Specific model to check (e.g., gemini/gemini-3-pro)")
+@click.option("--filter", "-f", "filter_str", help="Filter models by name (e.g., 'gemini', 'gpt-4')")
+@click.pass_context
+def model_pricing(ctx, model, filter_str):
+    """Show model pricing from LiteLLM's database.
+    
+    LiteLLM maintains an up-to-date community database of model pricing.
+    This command shows what prices will be used for cost tracking.
+    """
+    click.echo("💵 Model Pricing (from LiteLLM)\n")
+    click.echo("=" * 50)
+    
+    try:
+        from pr_agent.db import get_model_pricing, list_available_models_with_pricing
+        
+        if model:
+            pricing = get_model_pricing(model)
+            if pricing:
+                click.echo(f"\n🤖 {model}:")
+                input_per_1m = pricing["input_cost_per_token"] * 1_000_000
+                output_per_1m = pricing["output_cost_per_token"] * 1_000_000
+                click.echo(f"   Input:  ${input_per_1m:.4f} per 1M tokens")
+                click.echo(f"   Output: ${output_per_1m:.4f} per 1M tokens")
+                if pricing.get("max_tokens"):
+                    click.echo(f"   Max Tokens: {pricing['max_tokens']:,}")
+                if pricing.get("max_input_tokens"):
+                    click.echo(f"   Max Input: {pricing['max_input_tokens']:,}")
+                if pricing.get("max_output_tokens"):
+                    click.echo(f"   Max Output: {pricing['max_output_tokens']:,}")
+            else:
+                click.echo(f"❌ Model '{model}' not found in LiteLLM's database.")
+                click.echo("   Fallback pricing will be used for cost estimation.")
+        else:
+            all_models = list_available_models_with_pricing()
+            
+            if filter_str:
+                filtered = {k: v for k, v in all_models.items() if filter_str.lower() in k.lower()}
+            else:
+                common_models = [
+                    "gemini/gemini-3-pro",
+                    "gemini/gemini-2.5-pro",
+                    "gemini/gemini-2.0-flash",
+                    "gemini/gemini-1.5-pro",
+                    "gpt-4o",
+                    "gpt-4o-mini",
+                    "gpt-4-turbo",
+                    "claude-3-5-sonnet",
+                    "claude-3-opus",
+                    "claude-3-haiku",
+                ]
+                filtered = {k: all_models[k] for k in common_models if k in all_models}
+            
+            if not filtered:
+                click.echo("❌ No models found matching criteria.")
+                if filter_str:
+                    click.echo(f"   Filter used: '{filter_str}'")
+                return
+            
+            click.echo(f"\n{'Model':<35} {'Input/1M':<12} {'Output/1M':<12}")
+            click.echo("-" * 60)
+            
+            for model_name in sorted(filtered.keys()):
+                info = filtered[model_name]
+                input_cost = f"${info['input_cost_per_1m']:.4f}"
+                output_cost = f"${info['output_cost_per_1m']:.4f}"
+                click.echo(f"{model_name:<35} {input_cost:<12} {output_cost:<12}")
+            
+            click.echo(f"\n📊 Total models in LiteLLM database: {len(all_models):,}")
+            if filter_str:
+                click.echo(f"   Showing: {len(filtered)} models matching '{filter_str}'")
+            else:
+                click.echo(f"   Showing: {len(filtered)} common models (use --filter for more)")
+        
+    except ImportError as e:
+        click.echo(f"❌ LiteLLM not installed: {e}")
+        click.echo("   Fallback pricing will be used.")
+    except Exception as e:
+        click.echo(f"❌ Error: {e}")
+
+
 if __name__ == "__main__":
     cli()

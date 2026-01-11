@@ -90,7 +90,8 @@ private_key = """
 """
 
 [config]
-model = "gemini/gemini-3-pro"
+# Using preview models as Gemini 3 is still in preview (Jan 2026)
+model = "gemini/gemini-3-pro-preview"
 fallback_models = ["gemini/gemini-2.5-pro"]
 '''
     

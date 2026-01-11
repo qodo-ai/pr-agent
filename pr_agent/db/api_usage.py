@@ -2,6 +2,10 @@
 API Usage Tracking Module
 
 Tracks LLM API calls for cost monitoring and analytics.
+
+Uses LiteLLM's model_cost dictionary for up-to-date pricing information.
+LiteLLM maintains a community-updated pricing database for 100+ LLM models.
+See: https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json
 """
 
 import logging
@@ -11,20 +15,23 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Cost per 1M tokens (approximate, update as needed)
-MODEL_COSTS = {
-    "gemini/gemini-3-pro": {"input": 1.25, "output": 5.00},
-    "gemini/gemini-2.5-pro": {"input": 1.25, "output": 5.00},
-    "gpt-4o": {"input": 2.50, "output": 10.00},
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "claude-3-5-sonnet": {"input": 3.00, "output": 15.00},
-    "claude-3-opus": {"input": 15.00, "output": 75.00},
+# Fallback costs per 1M tokens (used only if LiteLLM doesn't have the model)
+# Updated Jan 2026 based on Google AI pricing
+# These are safety net values - LiteLLM's database is preferred
+FALLBACK_MODEL_COSTS = {
+    "gemini/gemini-3-pro-preview": {"input": 2.00, "output": 12.00},
+    "gemini/gemini-3-pro": {"input": 2.00, "output": 12.00},
+    "gemini/gemini-2.5-pro": {"input": 1.25, "output": 10.00},
+    "gemini/gemini-2.5-flash": {"input": 0.30, "output": 2.50},
 }
 
 
 def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     """
     Estimate the cost of an API call based on model and token counts.
+    
+    Uses LiteLLM's model_cost database for accurate, up-to-date pricing.
+    Falls back to hardcoded estimates for models not in LiteLLM's database.
     
     Args:
         model: The model name (e.g., "gemini/gemini-3-pro")
@@ -34,10 +41,89 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     Returns:
         Estimated cost in USD
     """
-    costs = MODEL_COSTS.get(model, {"input": 1.0, "output": 1.0})
-    input_cost = (input_tokens / 1_000_000) * costs["input"]
-    output_cost = (output_tokens / 1_000_000) * costs["output"]
-    return round(input_cost + output_cost, 6)
+    try:
+        from litellm import cost_per_token
+        
+        input_cost, output_cost = cost_per_token(
+            model=model,
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens
+        )
+        return round(input_cost + output_cost, 6)
+        
+    except Exception as e:
+        logger.debug(
+            "LiteLLM cost calculation failed, using fallback",
+            extra={"context": {"model": model, "error": str(e)}}
+        )
+        costs = FALLBACK_MODEL_COSTS.get(model, {"input": 1.0, "output": 1.0})
+        input_cost = (input_tokens / 1_000_000) * costs["input"]
+        output_cost = (output_tokens / 1_000_000) * costs["output"]
+        return round(input_cost + output_cost, 6)
+
+
+def get_model_pricing(model: str) -> dict[str, float] | None:
+    """
+    Get pricing information for a specific model from LiteLLM.
+    
+    Args:
+        model: The model name (e.g., "gemini/gemini-3-pro")
+        
+    Returns:
+        Dict with input_cost_per_token and output_cost_per_token, or None if not found
+    """
+    try:
+        from litellm import model_cost
+        
+        if model in model_cost:
+            model_info = model_cost[model]
+            return {
+                "input_cost_per_token": model_info.get("input_cost_per_token", 0),
+                "output_cost_per_token": model_info.get("output_cost_per_token", 0),
+                "max_tokens": model_info.get("max_tokens"),
+                "max_input_tokens": model_info.get("max_input_tokens"),
+                "max_output_tokens": model_info.get("max_output_tokens"),
+            }
+        return None
+    except ImportError:
+        logger.warning("LiteLLM not installed, cannot get model pricing")
+        return None
+    except Exception as e:
+        logger.debug(
+            "Failed to get model pricing",
+            extra={"context": {"model": model, "error": str(e)}}
+        )
+        return None
+
+
+def list_available_models_with_pricing() -> dict[str, dict]:
+    """
+    List all models with pricing information from LiteLLM.
+    
+    Returns:
+        Dict mapping model names to their pricing info
+    """
+    try:
+        from litellm import model_cost
+        
+        result = {}
+        for model_name, info in model_cost.items():
+            if info.get("input_cost_per_token") is not None:
+                result[model_name] = {
+                    "input_cost_per_1m": info.get("input_cost_per_token", 0) * 1_000_000,
+                    "output_cost_per_1m": info.get("output_cost_per_token", 0) * 1_000_000,
+                    "max_tokens": info.get("max_tokens"),
+                }
+        return result
+    except ImportError:
+        logger.warning("LiteLLM not installed, cannot list models")
+        return {}
+    except Exception as e:
+        logger.error(
+            "Failed to list models with pricing",
+            extra={"context": {"error": str(e)}}
+        )
+        return {}
 
 
 async def track_api_call(
