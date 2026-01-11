@@ -217,6 +217,64 @@ def handle_closed_pr(body, event, action, log_context):
     get_logger().info("PR-Agent statistics for closed PR", analytics=True, pr_statistics=pr_statistics, **log_context)
 
 
+async def handle_push_to_main_branch(body: Dict[str, Any], event: str, log_context: Dict[str, Any]) -> dict:
+    """
+    Handle push events to main branches for indexing/RepoSwarm updates.
+    
+    This handler:
+    1. Filters for pushes to main branches (workiz.com, main, master)
+    2. Triggers repository indexing for RAG updates
+    3. Queues RepoSwarm analysis if enabled
+    """
+    if event != "push":
+        return {}
+    
+    ref = body.get("ref", "")
+    if not ref.startswith("refs/heads/"):
+        return {}
+    
+    branch = ref.replace("refs/heads/", "")
+    
+    main_branches = get_settings().get("workiz.main_branches", ["workiz.com", "main", "master"])
+    if branch not in main_branches:
+        get_logger().debug(
+            f"Ignoring push to non-main branch",
+            extra={"context": {"branch": branch, "main_branches": main_branches}}
+        )
+        return {}
+    
+    repo = body.get("repository", {})
+    repo_full_name = repo.get("full_name", "")
+    commits = body.get("commits", [])
+    before_sha = body.get("before", "")
+    after_sha = body.get("after", "")
+    
+    get_logger().info(
+        "Push to main branch detected",
+        extra={"context": {
+            "repository": repo_full_name,
+            "branch": branch,
+            "commits_count": len(commits),
+            "before_sha": before_sha[:8] if before_sha else "",
+            "after_sha": after_sha[:8] if after_sha else "",
+        }}
+    )
+    
+    # TODO: Phase 5 - Trigger repository indexing
+    # await trigger_repository_indexing(repo_full_name, branch, commits)
+    
+    # TODO: Phase 5 - Trigger RepoSwarm analysis if significant changes
+    # if should_trigger_reposwarm_analysis(commits):
+    #     await queue_reposwarm_analysis(repo_full_name)
+    
+    get_logger().debug(
+        "Push handler completed (indexing not yet implemented)",
+        extra={"context": {"repository": repo_full_name, "branch": branch}}
+    )
+    
+    return {"status": "received", "repository": repo_full_name, "branch": branch}
+
+
 def get_log_context(body, event, action, build_number):
     sender = ""
     sender_id = ""
@@ -315,8 +373,15 @@ async def handle_request(body: Dict[str, Any], event: str):
 
     Args:
         body: The request body.
-        event: The GitHub event type (e.g. "pull_request", "issue_comment", etc.).
+        event: The GitHub event type (e.g. "pull_request", "issue_comment", "push", etc.).
     """
+    # Handle push events first (they don't have an action field)
+    if event == 'push':
+        log_context, sender, sender_id, sender_type = get_log_context(body, event, "push", build_number)
+        if not is_bot_user(sender, sender_type):
+            await handle_push_to_main_branch(body, event, log_context)
+        return {}
+    
     action = body.get("action")  # "created", "opened", "reopened", "ready_for_review", "review_requested", "synchronize"
     get_logger().debug(f"Handling request with event: {event}, action: {action}")
     if not action:

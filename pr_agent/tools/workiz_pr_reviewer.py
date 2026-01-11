@@ -365,31 +365,129 @@ class WorkizPRReviewer(PRReviewer):
             extra={"context": {"pr_url": self.pr_url}}
         )
         
-        # TODO: Implement in Phase 3.5
-        # - Save PR details
-        # - Save review comments
-        # - Save suggestions
-        # - Save findings
-        pass
+        try:
+            from pr_agent.db.review_history import save_review
+            
+            pr_info = self.git_provider.pr
+            repository = getattr(self.git_provider, 'repo', None)
+            repo_name = repository.full_name if repository else self._extract_repo_from_url()
+            
+            pr_number = pr_info.number if hasattr(pr_info, 'number') else 0
+            pr_title = pr_info.title if hasattr(pr_info, 'title') else ""
+            pr_author = pr_info.user.login if hasattr(pr_info, 'user') and hasattr(pr_info.user, 'login') else "unknown"
+            
+            review_output = {
+                "prediction": self.prediction[:1000] if self.prediction else None,
+                "workiz_findings": self.workiz_context,
+            }
+            
+            findings_count = (
+                len(self.workiz_context.get("rules_findings", [])) +
+                len(self.workiz_context.get("analyzer_findings", []))
+            )
+            
+            suggestions_count = sum(
+                1 for f in self.workiz_context.get("analyzer_findings", [])
+                if f.get("suggestion")
+            ) + sum(
+                1 for f in self.workiz_context.get("rules_findings", [])
+                if f.get("suggestion")
+            )
+            
+            duration_ms = int((time.time() - self._start_time) * 1000) if self._start_time else None
+            model_used = get_settings().config.get("model", "unknown")
+            
+            await save_review(
+                pr_url=self.pr_url,
+                pr_number=pr_number,
+                repository=repo_name,
+                pr_title=pr_title,
+                pr_author=pr_author,
+                review_type="auto_review" if getattr(self, 'is_auto', False) else "review",
+                review_output=review_output,
+                findings_count=findings_count,
+                suggestions_count=suggestions_count,
+                workiz_context=self.workiz_context,
+                duration_ms=duration_ms,
+                model_used=model_used,
+            )
+            
+            get_logger().info(
+                "Review history stored",
+                extra={"context": {
+                    "pr_url": self.pr_url,
+                    "findings_count": findings_count,
+                    "suggestions_count": suggestions_count,
+                }}
+            )
+            
+        except Exception as e:
+            get_logger().warning(
+                "Failed to store review history",
+                extra={"context": {"pr_url": self.pr_url, "error": str(e)}}
+            )
+    
+    def _extract_repo_from_url(self) -> str:
+        """Extract repository name from PR URL."""
+        try:
+            parts = self.pr_url.split("/")
+            if "github.com" in self.pr_url and len(parts) >= 5:
+                return f"{parts[-4]}/{parts[-3]}"
+        except Exception:
+            pass
+        return "unknown/unknown"
 
     async def _track_api_usage(self) -> None:
         """Track API usage for cost monitoring."""
-        duration = time.time() - self._start_time
+        duration_ms = int((time.time() - self._start_time) * 1000) if self._start_time else 0
         
         get_logger().debug(
             "Tracking API usage",
             extra={"context": {
                 "pr_url": self.pr_url,
-                "duration_seconds": duration,
+                "duration_ms": duration_ms,
             }}
         )
         
-        # TODO: Implement in Phase 3.4
-        # - Log model used
-        # - Log tokens consumed
-        # - Log estimated cost
-        # - Store in database
-        pass
+        try:
+            from pr_agent.db.api_usage import track_api_call
+            
+            model = get_settings().config.get("model", "unknown")
+            
+            input_tokens = self._estimate_input_tokens()
+            output_tokens = self._estimate_output_tokens()
+            
+            await track_api_call(
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_ms=duration_ms,
+                pr_url=self.pr_url,
+                command="review",
+                success=True,
+            )
+            
+        except Exception as e:
+            get_logger().warning(
+                "Failed to track API usage",
+                extra={"context": {"pr_url": self.pr_url, "error": str(e)}}
+            )
+    
+    def _estimate_input_tokens(self) -> int:
+        """Estimate input tokens from diff and context sizes."""
+        try:
+            diff_size = len(self.patches_diff) if self.patches_diff else 0
+            context_size = len(str(self.workiz_context)) if self.workiz_context else 0
+            return (diff_size + context_size) // 4
+        except Exception:
+            return 0
+    
+    def _estimate_output_tokens(self) -> int:
+        """Estimate output tokens from prediction size."""
+        try:
+            return len(self.prediction) // 4 if self.prediction else 0
+        except Exception:
+            return 0
 
     def get_workiz_findings_summary(self) -> dict[str, Any]:
         """Get summary of all Workiz-specific findings."""
