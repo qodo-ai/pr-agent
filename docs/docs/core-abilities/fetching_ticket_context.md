@@ -164,6 +164,16 @@ jira_api_token = "YOUR_API_TOKEN"
 jira_api_email = "YOUR_EMAIL"
 ```
 
+To use Jira as the issue provider for ticket compliance (and `/similar_issue`), enable it explicitly:
+
+```toml
+[config]
+issue_provider = "jira"
+
+[jira]
+issue_projects = ["ABC"] # or issue_jql = "project = ABC order by created DESC"
+```
+
 ### Jira Data Center/Server
 
 [//]: # ()

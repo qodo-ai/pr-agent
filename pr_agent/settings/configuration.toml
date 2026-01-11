@@ -12,6 +12,7 @@ fallback_models=["o4-mini"]
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
 # CLI
 git_provider="github"
+issue_provider="auto" # "auto", "github", "gitlab", "jira"
 publish_output=true
 publish_output_progress=true
 verbosity_level=0 # 0,1,2
@@ -170,6 +171,39 @@ fold_suggestions_on_self_review=true # Pro feature. if true, the code suggestion
 publish_post_process_suggestion_impact=true
 wiki_page_accepted_suggestions=true
 allow_thumbs_up_down=false
+
+[review_plus] # /review_plus #
+enable_review = true
+enable_improve = true
+enable_ask = true
+
+[ticket_summary] # /summarize_tickets #
+max_diff_chars = 15000
+description_preview_chars = 300
+enable_code_changes_summary = true
+
+[ticket]
+provider = "jira"
+base_url = ""
+api_email = ""
+api_token = ""
+api_version = 2
+valid_project_keys = []
+
+[jira]
+base_url = ""
+api_email = ""
+api_token = ""
+api_version = 2
+valid_project_keys = []
+issue_projects = []
+issue_jql = ""
+issue_project_map = {}
+issue_max_results = 200
+
+[notifications]
+teams_webhook_url = ""
+notify_on_review_plus = false
 
 [pr_custom_prompt] # /custom_prompt #
 prompt = """\
@@ -350,6 +384,11 @@ skip_comments = false
 force_update_dataset = false
 max_issues_to_scan = 500
 vectordb = "pinecone" # options: "pinecone", "lancedb", "qdrant"
+embedding_base_url = "" # OpenAI-compatible embeddings endpoint (optional)
+embedding_model = "text-embedding-ada-002"
+embedding_api_key = "" # Optional if the embeddings endpoint is unauthenticated
+embedding_dim = 1536
+embedding_max_tokens = 8000
 
 [pr_find_similar_component]
 class_name = ""
