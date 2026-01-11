@@ -7,7 +7,7 @@ across different languages.
 
 import pytest
 from pr_agent.tools.sql_analyzer import SQLAnalyzer, get_sql_analyzer
-from pr_agent.tools.security_analyzer import SecurityAnalyzer, get_security_analyzer, Severity
+from pr_agent.tools.security_analyzer import SecurityAnalyzer, get_security_analyzer, SecuritySeverity
 
 
 class TestSQLAnalyzer:
@@ -123,7 +123,7 @@ const config = {
 '''
         findings = await analyzer.analyze(code, "config.ts")
         assert any("secret" in f.message.lower() or "hardcoded" in f.message.lower() for f in findings)
-        assert any(f.severity == Severity.CRITICAL for f in findings)
+        assert any(f.severity == SecuritySeverity.CRITICAL for f in findings)
     
     @pytest.mark.asyncio
     async def test_detects_password_in_code(self, analyzer):
@@ -157,7 +157,7 @@ eval(userInput);
 '''
         findings = await analyzer.analyze(code, "dangerous.ts")
         assert any("eval" in f.message.lower() for f in findings)
-        assert any(f.severity == Severity.CRITICAL for f in findings)
+        assert any(f.severity == SecuritySeverity.CRITICAL for f in findings)
     
     @pytest.mark.asyncio
     async def test_detects_innerHTML(self, analyzer):

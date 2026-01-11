@@ -13,7 +13,7 @@ from pr_agent.tools.language_analyzers import (
     PHPAnalyzer,
     PythonAnalyzer,
     get_analyzer_for_file,
-    Severity,
+    FindingSeverity,
 )
 
 
@@ -169,7 +169,7 @@ export class OrdersController {
 }
 '''
         findings = await analyzer.analyze(code, "orders.controller.ts")
-        assert any(f.severity in [Severity.MEDIUM, Severity.HIGH] for f in findings)
+        assert any(f.severity in [FindingSeverity.MEDIUM, FindingSeverity.HIGH] for f in findings)
 
 
 class TestReactAnalyzer:
@@ -292,4 +292,4 @@ const password = "hardcoded_secret_123";
         findings = await analyzer.analyze(code, "config.ts")
         security_findings = [f for f in findings if "secret" in f.message.lower() or "password" in f.message.lower()]
         if security_findings:
-            assert any(f.severity == Severity.CRITICAL for f in security_findings)
+            assert any(f.severity == FindingSeverity.CRITICAL for f in security_findings)
