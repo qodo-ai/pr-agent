@@ -164,11 +164,18 @@ ngrok http 8000
 
 Configure GitHub webhook with ngrok URL for testing.
 
-### Test PR Review
+### Test PR Review and Code Suggestions
 
 ```bash
-# Use CLI to test directly:
+# Test review (uses WorkizPRReviewer when workiz.enabled=true):
 python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" review
+
+# Test code suggestions (uses WorkizPRCodeSuggestions when workiz.enabled=true):
+python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" improve
+
+# Force Workiz-enhanced versions explicitly:
+python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" workiz_review
+python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" workiz_improve
 ```
 
 ---

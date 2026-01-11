@@ -39,10 +39,12 @@ The qodo-ai/pr-agent is built with these key components:
 ```python
 # pr_agent/agent/pr_agent.py
 command2class = {
-    "review": PRReviewer,
-    "improve": PRCodeSuggestions,
+    "review": PRReviewer,           # Base reviewer (or WorkizPRReviewer if workiz.enabled)
+    "improve": PRCodeSuggestions,   # Base suggestions (or WorkizPRCodeSuggestions if workiz.enabled)
     "describe": PRDescription,
     "ask": PRReviewerAsk,
+    "workiz_review": WorkizPRReviewer,         # Explicit Workiz reviewer
+    "workiz_improve": WorkizPRCodeSuggestions, # Explicit Workiz suggestions
     # ... more commands
 }
 ```
@@ -144,6 +146,7 @@ Extra instructions:
 | Extension | Purpose | Implementation |
 |-----------|---------|----------------|
 | `WorkizPRReviewer` | Enhanced reviewer with Workiz rules | Extends `PRReviewer` |
+| `WorkizPRCodeSuggestions` | Enhanced code suggestions with Workiz standards | Extends `PRCodeSuggestions` |
 | `AgentOrchestrator` | Coordinates multiple specialized agents | New component |
 | `RepoSwarmContextLoader` | Loads cross-repo architecture context | New component |
 | `JiraContextProvider` | RAG for Jira ticket context | New component |

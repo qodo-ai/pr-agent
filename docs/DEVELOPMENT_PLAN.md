@@ -251,19 +251,30 @@ After this phase, you can deploy a basic working version to GKE.
 - [x] Add to `requirements.txt`: `click` ✅
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - CLI Admin Tool](./DEPLOYMENT_AND_IMPLEMENTATION.md#cli-admin-tool)
 
-#### 3.7 Webhook Handlers
+#### 3.7 Workiz Code Suggestions ✅ COMPLETED
+- [x] Create `pr_agent/tools/workiz_pr_code_suggestions.py` ✅
+  - [x] Extend base `PRCodeSuggestions` ✅
+  - [x] Override `run()` method to add Workiz pipeline ✅
+  - [x] Inject Workiz coding standards into prompts ✅
+  - [x] Add placeholder methods for cross-repo context ✅
+- [x] Register in `pr_agent/agent/pr_agent.py` command mapping ✅
+- [x] Added `get_code_suggestions_class()` to dynamically select suggestions class ✅
+  > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - WorkizPRCodeSuggestions](./ARCHITECTURE_AND_FEATURES.md#workiz-specific-extensions)
+
+#### 3.8 Webhook Handlers
 - [ ] Create push webhook handler `/api/v1/webhooks/push`
   - [ ] Filter for main branches
   - [ ] Placeholder for indexing trigger
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - Push Webhook](./DEPLOYMENT_AND_IMPLEMENTATION.md#push-webhook-handler)
 
-### 3.8 Local Testing
+### 3.9 Local Testing
 - [ ] Create test PR with various code changes
 - [ ] Verify enhanced review runs
+- [ ] Verify enhanced code suggestions run
 - [ ] Check review history saved to DB
 - [ ] Verify API usage logged
 
-### 🚀 3.9 First Deployment
+### 🚀 3.10 First Deployment
 - [ ] Create `Dockerfile` for production
 - [ ] Create Helm chart `infra/helm/staging.yaml`
 - [ ] Create GitHub Actions workflow `deploy-pr-agent-staging.yml`
@@ -276,7 +287,9 @@ After this phase, you can deploy a basic working version to GKE.
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - Production Deployment](./DEPLOYMENT_AND_IMPLEMENTATION.md#2-production-deployment-gke--helm)
 
 ### ✅ Phase 3 Completion Criteria
-- [ ] Enhanced reviewer works locally
+- [x] Enhanced reviewer (WorkizPRReviewer) works locally ✅
+- [x] Enhanced code suggestions (WorkizPRCodeSuggestions) works locally ✅
+- [ ] Webhook handlers for push events
 - [ ] Review history saved to database
 - [ ] API costs tracked
 - [ ] **Deployed to staging and functional**

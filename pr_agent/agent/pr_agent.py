@@ -21,6 +21,7 @@ from pr_agent.tools.pr_reviewer import PRReviewer
 from pr_agent.tools.pr_similar_issue import PRSimilarIssue
 from pr_agent.tools.pr_update_changelog import PRUpdateChangelog
 from pr_agent.tools.workiz_pr_reviewer import WorkizPRReviewer
+from pr_agent.tools.workiz_pr_code_suggestions import WorkizPRCodeSuggestions
 
 command2class = {
     "auto_review": PRReviewer,
@@ -28,6 +29,7 @@ command2class = {
     "review": PRReviewer,
     "review_pr": PRReviewer,
     "workiz_review": WorkizPRReviewer,
+    "workiz_improve": WorkizPRCodeSuggestions,
     "describe": PRDescription,
     "describe_pr": PRDescription,
     "improve": PRCodeSuggestions,
@@ -59,6 +61,19 @@ def get_reviewer_class():
     if workiz_enabled:
         return WorkizPRReviewer
     return PRReviewer
+
+
+def get_code_suggestions_class():
+    """
+    Get the appropriate code suggestions class based on workiz.enabled setting.
+    
+    Returns WorkizPRCodeSuggestions if workiz.enabled is True, otherwise PRCodeSuggestions.
+    Must be called at runtime after settings are loaded.
+    """
+    workiz_enabled = get_settings().get("workiz.enabled", False)
+    if workiz_enabled:
+        return WorkizPRCodeSuggestions
+    return PRCodeSuggestions
 
 
 class PRAgent:
@@ -128,6 +143,11 @@ class PRAgent:
                 if notify:
                     notify()
                 await ReviewerClass(pr_url, args=args, ai_handler=self.ai_handler).run()
+            elif action in ["improve", "improve_code"]:
+                if notify:
+                    notify()
+                SuggestionsClass = get_code_suggestions_class()
+                await SuggestionsClass(pr_url, args=args, ai_handler=self.ai_handler).run()
             elif action in command2class:
                 if notify:
                     notify()
