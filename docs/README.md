@@ -211,8 +211,8 @@ These rules are automatically enforced during PR reviews:
 
 ```toml
 [config]
-model = "gemini-2.5-pro"
-fallback_models = ["gemini-2.0-flash"]  # Additional models can be added later
+model = "gemini-3-pro"
+fallback_models = ["gemini-2.5-pro"]  # Additional models can be added later
 git_provider = "github"
 
 [workiz]
@@ -276,7 +276,7 @@ npm_org = "@workiz"
 │                                        ▼                                             │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
 │   │                    LLM Layer (via LiteLLM)                                    │   │
-│   │  Gemini 2.5 Pro (default) │ Gemini 2.0 Flash (fallback) │ (more coming)      │   │
+│   │  Gemini 3 Pro (default) │ Gemini 2.5 Pro (fallback) │ (more coming)        │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                        │                                             │
 │                                        ▼                                             │

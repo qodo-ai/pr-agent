@@ -72,7 +72,7 @@
   - [ ] `GITHUB_USER_TOKEN` (waiting on DevOps)
   - [x] `GOOGLE_API_KEY` ✅ (Gemini - primary LLM)
   - [x] `LLM_PROVIDER=google` ✅
-  - [x] `LLM_MODEL=gemini-2.5-pro` ✅
+  - [x] `LLM_MODEL=gemini-3-pro` ✅
   - [x] `DATABASE_URL` ✅
 - [x] Create `docker-compose.yml` for local PostgreSQL ✅
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - Environment Variables](./DEPLOYMENT_AND_IMPLEMENTATION.md#environment-variables)
@@ -639,7 +639,7 @@ After this phase, you can deploy a basic working version to GKE.
   [autofix]
   enabled = true
   max_iterations = 5
-  models = ["gemini-2.5-pro", "gemini-2.0-flash"]  # Configurable, more models can be added
+  models = ["gemini-3-pro", "gemini-2.5-pro"]  # Configurable, more models can be added
   ```
 
 ### 7.6 Testing

@@ -116,7 +116,7 @@ GITHUB_MAIN_BRANCHES=workiz.com,main,master
 
 # LLM Configuration (Gemini is default, others can be added later)
 LLM_PROVIDER=google
-LLM_MODEL=gemini-2.5-pro
+LLM_MODEL=gemini-3-pro
 GOOGLE_API_KEY=your-google-api-key
 
 # Additional LLM providers (optional, for future use)
@@ -243,7 +243,7 @@ GITHUB_WEBHOOK_SECRET=xxx
 
 # LLM Configuration (Gemini is default)
 LLM_PROVIDER=google                   # Primary LLM provider
-LLM_MODEL=gemini-2.5-pro             # Model to use
+LLM_MODEL=gemini-3-pro             # Model to use
 GOOGLE_API_KEY=xxx                    # Required for Gemini
 
 # Additional LLM providers (optional, for future use)

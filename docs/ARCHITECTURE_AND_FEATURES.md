@@ -123,8 +123,8 @@ Extra instructions:
 │  │  ┌─────────────────────────────────────────────────────────────────────────┐   │   │
 │  │  │                         LLM Layer (LiteLLM)                              │   │   │
 │  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │   │   │
-│  │  │  │Gemini 2.5   │  │Gemini 2.0   │  │  (Future)   │  │  (Future)   │     │   │   │
-│  │  │  │ Pro(Default)│  │Flash(Fast)  │  │ Claude/GPT  │  │ More models │     │   │   │
+│  │  │  │ Gemini 3    │  │Gemini 2.5   │  │  (Future)   │  │  (Future)   │     │   │   │
+│  │  │  │ Pro(Default)│  │Pro(Fallback)│  │ Claude/GPT  │  │ More models │     │   │   │
 │  │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘     │   │   │
 │  │  └─────────────────────────────────────────────────────────────────────────┘   │   │
 │  │                                   │                                             │   │
@@ -1999,7 +1999,7 @@ Code Styles:
 List any mismatches as review comments."""
         
         response = await self.ai_handler.chat_completion(
-            model=self.config.get("llm.model", "gemini-2.5-pro"),
+            model=self.config.get("llm.model", "gemini-3-pro"),
             system="You are a design reviewer comparing Figma designs to React implementations.",
             user=prompt
         )
@@ -2046,8 +2046,8 @@ class AutoFixAgent:
         self.config = config
         self.max_iterations = config.get('autofix.max_iterations', 5)
         self.models = [
-            config.get('llm.model', 'gemini-2.5-pro'),  # Primary from config
-            "gemini-2.0-flash",                         # Fast fallback
+            config.get('llm.model', 'gemini-3-pro'),  # Primary from config
+            "gemini-2.5-pro",                           # Fallback
         ]
     
     async def run(self, pr_url: str) -> Dict:
@@ -3008,7 +3008,7 @@ class KnowledgeAssistant:
         
         # 4. Get answer from LLM
         answer, tokens = await self.ai_handler.chat_completion(
-            model=self.config.get("llm.model", "gemini-2.5-pro"),
+            model=self.config.get("llm.model", "gemini-3-pro"),
             system=self._get_system_prompt(),
             user=prompt
         )
@@ -3043,7 +3043,7 @@ class KnowledgeAssistant:
         """
         
         response, _ = await self.ai_handler.chat_completion(
-            model=self.config.get("llm.model", "gemini-2.5-pro"),
+            model=self.config.get("llm.model", "gemini-3-pro"),
             system="You classify questions. Return only JSON.",
             user=classification_prompt
         )
