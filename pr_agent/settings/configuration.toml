@@ -394,3 +394,39 @@ pr_commands = [
     "/review",
     "/improve",
 ]
+
+# ==========================================
+# Workiz-Specific Configuration
+# ==========================================
+
+[workiz]
+enabled = true
+organization = "Workiz"
+main_branches = ["workiz.com", "main", "master"]
+
+# Review settings
+max_review_comments = 15
+include_cross_repo_context = true
+include_jira_context = true
+
+# Language analyzers to enable
+enable_typescript_analyzer = true
+enable_nestjs_analyzer = true
+enable_react_analyzer = true
+enable_php_analyzer = true
+enable_python_analyzer = true
+enable_sql_analyzer = true
+enable_security_analyzer = true
+
+# Auto-fix settings
+enable_autofix = true
+autofix_max_iterations = 5
+
+# NPM package tracking
+track_internal_packages = true
+internal_package_scope = "@workiz"
+
+[workiz.logging]
+# Datadog integration via JSON stdout
+json_format = true
+include_context = true
