@@ -38,7 +38,7 @@
 
 **Goal**: Get the base PR Agent running locally with all dependencies
 
-**Prerequisites**: Python 3.11+, Docker Desktop, GitHub PAT, Anthropic API Key
+**Prerequisites**: Python 3.11+, Docker Desktop, GitHub PAT, Google API Key (Gemini)
 
 ### Tasks
 
@@ -59,20 +59,21 @@
   ```
   > 📖 Reference: [README.md - Quick Start](./README.md#-quick-start)
 
-#### 1.2 Environment Configuration
-- [x] Create `env.example` template file ✅ (created `env.example`)
-- [ ] Create `.env` file from template
+#### 1.2 Environment Configuration ✅ MOSTLY COMPLETED
+- [x] Create `env.example` template file ✅
+- [x] Create `.env` file from template ✅
   ```bash
   cp env.example .env
   ```
-- [ ] Configure required secrets in `.env`:
-  - [ ] `GITHUB_APP_ID`
-  - [ ] `GITHUB_APP_PRIVATE_KEY_BASE64` (base64 encoded)
-  - [ ] `GITHUB_WEBHOOK_SECRET`
-  - [ ] `GITHUB_USER_TOKEN`
-  - [ ] `ANTHROPIC_API_KEY`
-  - [ ] `OPENAI_API_KEY` (for embeddings)
-  - [ ] `DATABASE_URL`
+- [x] Configure required secrets in `.env`:
+  - [x] `GITHUB_APP_ID` ✅
+  - [x] `GITHUB_APP_PRIVATE_KEY_BASE64` (base64 encoded) ✅
+  - [x] `GITHUB_WEBHOOK_SECRET` ✅
+  - [ ] `GITHUB_USER_TOKEN` (waiting on DevOps)
+  - [x] `GOOGLE_API_KEY` ✅ (Gemini - primary LLM)
+  - [x] `LLM_PROVIDER=google` ✅
+  - [x] `LLM_MODEL=gemini-2.5-pro` ✅
+  - [x] `DATABASE_URL` ✅
 - [x] Create `docker-compose.yml` for local PostgreSQL ✅
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - Environment Variables](./DEPLOYMENT_AND_IMPLEMENTATION.md#environment-variables)
 
@@ -638,7 +639,7 @@ After this phase, you can deploy a basic working version to GKE.
   [autofix]
   enabled = true
   max_iterations = 5
-  models = ["claude-opus-4-20250514", "gemini-2.5-pro", "claude-sonnet-4-20250514"]
+  models = ["gemini-2.5-pro", "gemini-2.0-flash"]  # Configurable, more models can be added
   ```
 
 ### 7.6 Testing

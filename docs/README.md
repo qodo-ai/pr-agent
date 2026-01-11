@@ -18,8 +18,9 @@ A customized fork of [qodo-ai/pr-agent](https://github.com/qodo-ai/pr-agent) tai
 - Python 3.11+
 - Docker Desktop
 - GitHub Personal Access Token
-- Anthropic API Key (Claude - default model)
-- (Optional) OpenAI API Key (fallback and embeddings)
+- Google API Key (Gemini - default model)
+- (Optional) Anthropic API Key (Claude - for future use)
+- (Optional) OpenAI API Key (for future use)
 - (Optional) Jira API Token
 - (Optional) Figma Access Token (for design verification)
 
@@ -210,8 +211,8 @@ These rules are automatically enforced during PR reviews:
 
 ```toml
 [config]
-model = "claude-sonnet-4-20250514"
-fallback_models = ["gpt-4o", "gemini-2.5-pro"]
+model = "gemini-2.5-pro"
+fallback_models = ["gemini-2.0-flash"]  # Additional models can be added later
 git_provider = "github"
 
 [workiz]
@@ -275,7 +276,7 @@ npm_org = "@workiz"
 │                                        ▼                                             │
 │   ┌─────────────────────────────────────────────────────────────────────────────┐   │
 │   │                    LLM Layer (via LiteLLM)                                    │   │
-│   │  Claude Sonnet (default) │ Claude Opus (auto-fix) │ GPT-4o (fallback)        │   │
+│   │  Gemini 2.5 Pro (default) │ Gemini 2.0 Flash (fallback) │ (more coming)      │   │
 │   └─────────────────────────────────────────────────────────────────────────────┘   │
 │                                        │                                             │
 │                                        ▼                                             │
@@ -306,7 +307,7 @@ Cross-repository architecture discovery is powered by an adaptation of [RepoSwar
 |--------------------|---------------------|
 | Temporal workflows | Simple async Python |
 | DynamoDB caching | PostgreSQL |
-| Claude API (direct) | LiteLLM (any model) |
+| Direct API calls | LiteLLM (model-agnostic) |
 | Standalone service | Embedded in PR Agent |
 | `prompts/` directory | ✅ Kept as-is |
 | `src/investigator/` | ✅ Adapted |

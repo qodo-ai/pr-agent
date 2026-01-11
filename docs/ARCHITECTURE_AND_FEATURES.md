@@ -123,8 +123,8 @@ Extra instructions:
 │  │  ┌─────────────────────────────────────────────────────────────────────────┐   │   │
 │  │  │                         LLM Layer (LiteLLM)                              │   │   │
 │  │  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │   │   │
-│  │  │  │Claude Sonnet│  │Claude Opus  │  │Gemini 2.5   │  │  OpenAI     │     │   │   │
-│  │  │  │ (Default)   │  │ (Auto-Fix)  │  │ (Fallback)  │  │ (Embeddings)│     │   │   │
+│  │  │  │Gemini 2.5   │  │Gemini 2.0   │  │  (Future)   │  │  (Future)   │     │   │   │
+│  │  │  │ Pro(Default)│  │Flash(Fast)  │  │ Claude/GPT  │  │ More models │     │   │   │
 │  │  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘     │   │   │
 │  │  └─────────────────────────────────────────────────────────────────────────┘   │   │
 │  │                                   │                                             │   │
@@ -1251,8 +1251,8 @@ RepoSwarm is based on [royosherove/repo-swarm](https://github.com/royosherove/re
 │   └─────────────────────┘                 └─────────────────────┘               │
 │                                                                                  │
 │   ┌─────────────────────┐                 ┌─────────────────────┐               │
-│   │  Claude API         │  ──────────►    │  LiteLLM            │               │
-│   │  (direct)           │   Replace       │  (any model)        │               │
+│   │  Direct API calls   │  ──────────►    │  LiteLLM            │               │
+│   │  (model-specific)   │   Replace       │  (model-agnostic)   │               │
 │   └─────────────────────┘                 └─────────────────────┘               │
 │                                                                                  │
 │   ┌─────────────────────┐                 ┌─────────────────────┐               │
@@ -1999,7 +1999,7 @@ Code Styles:
 List any mismatches as review comments."""
         
         response = await self.ai_handler.chat_completion(
-            model="claude-sonnet-4-20250514",
+            model=self.config.get("llm.model", "gemini-2.5-pro"),
             system="You are a design reviewer comparing Figma designs to React implementations.",
             user=prompt
         )
@@ -2046,9 +2046,8 @@ class AutoFixAgent:
         self.config = config
         self.max_iterations = config.get('autofix.max_iterations', 5)
         self.models = [
-            "claude-sonnet-4-20250514",  # Primary
-            "gemini-2.5-pro",             # Fallback
-            "gpt-4o"                      # Second fallback
+            config.get('llm.model', 'gemini-2.5-pro'),  # Primary from config
+            "gemini-2.0-flash",                         # Fast fallback
         ]
     
     async def run(self, pr_url: str) -> Dict:
@@ -2825,7 +2824,7 @@ A ChatGPT-like interface that lets developers ask questions about the entire cod
 │       │                                                                      │
 │       ▼                                                                      │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                         LLM (Claude)                                 │    │
+│  │                         LLM (Gemini)                                 │    │
 │  │  System: "You are a helpful assistant with access to Workiz         │    │
 │  │          codebase knowledge. Answer based on the context below."    │    │
 │  │                                                                      │    │
@@ -3009,7 +3008,7 @@ class KnowledgeAssistant:
         
         # 4. Get answer from LLM
         answer, tokens = await self.ai_handler.chat_completion(
-            model="claude-sonnet-4-20250514",
+            model=self.config.get("llm.model", "gemini-2.5-pro"),
             system=self._get_system_prompt(),
             user=prompt
         )
@@ -3044,7 +3043,7 @@ class KnowledgeAssistant:
         """
         
         response, _ = await self.ai_handler.chat_completion(
-            model="claude-sonnet-4-20250514",
+            model=self.config.get("llm.model", "gemini-2.5-pro"),
             system="You classify questions. Return only JSON.",
             user=classification_prompt
         )
