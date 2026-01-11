@@ -61,6 +61,8 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 
 | Feature | Description | Status |
 |---------|-------------|--------|
+| **WorkizPRReviewer** | Enhanced `/review` with Workiz coding standards | ✅ Implemented |
+| **WorkizPRCodeSuggestions** | Enhanced `/improve` with Workiz patterns | ✅ Implemented |
 | **Custom Rules Engine** | Workiz-specific code style rules | ✅ Planned |
 | **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Planned |
 | **Database Analyzers** | MySQL, MongoDB, Elasticsearch, PostgreSQL | ✅ Planned |

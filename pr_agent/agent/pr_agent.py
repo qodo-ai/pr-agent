@@ -20,12 +20,16 @@ from pr_agent.tools.pr_questions import PRQuestions
 from pr_agent.tools.pr_reviewer import PRReviewer
 from pr_agent.tools.pr_similar_issue import PRSimilarIssue
 from pr_agent.tools.pr_update_changelog import PRUpdateChangelog
+from pr_agent.tools.workiz_pr_reviewer import WorkizPRReviewer
+from pr_agent.tools.workiz_pr_code_suggestions import WorkizPRCodeSuggestions
 
 command2class = {
     "auto_review": PRReviewer,
     "answer": PRReviewer,
     "review": PRReviewer,
     "review_pr": PRReviewer,
+    "workiz_review": WorkizPRReviewer,
+    "workiz_improve": WorkizPRCodeSuggestions,
     "describe": PRDescription,
     "describe_pr": PRDescription,
     "improve": PRCodeSuggestions,
@@ -45,6 +49,31 @@ command2class = {
 
 commands = list(command2class.keys())
 
+
+def get_reviewer_class():
+    """
+    Get the appropriate reviewer class based on workiz.enabled setting.
+    
+    Returns WorkizPRReviewer if workiz.enabled is True, otherwise PRReviewer.
+    Must be called at runtime after settings are loaded.
+    """
+    workiz_enabled = get_settings().get("workiz.enabled", False)
+    if workiz_enabled:
+        return WorkizPRReviewer
+    return PRReviewer
+
+
+def get_code_suggestions_class():
+    """
+    Get the appropriate code suggestions class based on workiz.enabled setting.
+    
+    Returns WorkizPRCodeSuggestions if workiz.enabled is True, otherwise PRCodeSuggestions.
+    Must be called at runtime after settings are loaded.
+    """
+    workiz_enabled = get_settings().get("workiz.enabled", False)
+    if workiz_enabled:
+        return WorkizPRCodeSuggestions
+    return PRCodeSuggestions
 
 
 class PRAgent:
@@ -103,12 +132,22 @@ class PRAgent:
             return False
         with get_logger().contextualize(command=action, pr_url=pr_url):
             get_logger().info("PR-Agent request handler started", analytics=True)
+            ReviewerClass = get_reviewer_class()
             if action == "answer":
                 if notify:
                     notify()
-                await PRReviewer(pr_url, is_answer=True, args=args, ai_handler=self.ai_handler).run()
+                await ReviewerClass(pr_url, is_answer=True, args=args, ai_handler=self.ai_handler).run()
             elif action == "auto_review":
-                await PRReviewer(pr_url, is_auto=True, args=args, ai_handler=self.ai_handler).run()
+                await ReviewerClass(pr_url, is_auto=True, args=args, ai_handler=self.ai_handler).run()
+            elif action in ["review", "review_pr"]:
+                if notify:
+                    notify()
+                await ReviewerClass(pr_url, args=args, ai_handler=self.ai_handler).run()
+            elif action in ["improve", "improve_code"]:
+                if notify:
+                    notify()
+                SuggestionsClass = get_code_suggestions_class()
+                await SuggestionsClass(pr_url, args=args, ai_handler=self.ai_handler).run()
             elif action in command2class:
                 if notify:
                     notify()

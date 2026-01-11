@@ -1,7 +1,7 @@
 # Workiz PR Agent - Development Plan & Tracking
 
-> **Status**: 🟡 In Progress (Phase 1)  
-> **Last Updated**: January 7, 2026  
+> **Status**: 🟡 In Progress (Phase 3)  
+> **Last Updated**: January 11, 2026  
 > **Total Phases**: 8  
 > **Estimated Duration**: 8-10 weeks
 
@@ -203,67 +203,78 @@ After this phase, you can deploy a basic working version to GKE.
 
 ### Tasks
 
-#### 3.1 Configuration Extension
-- [ ] Update `pr_agent/settings/configuration.toml` with `[workiz]` section:
-  ```toml
-  [workiz]
-  enabled = true
-  organization = "Workiz"
-  main_branches = ["workiz.com", "main", "master"]
-  ```
-- [ ] Create `pr_agent/settings/workiz_rules.toml` with basic rules
+#### 3.1 Configuration Extension ✅ COMPLETED
+- [x] Update `pr_agent/settings/configuration.toml` with `[workiz]` section ✅
+- [x] Create `pr_agent/settings/workiz_rules.toml` with 20+ custom rules ✅
   > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Configuration](./ARCHITECTURE_AND_FEATURES.md#configuration-extension)
 
-#### 3.2 Workiz PR Reviewer
-- [ ] Create `pr_agent/tools/workiz_pr_reviewer.py`
-  - [ ] Extend base `PRReviewer`
-  - [ ] Override `run()` method to add Workiz pipeline
-  - [ ] Add placeholder methods for future analyzers
-  - [ ] Integrate with database for review history
-- [ ] Register in `pr_agent/agent/pr_agent.py` command mapping
+#### 3.2 Workiz PR Reviewer ✅ COMPLETED
+- [x] Create `pr_agent/tools/workiz_pr_reviewer.py` ✅
+  - [x] Extend base `PRReviewer` ✅
+  - [x] Override `run()` method to add Workiz pipeline ✅
+  - [x] Add placeholder methods for future analyzers ✅
+  - [x] Integrate with database for review history ✅
+- [x] Register in `pr_agent/agent/pr_agent.py` command mapping ✅
+- [x] Added `get_reviewer_class()` to dynamically select reviewer based on config ✅
   > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - WorkizPRReviewer](./ARCHITECTURE_AND_FEATURES.md#workizprreviewer)
 
-#### 3.3 Prompt Enhancement
-- [ ] Create `pr_agent/settings/workiz_prompts.toml`
-  - [ ] Enhanced system prompt with Workiz context
-  - [ ] Template variables for dynamic context injection
-  - [ ] Structured output format
-- [ ] Increase max comments (configurable, default 10)
+#### 3.3 Prompt Enhancement ✅ COMPLETED
+- [x] Create `pr_agent/settings/workiz_prompts.toml` ✅
+  - [x] Enhanced system prompt with Workiz context ✅
+  - [x] Template variables for dynamic context injection ✅
+  - [x] Cross-repo, Jira, rules, and analyzer prompt templates ✅
+- [x] Max comments configurable via `max_review_comments` setting ✅
   > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Prompt Enhancement](./ARCHITECTURE_AND_FEATURES.md#prompt-enhancement)
 
-#### 3.4 API Usage Tracking
-- [ ] Create `pr_agent/db/api_usage.py`
-  - [ ] `track_api_call()` function
-  - [ ] Log model, tokens, cost, latency
-- [ ] Integrate into LiteLLM handler
+#### 3.4 API Usage Tracking ✅ COMPLETED
+- [x] Create `pr_agent/db/api_usage.py` ✅
+  - [x] `track_api_call()` function ✅
+  - [x] `estimate_cost()` function with per-model pricing ✅
+  - [x] `get_usage_summary()` for analytics ✅
+- [x] Created migration `002_api_usage.sql` for api_usage table ✅
   > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Cost Tracking](./ARCHITECTURE_AND_FEATURES.md#14-cost-tracking)
 
-#### 3.5 Review History Storage
-- [ ] Create `pr_agent/db/review_history.py`
-  - [ ] `save_review()` function
-  - [ ] Store PR details, comments, suggestions
-- [ ] Call from `WorkizPRReviewer` after review completes
+#### 3.5 Review History Storage ✅ COMPLETED
+- [x] Create `pr_agent/db/review_history.py` ✅
+  - [x] `save_review()` function ✅
+  - [x] `get_review_history()` for listing ✅
+  - [x] `get_review_stats()` for analytics ✅
+- [x] Enhanced existing review_history table with new columns ✅
 
-#### 3.6 CLI Admin Tool (Basic)
-- [ ] Create `scripts/cli_admin.py` with Click
-  - [ ] `status` command - show DB stats
-  - [ ] `discover` command - placeholder
-- [ ] Add to `requirements.txt`: `click`
+#### 3.6 CLI Admin Tool (Basic) ✅ COMPLETED
+- [x] Create `scripts/cli_admin.py` with Click ✅
+  - [x] `status` command - show DB stats ✅
+  - [x] `costs` command - show API usage/costs ✅
+  - [x] `reviews` command - show review history ✅
+  - [x] `discover`, `index-repos`, `analyze-repos` placeholders ✅
+  - [x] `sync-jira`, `sync-github-activity` placeholders ✅
+- [x] Add to `requirements.txt`: `click` ✅
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - CLI Admin Tool](./DEPLOYMENT_AND_IMPLEMENTATION.md#cli-admin-tool)
 
-#### 3.7 Webhook Handlers
+#### 3.7 Workiz Code Suggestions ✅ COMPLETED
+- [x] Create `pr_agent/tools/workiz_pr_code_suggestions.py` ✅
+  - [x] Extend base `PRCodeSuggestions` ✅
+  - [x] Override `run()` method to add Workiz pipeline ✅
+  - [x] Inject Workiz coding standards into prompts ✅
+  - [x] Add placeholder methods for cross-repo context ✅
+- [x] Register in `pr_agent/agent/pr_agent.py` command mapping ✅
+- [x] Added `get_code_suggestions_class()` to dynamically select suggestions class ✅
+  > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - WorkizPRCodeSuggestions](./ARCHITECTURE_AND_FEATURES.md#workiz-specific-extensions)
+
+#### 3.8 Webhook Handlers
 - [ ] Create push webhook handler `/api/v1/webhooks/push`
   - [ ] Filter for main branches
   - [ ] Placeholder for indexing trigger
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - Push Webhook](./DEPLOYMENT_AND_IMPLEMENTATION.md#push-webhook-handler)
 
-### 3.8 Local Testing
+### 3.9 Local Testing
 - [ ] Create test PR with various code changes
 - [ ] Verify enhanced review runs
+- [ ] Verify enhanced code suggestions run
 - [ ] Check review history saved to DB
 - [ ] Verify API usage logged
 
-### 🚀 3.9 First Deployment
+### 🚀 3.10 First Deployment
 - [ ] Create `Dockerfile` for production
 - [ ] Create Helm chart `infra/helm/staging.yaml`
 - [ ] Create GitHub Actions workflow `deploy-pr-agent-staging.yml`
@@ -276,7 +287,9 @@ After this phase, you can deploy a basic working version to GKE.
   > 📖 Reference: [DEPLOYMENT_AND_IMPLEMENTATION.md - Production Deployment](./DEPLOYMENT_AND_IMPLEMENTATION.md#2-production-deployment-gke--helm)
 
 ### ✅ Phase 3 Completion Criteria
-- [ ] Enhanced reviewer works locally
+- [x] Enhanced reviewer (WorkizPRReviewer) works locally ✅
+- [x] Enhanced code suggestions (WorkizPRCodeSuggestions) works locally ✅
+- [ ] Webhook handlers for push events
 - [ ] Review history saved to database
 - [ ] API costs tracked
 - [ ] **Deployed to staging and functional**

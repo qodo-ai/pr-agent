@@ -1,0 +1,259 @@
+# Workiz Custom Review Rules
+# These rules are loaded by the Custom Rules Engine and applied during PR review
+# Based on team coding standards from Cursor rules
+
+# ===========================================
+# Functional Programming Rules
+# ===========================================
+
+[[rules]]
+id = "fp-001"
+name = "use-const-over-let"
+category = "functional-programming"
+severity = "medium"
+language = ["typescript", "javascript"]
+description = "Use const for all variables. Avoid let and var."
+pattern = "\\blet\\s+\\w+\\s*="
+message = "Consider using const instead of let. If mutation is needed, use immutable operations like spread operator or array methods."
+suggestion = "Replace with const and use immutable patterns"
+
+[[rules]]
+id = "fp-002"
+name = "avoid-array-mutation"
+category = "functional-programming"
+severity = "medium"
+language = ["typescript", "javascript"]
+description = "Avoid mutating arrays with push, splice, shift. Use map, filter, reduce, concat, spread."
+patterns = [
+    "\\.push\\(",
+    "\\.splice\\(",
+    "\\.shift\\(",
+    "\\.unshift\\(",
+    "\\.pop\\("
+]
+message = "Avoid array mutation methods. Use map(), filter(), reduce(), concat(), or spread operator instead."
+
+[[rules]]
+id = "fp-003"
+name = "avoid-for-loops"
+category = "functional-programming"
+severity = "low"
+language = ["typescript", "javascript"]
+description = "Prefer declarative array methods over imperative for loops."
+pattern = "\\bfor\\s*\\("
+message = "Consider using map(), filter(), reduce(), or other array methods instead of for loops."
+
+# ===========================================
+# NestJS Rules
+# ===========================================
+
+[[rules]]
+id = "nest-001"
+name = "use-dependency-injection"
+category = "nestjs"
+severity = "high"
+language = ["typescript"]
+description = "Use NestJS dependency injection instead of manual instantiation."
+pattern = "new\\s+\\w+Service\\("
+message = "Avoid manual service instantiation. Use @Injectable() and constructor injection."
+
+[[rules]]
+id = "nest-002"
+name = "controller-thin"
+category = "nestjs"
+severity = "medium"
+language = ["typescript"]
+description = "Controllers should be thin - business logic belongs in services."
+check_type = "function_length"
+max_lines = 20
+applies_to = "controller"
+message = "Controller method is too long. Move business logic to a service."
+
+[[rules]]
+id = "nest-003"
+name = "dto-validation"
+category = "nestjs"
+severity = "high"
+language = ["typescript"]
+description = "All controller endpoints should use DTOs with class-validator decorators."
+check_type = "controller_dto"
+message = "Use DTOs with class-validator decorators for input validation."
+
+# ===========================================
+# Logging Rules
+# ===========================================
+
+[[rules]]
+id = "log-001"
+name = "structured-logging"
+category = "logging"
+severity = "high"
+language = ["typescript", "javascript"]
+description = "Logger calls must include a context object as second parameter."
+patterns = [
+    "this\\.logger\\.log\\(['\"][^'\"]+['\"]\\s*\\)",
+    "this\\.logger\\.warn\\(['\"][^'\"]+['\"]\\s*\\)",
+    "this\\.logger\\.error\\(['\"][^'\"]+['\"]\\s*\\)",
+    "logger\\.log\\(['\"][^'\"]+['\"]\\s*\\)",
+    "logger\\.warn\\(['\"][^'\"]+['\"]\\s*\\)",
+    "logger\\.error\\(['\"][^'\"]+['\"]\\s*\\)"
+]
+message = "Logger calls should include a context object: this.logger.log('message', { contextData });"
+
+[[rules]]
+id = "log-002"
+name = "no-console-log"
+category = "logging"
+severity = "medium"
+language = ["typescript", "javascript"]
+description = "Use structured logger instead of console.log."
+pattern = "console\\.(log|warn|error|info)\\("
+message = "Use the structured logger (this.logger) instead of console methods."
+
+# ===========================================
+# Code Quality Rules
+# ===========================================
+
+[[rules]]
+id = "quality-001"
+name = "no-inline-comments"
+category = "code-quality"
+severity = "low"
+language = ["typescript", "javascript", "php"]
+description = "Avoid inline comments. Code should be self-documenting."
+pattern = "^\\s*\\/\\/(?!\\s*@|\\s*TODO|\\s*FIXME|\\s*eslint)"
+message = "Consider removing inline comments. Use descriptive variable and function names instead."
+
+[[rules]]
+id = "quality-002"
+name = "function-length"
+category = "code-quality"
+severity = "medium"
+language = ["typescript", "javascript", "php", "python"]
+description = "Functions should be small and focused (<15 lines)."
+check_type = "function_length"
+max_lines = 15
+message = "Function is too long. Consider breaking it into smaller, focused functions."
+
+[[rules]]
+id = "quality-003"
+name = "no-duplicate-code"
+category = "code-quality"
+severity = "high"
+language = ["typescript", "javascript", "php", "python"]
+description = "Avoid code duplication. Reuse existing utilities."
+check_type = "similarity"
+threshold = 0.8
+message = "This code appears similar to existing code. Consider extracting into a shared utility."
+
+# ===========================================
+# Security Rules
+# ===========================================
+
+[[rules]]
+id = "sec-001"
+name = "no-secrets-in-code"
+category = "security"
+severity = "critical"
+language = ["typescript", "javascript", "php", "python"]
+description = "Never commit secrets, API keys, or passwords."
+patterns = [
+    "api[_-]?key\\s*[=:]\\s*['\"][^'\"]{10,}['\"]",
+    "password\\s*[=:]\\s*['\"][^'\"]+['\"]",
+    "secret\\s*[=:]\\s*['\"][^'\"]+['\"]",
+    "token\\s*[=:]\\s*['\"][A-Za-z0-9]{20,}['\"]"
+]
+message = "Potential secret detected. Use environment variables or secret manager instead."
+
+[[rules]]
+id = "sec-002"
+name = "no-sql-string-concat"
+category = "security"
+severity = "critical"
+language = ["typescript", "javascript", "php"]
+description = "Avoid SQL string concatenation - use parameterized queries."
+patterns = [
+    "query\\s*\\(\\s*[`'\"].*\\$\\{",
+    "\\.query\\s*\\(.*\\+.*\\)",
+    "execute\\s*\\(.*\\+.*\\)"
+]
+message = "Potential SQL injection vulnerability. Use parameterized queries."
+
+# ===========================================
+# TypeORM/Database Rules
+# ===========================================
+
+[[rules]]
+id = "db-001"
+name = "use-transactions"
+category = "database"
+severity = "high"
+language = ["typescript"]
+description = "Multiple related database operations should use transactions."
+check_type = "transaction_usage"
+message = "Consider wrapping multiple database operations in a transaction."
+
+[[rules]]
+id = "db-002"
+name = "avoid-n-plus-one"
+category = "database"
+severity = "high"
+language = ["typescript"]
+description = "Detect potential N+1 query patterns."
+patterns = [
+    "for\\s*\\([^)]+\\)\\s*\\{[^}]*\\.find",
+    "\\.map\\s*\\([^)]*=>.*\\.find"
+]
+message = "Potential N+1 query detected. Consider using eager loading or batch queries."
+
+# ===========================================
+# React Rules
+# ===========================================
+
+[[rules]]
+id = "react-001"
+name = "use-functional-components"
+category = "react"
+severity = "medium"
+language = ["typescript", "javascript"]
+description = "Prefer functional components with hooks over class components."
+pattern = "class\\s+\\w+\\s+extends\\s+(React\\.)?Component"
+message = "Consider using functional components with hooks instead of class components."
+
+[[rules]]
+id = "react-002"
+name = "memo-expensive-components"
+category = "react"
+severity = "low"
+language = ["typescript", "javascript"]
+description = "Consider memoizing components that receive complex props."
+check_type = "react_memo"
+message = "Consider using React.memo() for this component to prevent unnecessary re-renders."
+
+# ===========================================
+# Migration Rules (TypeORM)
+# ===========================================
+
+[[rules]]
+id = "migration-001"
+name = "raw-sql-migrations"
+category = "database"
+severity = "high"
+language = ["typescript"]
+description = "TypeORM migrations should use raw SQL, not table builder."
+pattern = "createTable\\("
+applies_to = "migrations"
+message = "Use raw SQL (queryRunner.query) in migrations instead of TypeORM table builder."
+
+# ===========================================
+# Test Rules
+# ===========================================
+
+[[rules]]
+id = "test-001"
+name = "test-file-modification"
+category = "testing"
+severity = "info"
+description = "When fixing tests, only modify test files unless explicitly approved."
+check_type = "file_scope"
+message = "Reminder: When fixing tests, ensure changes are limited to test files unless implementation changes are explicitly discussed."

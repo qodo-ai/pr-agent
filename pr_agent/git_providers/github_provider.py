@@ -36,6 +36,8 @@ class GithubProvider(GitProvider):
             self.installation_id = context.get("installation_id", None)
         except Exception:
             self.installation_id = None
+        if not self.installation_id:
+            self.installation_id = get_settings().get("GITHUB.INSTALLATION_ID", None)
         self.max_comment_chars = 65000
         self.base_url = get_settings().get("GITHUB.BASE_URL", "https://api.github.com").rstrip("/") # "https://api.github.com"
         self.base_url_html = self.base_url.split("api/")[0].rstrip("/") if "api/" in self.base_url else "https://github.com"
