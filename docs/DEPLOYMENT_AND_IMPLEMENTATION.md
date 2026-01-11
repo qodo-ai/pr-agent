@@ -114,10 +114,14 @@ GITHUB_USER_TOKEN=ghp_your-github-token
 GITHUB_ORG=Workiz
 GITHUB_MAIN_BRANCHES=workiz.com,main,master
 
-# LLM API Keys (Claude is default, others are fallbacks)
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
-OPENAI_API_KEY=sk-your-openai-key
-# GOOGLE_API_KEY=your-google-key  # Optional
+# LLM Configuration (Gemini is default, others can be added later)
+LLM_PROVIDER=google
+LLM_MODEL=gemini-3-pro
+GOOGLE_API_KEY=your-google-api-key
+
+# Additional LLM providers (optional, for future use)
+# ANTHROPIC_API_KEY=sk-ant-xxx
+# OPENAI_API_KEY=sk-xxx
 
 # Jira (optional for local dev)
 JIRA_BASE_URL=https://workiz.atlassian.net
@@ -237,10 +241,14 @@ GITHUB_APP_ID=123456
 GITHUB_APP_PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----...
 GITHUB_WEBHOOK_SECRET=xxx
 
-# LLM API Keys (at least one required)
-ANTHROPIC_API_KEY=sk-ant-xxx         # For Claude models (default)
-OPENAI_API_KEY=sk-xxx                 # For GPT models and embeddings
-GOOGLE_API_KEY=xxx                    # For Gemini models (optional fallback)
+# LLM Configuration (Gemini is default)
+LLM_PROVIDER=google                   # Primary LLM provider
+LLM_MODEL=gemini-3-pro             # Model to use
+GOOGLE_API_KEY=xxx                    # Required for Gemini
+
+# Additional LLM providers (optional, for future use)
+# ANTHROPIC_API_KEY=sk-ant-xxx       # For Claude models
+# OPENAI_API_KEY=sk-xxx              # For GPT models
 
 # Jira
 JIRA_BASE_URL=https://workiz.atlassian.net

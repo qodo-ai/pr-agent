@@ -11,7 +11,8 @@ ENV PYTHONPATH=/app
 
 FROM base AS github_app
 ADD pr_agent pr_agent
-CMD ["python", "-m", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-c", "pr_agent/servers/gunicorn_config.py", "--forwarded-allow-ips", "*", "pr_agent.servers.github_app:app"]
+ADD scripts scripts
+CMD ["python", "scripts/entrypoint.py", "gunicorn"]
 
 FROM base AS bitbucket_app
 ADD pr_agent pr_agent

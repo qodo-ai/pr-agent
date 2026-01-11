@@ -1,0 +1,38 @@
+# Workiz PR Agent - Local Development Setup
+# Usage: docker-compose up -d db
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: pr-agent-db
+    environment:
+      POSTGRES_DB: pr_agent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pr_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: PgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pr-agent-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@workiz.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    profiles:
+      - tools
+
+volumes:
+  pgdata:
+

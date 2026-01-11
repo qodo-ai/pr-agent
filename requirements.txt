@@ -8,6 +8,7 @@ boto3==1.40.45
 certifi==2024.8.30
 dynaconf==3.2.4
 fastapi==0.118.0
+python-dotenv==1.0.1
 GitPython==3.1.41
 google-cloud-aiplatform==1.38.0
 google-generativeai==0.8.3
@@ -27,6 +28,14 @@ tiktoken==0.8.0
 ujson==5.8.0
 uvicorn==0.22.0
 tenacity==8.2.3
+
+# Database (PostgreSQL + pgvector)
+psycopg[binary]==3.2.1
+psycopg-pool==3.2.1
+pgvector==0.2.5
+
+# Google Cloud (secrets manager)
+google-cloud-secret-manager==2.20.0
 gunicorn==23.0.0
 pytest-cov==5.0.0
 pydantic==2.8.2
