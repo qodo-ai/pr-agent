@@ -19,6 +19,10 @@ from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
 from pr_agent.tools.pr_reviewer import PRReviewer
+from pr_agent.tools.language_analyzers import get_analyzer_for_file
+from pr_agent.tools.custom_rules_engine import get_rules_engine
+from pr_agent.tools.sql_analyzer import get_sql_analyzer
+from pr_agent.tools.security_analyzer import get_security_analyzer
 
 
 class WorkizPRReviewer(PRReviewer):
@@ -166,15 +170,97 @@ class WorkizPRReviewer(PRReviewer):
             extra={"context": {"pr_url": self.pr_url}}
         )
         
-        # TODO: Implement in Phase 4
-        # - Detect file types
-        # - Run TypeScript/NestJS analyzer
-        # - Run React analyzer
-        # - Run PHP analyzer
-        # - Run Python analyzer
-        # - Run SQL analyzer
-        # - Run Security analyzer
-        self.workiz_context["analyzer_findings"] = []
+        findings = []
+        files = self.git_provider.get_files()
+        
+        sql_analyzer = get_sql_analyzer()
+        security_analyzer = get_security_analyzer()
+        
+        for file in files:
+            try:
+                file_path = file.filename if hasattr(file, 'filename') else str(file)
+                
+                try:
+                    content = self.git_provider.get_pr_file_content(file_path, self.git_provider.pr.head.ref)
+                except Exception:
+                    continue
+                
+                if not content:
+                    continue
+                
+                language_analyzers = get_analyzer_for_file(file_path)
+                for analyzer in language_analyzers:
+                    try:
+                        analyzer_findings = await analyzer.analyze(content, file_path)
+                        for finding in analyzer_findings:
+                            findings.append({
+                                "analyzer": analyzer.name,
+                                "rule_id": finding.rule_id,
+                                "message": finding.message,
+                                "severity": finding.severity.value,
+                                "file": file_path,
+                                "line": finding.line_start,
+                                "suggestion": finding.suggestion,
+                            })
+                    except Exception as e:
+                        get_logger().warning(
+                            f"Analyzer {analyzer.name} failed",
+                            extra={"context": {"file": file_path, "error": str(e)}}
+                        )
+                
+                try:
+                    sql_findings = await sql_analyzer.analyze(content, file_path)
+                    for finding in sql_findings:
+                        findings.append({
+                            "analyzer": "SQLAnalyzer",
+                            "rule_id": finding.rule_id,
+                            "message": finding.message,
+                            "severity": finding.severity.value,
+                            "file": file_path,
+                            "line": finding.line_start,
+                            "suggestion": finding.suggestion,
+                        })
+                except Exception as e:
+                    get_logger().warning(
+                        "SQL analyzer failed",
+                        extra={"context": {"file": file_path, "error": str(e)}}
+                    )
+                
+                try:
+                    security_findings = await security_analyzer.analyze(content, file_path)
+                    for finding in security_findings:
+                        findings.append({
+                            "analyzer": "SecurityAnalyzer",
+                            "rule_id": finding.rule_id,
+                            "message": finding.message,
+                            "severity": finding.severity.value,
+                            "file": file_path,
+                            "line": finding.line_start,
+                            "suggestion": finding.suggestion,
+                            "cwe_id": finding.cwe_id,
+                        })
+                except Exception as e:
+                    get_logger().warning(
+                        "Security analyzer failed",
+                        extra={"context": {"file": file_path, "error": str(e)}}
+                    )
+                    
+            except Exception as e:
+                get_logger().warning(
+                    "Failed to analyze file",
+                    extra={"context": {"file": str(file), "error": str(e)}}
+                )
+        
+        self.workiz_context["analyzer_findings"] = findings
+        
+        get_logger().info(
+            "Language analyzers completed",
+            extra={"context": {
+                "pr_url": self.pr_url,
+                "findings_count": len(findings),
+                "files_analyzed": len(files),
+            }}
+        )
 
     async def _run_custom_rules(self) -> None:
         """Run custom rules engine on changed files."""
@@ -183,12 +269,47 @@ class WorkizPRReviewer(PRReviewer):
             extra={"context": {"pr_url": self.pr_url}}
         )
         
-        # TODO: Implement in Phase 4
-        # - Load rules from workiz_rules.toml
-        # - Load rules from database
-        # - Apply rules to changed files
-        # - Collect findings
-        self.workiz_context["rules_findings"] = []
+        rules_engine = get_rules_engine()
+        await rules_engine.load_rules()
+        
+        files_content = {}
+        files = self.git_provider.get_files()
+        
+        for file in files:
+            try:
+                file_path = file.filename if hasattr(file, 'filename') else str(file)
+                try:
+                    content = self.git_provider.get_pr_file_content(file_path, self.git_provider.pr.head.ref)
+                    if content:
+                        files_content[file_path] = content
+                except Exception:
+                    continue
+            except Exception:
+                continue
+        
+        rule_findings = await rules_engine.apply_rules(files_content)
+        
+        self.workiz_context["rules_findings"] = [
+            {
+                "rule": f.rule_id,
+                "rule_name": f.rule_name,
+                "message": f.message,
+                "severity": f.severity,
+                "file": f.file_path,
+                "line": f.line_start,
+                "suggestion": f.suggestion,
+            }
+            for f in rule_findings
+        ]
+        
+        get_logger().info(
+            "Custom rules engine completed",
+            extra={"context": {
+                "pr_url": self.pr_url,
+                "findings_count": len(rule_findings),
+                "files_checked": len(files_content),
+            }}
+        )
 
     def _enhance_review_vars(self) -> None:
         """Add Workiz context to review variables for prompt injection."""
