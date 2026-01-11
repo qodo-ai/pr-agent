@@ -58,22 +58,35 @@ async def save_review(
         from pr_agent.db import get_db_connection
         
         with get_db_connection() as conn:
+            # First get repository_id from repositories table, or create if not exists
+            cursor = conn.execute(
+                """
+                INSERT INTO repositories (name, full_name, url)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+                RETURNING id
+                """,
+                (repository, repository, pr_url.split("/pull/")[0] if "/pull/" in pr_url else ""),
+            )
+            repo_result = cursor.fetchone()
+            repository_id = repo_result[0] if repo_result else None
+            
             cursor = conn.execute(
                 """
                 INSERT INTO review_history (
-                    pr_url, pr_number, repository, pr_title, pr_author,
+                    repository_id, pr_url, pr_number, pr_title, pr_author,
                     review_type, review_output, findings_count, suggestions_count,
                     workiz_context_used, duration_ms, model_used, tokens_used,
-                    created_at
+                    reviewed_at
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING id
                 """,
                 (
+                    repository_id,
                     pr_url,
                     pr_number,
-                    repository,
                     pr_title,
                     pr_author,
                     review_type,
@@ -142,23 +155,24 @@ async def get_review_history(
         
         query = """
             SELECT 
-                id, pr_url, pr_number, repository, pr_title, pr_author,
-                review_type, findings_count, suggestions_count,
-                duration_ms, model_used, tokens_used, created_at
-            FROM review_history
+                rh.id, rh.pr_url, rh.pr_number, r.name as repository, rh.pr_title, rh.pr_author,
+                rh.review_type, rh.findings_count, rh.suggestions_count,
+                rh.duration_ms, rh.model_used, rh.tokens_used, rh.reviewed_at
+            FROM review_history rh
+            LEFT JOIN repositories r ON rh.repository_id = r.id
             WHERE 1=1
         """
         params = []
         
         if repository:
-            query += " AND repository = %s"
+            query += " AND r.name = %s"
             params.append(repository)
         
         if pr_author:
-            query += " AND pr_author = %s"
+            query += " AND rh.pr_author = %s"
             params.append(pr_author)
         
-        query += " ORDER BY created_at DESC LIMIT %s OFFSET %s"
+        query += " ORDER BY rh.reviewed_at DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
         
         with get_db_connection() as conn:
@@ -225,19 +239,20 @@ async def get_review_stats(
         query = """
             SELECT 
                 COUNT(*) as total_reviews,
-                COUNT(DISTINCT repository) as repos_reviewed,
-                COUNT(DISTINCT pr_author) as authors_reviewed,
-                SUM(findings_count) as total_findings,
-                SUM(suggestions_count) as total_suggestions,
-                AVG(duration_ms) as avg_duration_ms,
-                SUM(tokens_used) as total_tokens
-            FROM review_history
-            WHERE created_at >= %s AND created_at <= %s
+                COUNT(DISTINCT rh.repository_id) as repos_reviewed,
+                COUNT(DISTINCT rh.pr_author) as authors_reviewed,
+                COALESCE(SUM(rh.findings_count), 0) as total_findings,
+                COALESCE(SUM(rh.suggestions_count), 0) as total_suggestions,
+                AVG(rh.duration_ms) as avg_duration_ms,
+                COALESCE(SUM(rh.tokens_used), 0) as total_tokens
+            FROM review_history rh
+            LEFT JOIN repositories r ON rh.repository_id = r.id
+            WHERE rh.reviewed_at >= %s AND rh.reviewed_at <= %s
         """
         params = [start_date, end_date]
         
         if repository:
-            query += " AND repository = %s"
+            query += " AND r.name = %s"
             params.append(repository)
         
         with get_db_connection() as conn:
