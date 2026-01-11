@@ -9,9 +9,6 @@
 # 🚀 The first AI Code Reviewer
 
 PR-Agent is an open-source, AI-powered code review agent. It is a legacy project of Qodo that is now maintained by the community.
-
-> NOTE: It is not related to the main product offering of Qodo's code review product.
-
 Qodo now offers a [free tier for AI code review](https://www.qodo.ai/get-started/) to easily integrate with GitHub, GitLab, Bitbucket, and Azure DevOps, with feature-rich capabilities for high-quality context-aware code reviews.
 
 ## Table of Contents
