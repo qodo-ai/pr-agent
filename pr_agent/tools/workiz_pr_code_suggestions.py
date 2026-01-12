@@ -267,31 +267,93 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         """
         Add Fix in Cursor links to each suggestion in the output.
         
-        The suggestions use markdown format:
-        [filename [line-range]](github_url)
-        
-        We add Cursor links after each file link.
+        The suggestions use HTML format with <details><summary>Title</summary>
+        We add the Cursor link button right after the summary title.
         """
-        file_link_pattern = r'\[([^\]]+\.(?:ts|tsx|js|jsx|py|php|java|go|rb|rs|cs))\s+\[(\d+)(?:-(\d+))?\]\]\(([^)]+)\)'
+        details_pattern = r'<details><summary>([^<]+)</summary>\s*\n\n___\s*\n\n\*\*([^*]+)\*\*\s*\n\n\[([^\]]+)\s+\[(\d+)(?:-(\d+))?\]\]\(([^)]+)\)\s*\n\n```diff\n(.*?)```'
         
         def add_cursor_link(match):
-            file_path = match.group(1)
-            start_line = int(match.group(2))
-            original_link = match.group(0)
+            title = match.group(1).strip()
+            description = match.group(2).strip()
+            file_path = match.group(3).strip()
+            start_line = int(match.group(4))
+            end_line = match.group(5)
+            github_url = match.group(6)
+            diff_code = match.group(7).strip()
             
-            cursor_url = self.comment_formatter._build_cursor_agent_url(
-                issue_type="Code Suggestion",
+            full_context = f"""Title: {title}
+
+Description: {description}
+
+File: {file_path}
+Lines: {start_line}{f'-{end_line}' if end_line else ''}
+
+Code changes:
+```diff
+{diff_code}
+```"""
+            
+            cursor_url = self._build_suggestion_cursor_url(
+                title=title,
                 file_path=file_path,
                 line_number=start_line,
-                suggestion="Apply the suggested code improvement from this PR review",
-                rule_id=None,
+                description=description,
+                diff_code=diff_code,
             )
             
-            return f"{original_link} [🔧 Fix in Cursor]({cursor_url})"
+            new_summary = f'<details><summary>{title} &nbsp;<kbd><a href="{cursor_url}">🔧 Fix in Cursor</a></kbd></summary>'
+            
+            rest_of_content = f"""
+
+___
+
+**{description}**
+
+[{file_path} [{start_line}{f'-{end_line}' if end_line else ''}]]({github_url})
+
+```diff
+{diff_code}```"""
+            
+            return new_summary + rest_of_content
         
-        enhanced_body = re.sub(file_link_pattern, add_cursor_link, pr_body)
+        enhanced_body = re.sub(details_pattern, add_cursor_link, pr_body, flags=re.DOTALL)
         
         return enhanced_body
+    
+    def _build_suggestion_cursor_url(
+        self,
+        title: str,
+        file_path: str,
+        line_number: int,
+        description: str,
+        diff_code: str,
+    ) -> str:
+        """Build cursor://agent/prompt URL with full suggestion context."""
+        from urllib.parse import quote
+        
+        prompt = f"""Apply this code suggestion from a PR review:
+
+## Suggestion: {title}
+
+**File:** {file_path}
+**Line:** {line_number}
+
+**What to do:** {description[:500]}
+
+**Suggested code changes:**
+```diff
+{diff_code[:1000]}
+```
+
+## Instructions:
+1. First verify the file and line number are correct
+2. Review the suggested diff carefully
+3. Apply the changes if they make sense
+4. Ensure the fix doesn't break existing functionality
+5. Follow the project's coding standards"""
+        
+        encoded_prompt = quote(prompt, safe='')
+        return f"cursor://agent/prompt?prompt={encoded_prompt}"
 
     def get_workiz_suggestions_summary(self) -> dict[str, Any]:
         """Get summary of Workiz-specific suggestions context."""
