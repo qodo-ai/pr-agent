@@ -83,7 +83,7 @@ To build from a custom base image (e.g., an internal registry mirror), pass `BAS
 The base image should include `python` and `apt-get` (Debian/Ubuntu base):
 
 ```bash
-docker build --build-arg BASE_IMAGE=python:3.12.10-slim \
+docker build . --build-arg BASE_IMAGE=python:3.12.10-slim \
   -t gitlab_pr_agent --target gitlab_webhook -f docker/Dockerfile
 ```
 
