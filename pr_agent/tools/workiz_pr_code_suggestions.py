@@ -267,10 +267,12 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         """
         Add Fix in Cursor links to each suggestion in the output.
         
-        Parses the markdown/HTML to find file references and adds clickable
-        cursor:// links for one-click fixing.
+        The suggestions use markdown format:
+        [filename [line-range]](github_url)
+        
+        We add Cursor links after each file link.
         """
-        file_link_pattern = r'\[([^\]]+\.(?:ts|tsx|js|jsx|py|php|java|go|rb|rs|cs))\s*\[(\d+)(?:-(\d+))?\]\]\(([^)]+)\)'
+        file_link_pattern = r'\[([^\]]+\.(?:ts|tsx|js|jsx|py|php|java|go|rb|rs|cs))\s+\[(\d+)(?:-(\d+))?\]\]\(([^)]+)\)'
         
         def add_cursor_link(match):
             file_path = match.group(1)

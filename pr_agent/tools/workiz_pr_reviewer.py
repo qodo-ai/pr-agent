@@ -429,47 +429,71 @@ class WorkizPRReviewer(PRReviewer):
         """
         Add Fix in Cursor links to key issues in the review output.
         
-        Parses the markdown to find file references and adds clickable
-        cursor:// links for one-click fixing.
+        The review output uses HTML format with links like:
+        <a href='...#diff-...R{start}-R{end}'><strong>Issue Header</strong></a>
+        
+        We add Cursor links after each issue's code block before </details>.
         """
-        file_line_pattern = r'\[([^\]]+\.(?:ts|tsx|js|jsx|py|php))\]\([^)]+\)\s*\[(\d+)-(\d+)\]'
+        html_link_pattern = r"<a href='([^']*#diff-[^']*R(\d+)-R(\d+))'><strong>([^<]+)</strong></a>\s*\n\n([^<]+)\n</summary>"
         
         def add_cursor_link(match):
-            file_path = match.group(1)
+            github_url = match.group(1)
             start_line = int(match.group(2))
-            
+            issue_header = match.group(4)
+            issue_content = match.group(5)
             original_text = match.group(0)
             
+            file_match = re.search(r'/([^/]+\.(ts|tsx|js|jsx|py|php|java|go|rb|rs|cs))R\d+', github_url)
+            file_path = file_match.group(1) if file_match else "unknown"
+            
+            path_match = re.search(r'#diff-[a-f0-9]+R', github_url)
+            if path_match:
+                file_parts = github_url.split('/files#')[0].split('/')
+                if len(file_parts) > 0:
+                    pass
+            
             cursor_url = self.comment_formatter._build_cursor_agent_url(
-                issue_type="Review Issue",
+                issue_type=issue_header,
                 file_path=file_path,
                 line_number=start_line,
-                suggestion="Fix the issue identified in this code review",
+                suggestion=issue_content.strip()[:200],
                 rule_id=None,
             )
             
-            return f"{original_text} [🔧 Fix in Cursor]({cursor_url})"
+            cursor_link = f"\n\n[🔧 Fix in Cursor]({cursor_url})"
+            
+            return original_text.replace("</summary>", f"{cursor_link}\n</summary>")
         
-        enhanced_text = re.sub(file_line_pattern, add_cursor_link, markdown_text)
+        enhanced_text = re.sub(html_link_pattern, add_cursor_link, markdown_text, flags=re.DOTALL)
         
-        simple_file_pattern = r'`([^`]+\.(?:ts|tsx|js|jsx|py|php))`[:\s]+(?:line\s*)?(\d+)'
+        simple_details_pattern = r"(</details>)"
+        details_blocks = list(re.finditer(r"<details><summary>.*?</details>", markdown_text, re.DOTALL))
         
-        def add_simple_cursor_link(match):
-            file_path = match.group(1)
-            line_num = int(match.group(2))
-            original_text = match.group(0)
+        for block in details_blocks:
+            block_text = block.group(0)
+            
+            href_match = re.search(r"href='[^']*#diff-[^']*R(\d+)", block_text)
+            if not href_match:
+                continue
+                
+            start_line = int(href_match.group(1))
+            
+            header_match = re.search(r"<strong>([^<]+)</strong>", block_text)
+            issue_header = header_match.group(1) if header_match else "Issue"
+            
+            file_match = re.search(r"```(\w+)\n(.*?)```", block_text, re.DOTALL)
             
             cursor_url = self.comment_formatter._build_cursor_agent_url(
-                issue_type="Review Issue",
-                file_path=file_path,
-                line_number=line_num,
-                suggestion="Fix the issue identified in this code review",
+                issue_type=issue_header,
+                file_path="file",
+                line_number=start_line,
+                suggestion=f"Fix the '{issue_header}' issue identified in this code review",
                 rule_id=None,
             )
             
-            return f"{original_text} [🔧 Fix]({cursor_url})"
-        
-        enhanced_text = re.sub(simple_file_pattern, add_simple_cursor_link, enhanced_text, flags=re.IGNORECASE)
+            if "</details>" in block_text and f"[🔧" not in block_text:
+                new_block = block_text.replace("</details>", f"\n\n[🔧 Fix in Cursor]({cursor_url})\n\n</details>")
+                enhanced_text = enhanced_text.replace(block_text, new_block)
         
         return enhanced_text
 
