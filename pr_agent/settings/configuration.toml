@@ -426,6 +426,16 @@ autofix_max_iterations = 5
 track_internal_packages = true
 internal_package_scope = "@workiz"
 
+# Fix in Cursor integration
+# Adds clickable deep links to review comments that open Cursor IDE
+# with the AI agent pre-filled with fix instructions
+[workiz.cursor_integration]
+enabled = true
+# Include "Open File" link (cursor://open)
+include_open_file_link = true
+# Include vscode.dev web fallback link
+show_web_fallback = true
+
 [workiz.logging]
 # Datadog integration via JSON stdout
 json_format = true

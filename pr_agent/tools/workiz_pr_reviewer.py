@@ -8,6 +8,7 @@ Extends the base PRReviewer with Workiz-specific features:
 - Language-specific analyzers
 - Review history storage
 - API usage tracking
+- Fix in Cursor deep links
 """
 
 import time
@@ -23,6 +24,7 @@ from pr_agent.tools.language_analyzers import get_analyzer_for_file
 from pr_agent.tools.custom_rules_engine import get_rules_engine
 from pr_agent.tools.sql_analyzer import get_sql_analyzer
 from pr_agent.tools.security_analyzer import get_security_analyzer
+from pr_agent.tools.comment_formatter import CommentFormatter
 
 
 class WorkizPRReviewer(PRReviewer):
@@ -59,6 +61,13 @@ class WorkizPRReviewer(PRReviewer):
         
         self._start_time = None
         self._api_calls = []
+        
+        self.comment_formatter = CommentFormatter.from_pr_url(pr_url)
+        
+        cursor_config = self.workiz_config.get("cursor_integration", {})
+        self.cursor_enabled = cursor_config.get("enabled", True)
+        self.cursor_include_open_file = cursor_config.get("include_open_file_link", True)
+        self.cursor_show_web_fallback = cursor_config.get("show_web_fallback", True)
 
     async def run(self) -> None:
         """
@@ -339,24 +348,68 @@ class WorkizPRReviewer(PRReviewer):
             )
         
         if self.workiz_context["rules_findings"]:
-            findings_str = "\n".join(
-                f"- [{f['severity']}] {f['rule']}: {f['message']}"
-                for f in self.workiz_context["rules_findings"]
+            findings_with_links = self._format_findings_with_cursor_links(
+                self.workiz_context["rules_findings"],
+                finding_type="rule"
             )
             sections.append(
-                f"### Custom Rules Findings\n{findings_str}"
+                f"### Custom Rules Findings\n{findings_with_links}"
             )
         
         if self.workiz_context["analyzer_findings"]:
-            findings_str = "\n".join(
-                f"- [{f['analyzer']}] {f['message']}"
-                for f in self.workiz_context["analyzer_findings"]
+            findings_with_links = self._format_findings_with_cursor_links(
+                self.workiz_context["analyzer_findings"],
+                finding_type="analyzer"
             )
             sections.append(
-                f"### Language Analyzer Findings\n{findings_str}"
+                f"### Language Analyzer Findings\n{findings_with_links}"
             )
         
         return "\n\n".join(sections)
+    
+    def _format_findings_with_cursor_links(
+        self,
+        findings: list,
+        finding_type: str = "analyzer"
+    ) -> str:
+        """
+        Format findings with Fix in Cursor deep links.
+        
+        Args:
+            findings: List of finding dictionaries
+            finding_type: Either "analyzer" or "rule"
+        
+        Returns:
+            Formatted markdown string with Cursor links
+        """
+        if not self.cursor_enabled or not findings:
+            if finding_type == "rule":
+                return "\n".join(
+                    f"- [{f.get('severity', 'warning')}] {f.get('rule', 'unknown')}: {f.get('message', '')}"
+                    for f in findings
+                )
+            else:
+                return "\n".join(
+                    f"- [{f.get('analyzer', 'unknown')}] {f.get('message', '')}"
+                    for f in findings
+                )
+        
+        normalized_findings = []
+        for f in findings:
+            normalized = {
+                "file": f.get("file", "unknown"),
+                "line": f.get("line", 1),
+                "message": f.get("message", "Issue detected"),
+                "severity": f.get("severity", "warning"),
+                "suggestion": f.get("suggestion", "Review and fix this issue"),
+                "rule_id": f.get("rule_id") or f.get("rule"),
+            }
+            normalized_findings.append(normalized)
+        
+        return self.comment_formatter.add_cursor_links_to_findings(
+            normalized_findings,
+            format_type="inline"
+        )
 
     async def _store_review_history(self) -> None:
         """Store review in database for analytics and learning."""

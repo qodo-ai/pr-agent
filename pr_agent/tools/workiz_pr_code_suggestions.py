@@ -6,6 +6,7 @@ Extends the base PRCodeSuggestions with Workiz-specific features:
 - Cross-repository context for better suggestions
 - Custom rules-based suggestions
 - NestJS/React/PHP idiomatic patterns
+- Fix in Cursor deep links
 """
 
 import time
@@ -17,6 +18,7 @@ from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
+from pr_agent.tools.comment_formatter import CommentFormatter
 
 
 class WorkizPRCodeSuggestions(PRCodeSuggestions):
@@ -49,6 +51,13 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         }
         
         self._start_time = None
+        
+        self.comment_formatter = CommentFormatter.from_pr_url(pr_url)
+        
+        cursor_config = self.workiz_config.get("cursor_integration", {})
+        self.cursor_enabled = cursor_config.get("enabled", True)
+        self.cursor_include_open_file = cursor_config.get("include_open_file_link", True)
+        self.cursor_show_web_fallback = cursor_config.get("show_web_fallback", True)
 
     async def run(self):
         """
@@ -193,14 +202,32 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
 """
 
     def _format_rules_findings(self) -> str:
-        """Format rules findings for prompt injection."""
+        """Format rules findings for prompt injection with Cursor links."""
         findings = self.workiz_context["rules_findings"]
         if not findings:
             return ""
         
-        return "\n".join(
-            f"- [{f['severity']}] {f['rule']}: {f['message']} (line {f.get('line', '?')})"
+        if not self.cursor_enabled:
+            return "\n".join(
+                f"- [{f['severity']}] {f['rule']}: {f['message']} (line {f.get('line', '?')})"
+                for f in findings
+            )
+        
+        normalized_findings = [
+            {
+                "file": f.get("file", "unknown"),
+                "line": f.get("line", 1),
+                "message": f.get("message", "Issue detected"),
+                "severity": f.get("severity", "warning"),
+                "suggestion": f.get("suggestion", f.get("message", "Review and fix this issue")),
+                "rule_id": f.get("rule"),
+            }
             for f in findings
+        ]
+        
+        return self.comment_formatter.add_cursor_links_to_findings(
+            normalized_findings,
+            format_type="inline"
         )
 
     async def _track_api_usage(self) -> None:
