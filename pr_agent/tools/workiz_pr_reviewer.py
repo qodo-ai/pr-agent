@@ -24,7 +24,8 @@ from pr_agent.tools.language_analyzers import get_analyzer_for_file
 from pr_agent.tools.custom_rules_engine import get_rules_engine
 from pr_agent.tools.sql_analyzer import get_sql_analyzer
 from pr_agent.tools.security_analyzer import get_security_analyzer
-from pr_agent.tools.comment_formatter import CommentFormatter
+from pr_agent.tools.comment_formatter import CommentFormatter, add_cursor_links_to_review_text
+import re
 
 
 class WorkizPRReviewer(PRReviewer):
@@ -410,6 +411,67 @@ class WorkizPRReviewer(PRReviewer):
             normalized_findings,
             format_type="inline"
         )
+
+    def _prepare_pr_review(self) -> str:
+        """
+        Override base method to add Fix in Cursor links to the review output.
+        """
+        markdown_text = super()._prepare_pr_review()
+        
+        if not self.cursor_enabled or not markdown_text:
+            return markdown_text
+        
+        markdown_text = self._add_cursor_links_to_issues(markdown_text)
+        
+        return markdown_text
+    
+    def _add_cursor_links_to_issues(self, markdown_text: str) -> str:
+        """
+        Add Fix in Cursor links to key issues in the review output.
+        
+        Parses the markdown to find file references and adds clickable
+        cursor:// links for one-click fixing.
+        """
+        file_line_pattern = r'\[([^\]]+\.(?:ts|tsx|js|jsx|py|php))\]\([^)]+\)\s*\[(\d+)-(\d+)\]'
+        
+        def add_cursor_link(match):
+            file_path = match.group(1)
+            start_line = int(match.group(2))
+            
+            original_text = match.group(0)
+            
+            cursor_url = self.comment_formatter._build_cursor_agent_url(
+                issue_type="Review Issue",
+                file_path=file_path,
+                line_number=start_line,
+                suggestion="Fix the issue identified in this code review",
+                rule_id=None,
+            )
+            
+            return f"{original_text} [🔧 Fix in Cursor]({cursor_url})"
+        
+        enhanced_text = re.sub(file_line_pattern, add_cursor_link, markdown_text)
+        
+        simple_file_pattern = r'`([^`]+\.(?:ts|tsx|js|jsx|py|php))`[:\s]+(?:line\s*)?(\d+)'
+        
+        def add_simple_cursor_link(match):
+            file_path = match.group(1)
+            line_num = int(match.group(2))
+            original_text = match.group(0)
+            
+            cursor_url = self.comment_formatter._build_cursor_agent_url(
+                issue_type="Review Issue",
+                file_path=file_path,
+                line_number=line_num,
+                suggestion="Fix the issue identified in this code review",
+                rule_id=None,
+            )
+            
+            return f"{original_text} [🔧 Fix]({cursor_url})"
+        
+        enhanced_text = re.sub(simple_file_pattern, add_simple_cursor_link, enhanced_text, flags=re.IGNORECASE)
+        
+        return enhanced_text
 
     async def _store_review_history(self) -> None:
         """Store review in database for analytics and learning."""

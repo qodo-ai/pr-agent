@@ -9,9 +9,10 @@ Extends the base PRCodeSuggestions with Workiz-specific features:
 - Fix in Cursor deep links
 """
 
+import re
 import time
 from functools import partial
-from typing import Any
+from typing import Any, Dict
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
@@ -248,6 +249,47 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         # - Log estimated cost
         # - Store in database
         pass
+
+    def generate_summarized_suggestions(self, data: Dict) -> str:
+        """
+        Override base method to add Fix in Cursor links to the suggestions output.
+        """
+        pr_body = super().generate_summarized_suggestions(data)
+        
+        if not self.cursor_enabled or not pr_body:
+            return pr_body
+        
+        pr_body = self._add_cursor_links_to_suggestions(pr_body)
+        
+        return pr_body
+    
+    def _add_cursor_links_to_suggestions(self, pr_body: str) -> str:
+        """
+        Add Fix in Cursor links to each suggestion in the output.
+        
+        Parses the markdown/HTML to find file references and adds clickable
+        cursor:// links for one-click fixing.
+        """
+        file_link_pattern = r'\[([^\]]+\.(?:ts|tsx|js|jsx|py|php|java|go|rb|rs|cs))\s*\[(\d+)(?:-(\d+))?\]\]\(([^)]+)\)'
+        
+        def add_cursor_link(match):
+            file_path = match.group(1)
+            start_line = int(match.group(2))
+            original_link = match.group(0)
+            
+            cursor_url = self.comment_formatter._build_cursor_agent_url(
+                issue_type="Code Suggestion",
+                file_path=file_path,
+                line_number=start_line,
+                suggestion="Apply the suggested code improvement from this PR review",
+                rule_id=None,
+            )
+            
+            return f"{original_link} [🔧 Fix in Cursor]({cursor_url})"
+        
+        enhanced_body = re.sub(file_link_pattern, add_cursor_link, pr_body)
+        
+        return enhanced_body
 
     def get_workiz_suggestions_summary(self) -> dict[str, Any]:
         """Get summary of Workiz-specific suggestions context."""
