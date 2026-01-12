@@ -92,21 +92,24 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 
 ### 🔧 Fix in Cursor (NEW!)
 
-Every review comment includes a **"Fix in Cursor"** link that opens the file at the exact line in your IDE:
+Every review comment includes a **"Fix in Cursor"** link that opens Cursor with the AI agent **pre-filled with fix instructions**:
 
 ```
 🔍 Issue: Let Usage Detected
 File: src/services/user.service.ts (line 42)
 
-[🔧 Fix in Cursor](cursor://file/...) | [📋 Copy Fix Instructions](#)
+[🔧 Fix in Cursor](cursor://agent/prompt?prompt=...) | [📂 Open File](cursor://open?...)
 ```
 
 **How it works:**
-1. Click "🔧 Fix in Cursor" → Opens file at the exact line in Cursor
-2. Click "📋 Copy Fix Instructions" → Copy context for Cursor Composer
-3. Paste in Composer (Cmd+K) → AI fixes with full context
+1. Click "🔧 Fix in Cursor" → Cursor opens with Agent pre-filled with the fix prompt
+2. Hit Enter → AI fixes the issue automatically
+3. No copy-paste needed! Uses `cursor://agent/prompt` deep link
 
-Supports: `cursor://` (Cursor IDE), `vscode://` (VS Code), and `vscode.dev` (web fallback)
+**URL Schemes:**
+- `cursor://agent/prompt?prompt={encoded}` - Opens Agent with pre-filled instructions
+- `cursor://open?file={path}&line={num}` - Opens file at specific line
+- `vscode.dev` - Web fallback for users without Cursor
 
 ### 🤖 Knowledge Assistant (NEW!)
 

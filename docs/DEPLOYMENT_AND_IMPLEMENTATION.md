@@ -180,17 +180,27 @@ python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" wor
 
 ### Fix in Cursor Links
 
-Review comments include "Fix in Cursor" links that use URL schemes:
+Review comments include "Fix in Cursor" links that use Cursor's deep link URL schemes:
 
 | Link | URL Format | Opens |
 |------|------------|-------|
-| 🔧 Fix in Cursor | `cursor://file/{path}:{line}` | Cursor IDE at line |
-| 📝 Fix in VS Code | `vscode://file/{path}:{line}` | VS Code at line |
-| 🌐 Open in vscode.dev | `https://vscode.dev/github/{org}/{repo}` | Browser editor |
+| 🔧 Fix in Cursor | `cursor://agent/prompt?prompt={encoded}` | Cursor Agent with pre-filled fix prompt |
+| 📂 Open File | `cursor://open?file={path}&line={line}` | Cursor at specific file and line |
+| 🌐 vscode.dev | `https://vscode.dev/github/{org}/{repo}` | Browser editor (fallback) |
+
+**How the Agent URL Works:**
+```
+cursor://agent/prompt?prompt=Fix%20the%20following%20issue%3A%0A%0AFile%3A%20src%2Fapp.ts%0ALine%3A%2042%0A...
+```
+
+When clicked:
+1. Cursor opens (or focuses if already open)
+2. The Agent/Composer is activated with the fix instructions pre-filled
+3. User reviews and hits Enter to apply the fix
 
 **Requirements:**
-- Cursor/VS Code must be installed and associated with the URL protocol
-- Repository must be cloned locally for local IDE links to work
+- Cursor must be installed (version 1.0+ with Bugbot deep link support)
+- Repository should be open in Cursor for best results
 - Web fallback always works (opens GitHub in vscode.dev)
 
 ---

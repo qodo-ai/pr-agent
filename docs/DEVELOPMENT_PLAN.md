@@ -412,16 +412,17 @@ After this phase, you can deploy a basic working version to GKE.
 - [ ] Add "Fix in Cursor" link to all review comments
 - [ ] Add "Fix in Cursor" link to code suggestions
 - [ ] Implement URL scheme support:
-  - [ ] Primary: `cursor://file/{path}:{line}` - opens file at line in Cursor
-  - [ ] Fallback: `vscode://file/{path}:{line}` - opens in VS Code
+  - [ ] Primary: `cursor://agent/prompt?prompt={encoded}` - opens Agent with pre-filled fix prompt
+  - [ ] Secondary: `cursor://open?file={path}&line={line}` - opens file at line
   - [ ] Web fallback: `https://vscode.dev/github/{org}/{repo}` link
-- [ ] Include full context in link hover/title:
-  - [ ] Issue description
+- [ ] Build fix prompt with full context:
+  - [ ] Issue type and description
   - [ ] File path and line number
   - [ ] Suggested fix
-  - [ ] Prompt: "Verify if the issue exists"
-- [ ] Add "📋 Copy Fix Instructions" button for Cursor Composer
-  > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Fix in Cursor Integration](#fix-in-cursor-integration)
+  - [ ] Verification instruction: "First verify the issue still exists"
+- [ ] Create `pr_agent/tools/comment_formatter.py` with `CommentFormatter` class
+- [ ] Integrate into `WorkizPRReviewer` output formatting
+  > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Fix in Cursor Integration](#14-fix-in-cursor-integration)
 
 ### ✅ Phase 4 Completion Criteria
 - [x] All language analyzers implemented ✅
