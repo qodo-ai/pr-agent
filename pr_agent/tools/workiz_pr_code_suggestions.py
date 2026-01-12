@@ -252,73 +252,118 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
 
     def generate_summarized_suggestions(self, data: Dict) -> str:
         """
-        Override base method to add Fix in Cursor links to the suggestions output.
+        Override base method to add Fix in Cursor column to the suggestions table.
         """
-        pr_body = super().generate_summarized_suggestions(data)
+        if not self.cursor_enabled:
+            return super().generate_summarized_suggestions(data)
         
-        if not self.cursor_enabled or not pr_body:
+        try:
+            import difflib
+            from pr_agent.algo.utils import get_settings
+            from pr_agent.tools.pr_code_suggestions import insert_br_after_x_chars, replace_code_tags
+            
+            pr_body = "## PR Code Suggestions ✨\n\n"
+
+            if len(data.get('code_suggestions', [])) == 0:
+                pr_body += "No suggestions found to improve this PR."
+                return pr_body
+
+            if get_settings().config.is_auto_command:
+                pr_body += "Explore these optional code suggestions:\n\n"
+
+            pr_body += "<table>"
+            header = f"Suggestion"
+            delta = 58
+            header += "&nbsp; " * delta
+            pr_body += f"""<thead><tr><td><strong>Category</strong></td><td align=left><strong>{header}</strong></td><td align=center><strong>Impact</strong></td><td align=center><strong>Fix</strong></td></tr>"""
+            pr_body += """<tbody>"""
+            
+            suggestions_labels = dict()
+            for suggestion in data['code_suggestions']:
+                label = suggestion['label'].strip().strip("'").strip('"')
+                if label not in suggestions_labels:
+                    suggestions_labels[label] = []
+                suggestions_labels[label].append(suggestion)
+
+            suggestions_labels = dict(
+                sorted(suggestions_labels.items(), key=lambda x: max([s['score'] for s in x[1]]), reverse=True))
+            for label, suggestions in suggestions_labels.items():
+                suggestions_labels[label] = sorted(suggestions, key=lambda x: x['score'], reverse=True)
+
+            for label, suggestions in suggestions_labels.items():
+                num_suggestions = len(suggestions)
+                pr_body += f"""<tr><td rowspan={num_suggestions}>{label.capitalize()}</td>\n"""
+                
+                for i, suggestion in enumerate(suggestions):
+                    relevant_file = suggestion['relevant_file'].strip()
+                    relevant_lines_start = int(suggestion['relevant_lines_start'])
+                    relevant_lines_end = int(suggestion['relevant_lines_end'])
+                    
+                    range_str = f"[{relevant_lines_start}]" if relevant_lines_start == relevant_lines_end else f"[{relevant_lines_start}-{relevant_lines_end}]"
+
+                    try:
+                        code_snippet_link = self.git_provider.get_line_link(relevant_file, relevant_lines_start, relevant_lines_end)
+                    except:
+                        code_snippet_link = ""
+
+                    suggestion_content = suggestion['suggestion_content'].rstrip()
+                    suggestion_content = insert_br_after_x_chars(suggestion_content, 84)
+                    
+                    existing_code = suggestion['existing_code'].rstrip() + "\n"
+                    improved_code = suggestion['improved_code'].rstrip() + "\n"
+
+                    diff = difflib.unified_diff(existing_code.split('\n'), improved_code.split('\n'), n=999)
+                    patch = "\n".join(list(diff)[5:]).strip('\n')
+                    example_code = f"```diff\n{patch.rstrip()}\n```\n"
+
+                    if i == 0:
+                        pr_body += f"""<td>\n\n"""
+                    else:
+                        pr_body += f"""<tr><td>\n\n"""
+                    
+                    suggestion_summary = suggestion['one_sentence_summary'].strip().rstrip('.')
+                    if "'<" in suggestion_summary and ">'" in suggestion_summary:
+                        suggestion_summary = suggestion_summary.replace("'<", "`<").replace(">'", ">`")
+                    if '`' in suggestion_summary:
+                        suggestion_summary = replace_code_tags(suggestion_summary)
+
+                    pr_body += f"""\n\n<details><summary>{suggestion_summary}</summary>\n\n___\n\n"""
+                    pr_body += f"""**{suggestion_content}**\n\n[{relevant_file} {range_str}]({code_snippet_link})\n\n{example_code.rstrip()}\n"""
+                    
+                    if suggestion.get('score_why'):
+                        pr_body += f"<details><summary>Suggestion importance[1-10]: {suggestion['score']}</summary>\n\n__\n\nWhy: {suggestion['score_why']}\n\n</details>"
+
+                    pr_body += f"</details>"
+
+                    score_int = int(suggestion.get('score', 0))
+                    score_str = self._get_score_str(score_int)
+                    pr_body += f"</td><td align=center>{score_str}</td>"
+                    
+                    cursor_url = self._build_suggestion_cursor_url(
+                        title=suggestion_summary,
+                        file_path=relevant_file,
+                        line_number=relevant_lines_start,
+                        description=suggestion_content,
+                        diff_code=patch,
+                    )
+                    pr_body += f"""<td align=center><a href="{cursor_url}"><kbd>🔧&nbsp;Fix</kbd></a></td>"""
+                    
+                    pr_body += f"</tr>"
+
+            pr_body += """</tbody></table>"""
             return pr_body
-        
-        pr_body = self._add_cursor_links_to_suggestions(pr_body)
-        
-        return pr_body
+            
+        except Exception as e:
+            get_logger().info(f"Failed to generate Workiz suggestions, falling back to base: {e}")
+            return super().generate_summarized_suggestions(data)
     
-    def _add_cursor_links_to_suggestions(self, pr_body: str) -> str:
-        """
-        Add Fix in Cursor links to each suggestion in the output.
-        
-        The suggestions use HTML format with <details><summary>Title</summary>
-        We add the Cursor link button right after the summary title.
-        """
-        details_pattern = r'<details><summary>([^<]+)</summary>\s*\n\n___\s*\n\n\*\*([^*]+)\*\*\s*\n\n\[([^\]]+)\s+\[(\d+)(?:-(\d+))?\]\]\(([^)]+)\)\s*\n\n```diff\n(.*?)```'
-        
-        def add_cursor_link(match):
-            title = match.group(1).strip()
-            description = match.group(2).strip()
-            file_path = match.group(3).strip()
-            start_line = int(match.group(4))
-            end_line = match.group(5)
-            github_url = match.group(6)
-            diff_code = match.group(7).strip()
-            
-            full_context = f"""Title: {title}
-
-Description: {description}
-
-File: {file_path}
-Lines: {start_line}{f'-{end_line}' if end_line else ''}
-
-Code changes:
-```diff
-{diff_code}
-```"""
-            
-            cursor_url = self._build_suggestion_cursor_url(
-                title=title,
-                file_path=file_path,
-                line_number=start_line,
-                description=description,
-                diff_code=diff_code,
-            )
-            
-            new_summary = f'<details><summary>{title} &nbsp;<kbd><a href="{cursor_url}">🔧 Fix in Cursor</a></kbd></summary>'
-            
-            rest_of_content = f"""
-
-___
-
-**{description}**
-
-[{file_path} [{start_line}{f'-{end_line}' if end_line else ''}]]({github_url})
-
-```diff
-{diff_code}```"""
-            
-            return new_summary + rest_of_content
-        
-        enhanced_body = re.sub(details_pattern, add_cursor_link, pr_body, flags=re.DOTALL)
-        
-        return enhanced_body
+    def _get_score_str(self, score: int) -> str:
+        """Convert numeric score to label."""
+        if score >= 9:
+            return "High"
+        elif score >= 7:
+            return "Medium"
+        return "Low"
     
     def _build_suggestion_cursor_url(
         self,
@@ -331,6 +376,8 @@ ___
         """Build cursor://agent/prompt URL with full suggestion context."""
         from urllib.parse import quote
         
+        clean_description = re.sub(r'<br\s*/?>', '\n', description)
+        
         prompt = f"""Apply this code suggestion from a PR review:
 
 ## Suggestion: {title}
@@ -338,7 +385,7 @@ ___
 **File:** {file_path}
 **Line:** {line_number}
 
-**What to do:** {description[:500]}
+**What to do:** {clean_description[:500]}
 
 **Suggested code changes:**
 ```diff
