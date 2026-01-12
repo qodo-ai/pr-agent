@@ -178,6 +178,21 @@ python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" wor
 python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" workiz_improve
 ```
 
+### Fix in Cursor Links
+
+Review comments include "Fix in Cursor" links that use URL schemes:
+
+| Link | URL Format | Opens |
+|------|------------|-------|
+| 🔧 Fix in Cursor | `cursor://file/{path}:{line}` | Cursor IDE at line |
+| 📝 Fix in VS Code | `vscode://file/{path}:{line}` | VS Code at line |
+| 🌐 Open in vscode.dev | `https://vscode.dev/github/{org}/{repo}` | Browser editor |
+
+**Requirements:**
+- Cursor/VS Code must be installed and associated with the URL protocol
+- Repository must be cloned locally for local IDE links to work
+- Web fallback always works (opens GitHub in vscode.dev)
+
 ---
 
 ## 2. Production Deployment (GKE + Helm)

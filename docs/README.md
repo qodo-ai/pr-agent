@@ -63,10 +63,11 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 |---------|-------------|--------|
 | **WorkizPRReviewer** | Enhanced `/review` with Workiz coding standards | ✅ Implemented |
 | **WorkizPRCodeSuggestions** | Enhanced `/improve` with Workiz patterns | ✅ Implemented |
-| **Custom Rules Engine** | Workiz-specific code style rules | ✅ Planned |
-| **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Planned |
+| **🔧 Fix in Cursor** | One-click links to open issues in Cursor IDE | ✅ Planned |
+| **Custom Rules Engine** | Workiz-specific code style rules | ✅ Implemented |
+| **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Implemented |
 | **Database Analyzers** | MySQL, MongoDB, Elasticsearch, PostgreSQL | ✅ Planned |
-| **Security Analyzer** | Traefik-aware security checks | ✅ Planned |
+| **Security Analyzer** | Traefik-aware security checks | ✅ Implemented |
 | **PubSub Analyzer** | Event topology and pattern validation | ✅ Planned |
 
 ### Integrations
@@ -88,6 +89,24 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **Admin UI** | Web dashboard for management | ✅ Planned |
 | **🤖 Knowledge Assistant** | Ask questions about your codebase | ✅ Planned |
 | **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
+
+### 🔧 Fix in Cursor (NEW!)
+
+Every review comment includes a **"Fix in Cursor"** link that opens the file at the exact line in your IDE:
+
+```
+🔍 Issue: Let Usage Detected
+File: src/services/user.service.ts (line 42)
+
+[🔧 Fix in Cursor](cursor://file/...) | [📋 Copy Fix Instructions](#)
+```
+
+**How it works:**
+1. Click "🔧 Fix in Cursor" → Opens file at the exact line in Cursor
+2. Click "📋 Copy Fix Instructions" → Copy context for Cursor Composer
+3. Paste in Composer (Cmd+K) → AI fixes with full context
+
+Supports: `cursor://` (Cursor IDE), `vscode://` (VS Code), and `vscode.dev` (web fallback)
 
 ### 🤖 Knowledge Assistant (NEW!)
 

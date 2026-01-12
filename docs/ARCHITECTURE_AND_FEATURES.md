@@ -17,6 +17,7 @@ This document covers the system architecture and all features of the Workiz PR A
 11. [NPM Package Management](#11-npm-package-management)
 12. [Admin UI](#12-admin-ui)
 13. [Error Handling](#13-error-handling)
+14. [Fix in Cursor Integration](#14-fix-in-cursor-integration)
 
 ---
 
@@ -3703,6 +3704,239 @@ class CircuitBreaker:
             return True
         return datetime.now() - self.last_failure_time > timedelta(seconds=self.recovery_timeout)
 ```
+
+---
+
+## 14. Fix in Cursor Integration
+
+The "Fix in Cursor" feature adds clickable links to review comments and code suggestions that open the affected file directly in Cursor IDE at the specific line, enabling developers to quickly address issues.
+
+### URL Scheme Support
+
+Cursor (based on VS Code) supports URL schemes for opening files:
+
+| Scheme | Format | Description |
+|--------|--------|-------------|
+| **Cursor** | `cursor://file/{path}:{line}:{column}` | Opens in Cursor IDE |
+| **VS Code** | `vscode://file/{path}:{line}:{column}` | Opens in VS Code |
+| **Web** | `https://vscode.dev/github/{org}/{repo}/blob/{branch}/{path}#L{line}` | Opens in vscode.dev |
+
+### Comment Format with Fix in Cursor
+
+Each review comment includes:
+
+```markdown
+### 🔍 Issue: Let Usage Detected
+
+**File:** `src/services/user.service.ts` (line 42)
+
+```typescript
+let count = 0; // ❌ Use const instead
+```
+
+**Suggestion:** Use `const` with immutable operations instead of `let`.
+
+---
+
+[🔧 Fix in Cursor](cursor://file//Users/dev/workiz/backend/src/services/user.service.ts:42:1) | 
+[📋 Copy Fix Instructions](#) | 
+[🌐 Open in vscode.dev](https://vscode.dev/github/Workiz/backend/blob/main/src/services/user.service.ts#L42)
+
+<details>
+<summary>💬 Fix Instructions for AI Assistant</summary>
+
+```
+Verify if the issue exists and fix it:
+
+File: src/services/user.service.ts
+Line: 42
+Issue: Let Usage Detected - Use const with immutable operations instead of let
+
+Context:
+- Rule: functional-programming/const-over-let
+- Severity: warning
+- The code uses 'let count = 0' which violates the immutability rule.
+
+Suggested fix: Replace 'let' with 'const' and use immutable array operations.
+```
+</details>
+```
+
+### Implementation
+
+```python
+# pr_agent/tools/comment_formatter.py
+
+from urllib.parse import quote
+from typing import Optional
+import re
+
+class CommentFormatter:
+    """Format review comments with Fix in Cursor links."""
+    
+    def __init__(self, org: str, repo: str, branch: str = "main"):
+        self.org = org
+        self.repo = repo
+        self.branch = branch
+    
+    def format_comment_with_cursor_link(
+        self,
+        issue_type: str,
+        file_path: str,
+        line_number: int,
+        code_snippet: str,
+        suggestion: str,
+        severity: str = "warning",
+        rule_id: Optional[str] = None
+    ) -> str:
+        """Format a review comment with Fix in Cursor links."""
+        
+        # Build URL-safe paths
+        cursor_url = self._build_cursor_url(file_path, line_number)
+        vscode_url = self._build_vscode_url(file_path, line_number)
+        web_url = self._build_web_url(file_path, line_number)
+        
+        # Build the fix instructions for AI
+        fix_instructions = self._build_fix_instructions(
+            issue_type, file_path, line_number, suggestion, severity, rule_id
+        )
+        
+        return f"""### 🔍 Issue: {issue_type}
+
+**File:** `{file_path}` (line {line_number})
+
+```
+{code_snippet}
+```
+
+**Suggestion:** {suggestion}
+
+---
+
+[🔧 Fix in Cursor]({cursor_url}) | [📝 Fix in VS Code]({vscode_url}) | [🌐 Open in vscode.dev]({web_url})
+
+<details>
+<summary>💬 Copy Fix Instructions for AI Assistant</summary>
+
+```
+{fix_instructions}
+```
+</details>
+"""
+    
+    def _build_cursor_url(self, file_path: str, line: int, column: int = 1) -> str:
+        """Build cursor:// URL to open file at specific line."""
+        # Note: User must have repo cloned locally
+        # The path is relative - Cursor will resolve it if the workspace is open
+        return f"cursor://file/{quote(file_path)}:{line}:{column}"
+    
+    def _build_vscode_url(self, file_path: str, line: int, column: int = 1) -> str:
+        """Build vscode:// URL to open file at specific line."""
+        return f"vscode://file/{quote(file_path)}:{line}:{column}"
+    
+    def _build_web_url(self, file_path: str, line: int) -> str:
+        """Build vscode.dev URL for web-based editing."""
+        return f"https://vscode.dev/github/{self.org}/{self.repo}/blob/{self.branch}/{file_path}#L{line}"
+    
+    def _build_fix_instructions(
+        self,
+        issue_type: str,
+        file_path: str,
+        line_number: int,
+        suggestion: str,
+        severity: str,
+        rule_id: Optional[str]
+    ) -> str:
+        """Build instructions that can be copied and pasted into Cursor Composer."""
+        rule_info = f"\n- Rule: {rule_id}" if rule_id else ""
+        
+        return f"""Verify if the issue exists and fix it:
+
+File: {file_path}
+Line: {line_number}
+Issue: {issue_type}
+Severity: {severity}{rule_info}
+
+Suggested fix: {suggestion}
+
+Instructions:
+1. Open the file at the specified line
+2. Verify the issue exists (it may have been fixed already)
+3. Apply the suggested fix if appropriate
+4. Ensure the fix doesn't break existing functionality"""
+
+
+def add_cursor_links_to_review(review_output: str, org: str, repo: str) -> str:
+    """
+    Post-process review output to add Fix in Cursor links to all findings.
+    
+    This function parses existing review comments and enhances them with
+    clickable links for fixing in Cursor IDE.
+    """
+    formatter = CommentFormatter(org, repo)
+    
+    # Pattern to match file references in review comments
+    file_pattern = r'`([^`]+\.(ts|tsx|js|jsx|py|php|java|go|rb))`.*?line\s*(\d+)'
+    
+    def add_links(match):
+        file_path = match.group(1)
+        line_num = int(match.group(3))
+        
+        cursor_url = formatter._build_cursor_url(file_path, line_num)
+        web_url = formatter._build_web_url(file_path, line_num)
+        
+        return f"{match.group(0)}\n\n[🔧 Fix in Cursor]({cursor_url}) | [🌐 Open in vscode.dev]({web_url})"
+    
+    return re.sub(file_pattern, add_links, review_output, flags=re.IGNORECASE)
+```
+
+### Configuration
+
+Add to `configuration.toml`:
+
+```toml
+[workiz.cursor_integration]
+enabled = true
+# Primary IDE to link to
+primary_ide = "cursor"  # "cursor" | "vscode" | "web"
+# Include copy-paste instructions for AI
+include_ai_instructions = true
+# Show web fallback link
+show_web_fallback = true
+```
+
+### How It Works
+
+1. **During Review**: When `WorkizPRReviewer` generates findings, each finding is formatted with Fix in Cursor links
+2. **Link Types**:
+   - **cursor://**: Opens Cursor IDE at the exact file and line (requires local clone)
+   - **vscode://**: Fallback for VS Code users
+   - **vscode.dev**: Web-based editing for users without local setup
+3. **AI Instructions**: Collapsible section with copy-paste text for Cursor Composer including:
+   - File path and line number
+   - Issue description and severity
+   - Suggested fix
+   - Verification prompt: "Verify if the issue exists"
+
+### User Experience
+
+1. Developer sees review comment with issue
+2. Clicks "🔧 Fix in Cursor" link
+3. Cursor opens at the exact line
+4. Developer can invoke Cursor Composer (Cmd+K) and paste the fix instructions
+5. AI assistant fixes the issue with full context
+
+### Limitations
+
+- **Local Path**: `cursor://file/` requires the repo to be cloned locally at a known path
+- **No Pre-filled Composer**: Cursor doesn't support pre-filling the Composer via URL scheme
+- **Solution**: We provide copyable instructions in a collapsible section
+
+### Future Enhancements
+
+- [ ] Cursor extension that handles custom `cursor://workiz-fix/` URLs
+- [ ] Integration with GitHub Codespaces for cloud-based fixing
+- [ ] One-click fix that applies the suggestion automatically
 
 ---
 

@@ -408,14 +408,30 @@ After this phase, you can deploy a basic working version to GKE.
 - [ ] Verify Datadog logs show analyzer activity
 - [ ] Tune rules based on feedback
 
+#### 4.13 "Fix in Cursor" Button (NEW)
+- [ ] Add "Fix in Cursor" link to all review comments
+- [ ] Add "Fix in Cursor" link to code suggestions
+- [ ] Implement URL scheme support:
+  - [ ] Primary: `cursor://file/{path}:{line}` - opens file at line in Cursor
+  - [ ] Fallback: `vscode://file/{path}:{line}` - opens in VS Code
+  - [ ] Web fallback: `https://vscode.dev/github/{org}/{repo}` link
+- [ ] Include full context in link hover/title:
+  - [ ] Issue description
+  - [ ] File path and line number
+  - [ ] Suggested fix
+  - [ ] Prompt: "Verify if the issue exists"
+- [ ] Add "📋 Copy Fix Instructions" button for Cursor Composer
+  > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Fix in Cursor Integration](#fix-in-cursor-integration)
+
 ### ✅ Phase 4 Completion Criteria
 - [x] All language analyzers implemented ✅
 - [x] Custom rules working ✅
 - [x] SQL analyzer finds issues ✅
 - [x] Security analyzer finds issues ✅
+- [ ] "Fix in Cursor" button implemented
 - [ ] **Deployed and tested on real PRs** (SKIPPED for now)
 
-**Phase 4 Status: ✅ COMPLETED** (deployment skipped)
+**Phase 4 Status: ✅ COMPLETED** (deployment skipped, "Fix in Cursor" pending)
 
 ---
 
