@@ -333,20 +333,41 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
                     if suggestion.get('score_why'):
                         pr_body += f"<details><summary>Suggestion importance[1-10]: {suggestion['score']}</summary>\n\n__\n\nWhy: {suggestion['score_why']}\n\n</details>"
 
+                    cursor_prompt_text = self._build_cursor_prompt(
+                        title=suggestion_summary,
+                        file_path=relevant_file,
+                        line_number=relevant_lines_start,
+                        description=suggestion_content.replace('<br>', '\n'),
+                        diff_code=patch,
+                    )
+                    pr_body += f"\n\n<details><summary>🔧 <strong>Fix with Cursor AI</strong> - Click to copy prompt</summary>\n\n"
+                    pr_body += f"Copy this prompt and paste it in Cursor's AI chat:\n\n"
+                    pr_body += f"```\n{cursor_prompt_text}\n```\n\n</details>"
+
                     pr_body += f"</details>"
 
                     score_int = int(suggestion.get('score', 0))
                     score_str = self._get_score_str(score_int)
                     pr_body += f"</td><td align=center>{score_str}</td>"
                     
-                    cursor_url = self._build_suggestion_cursor_url(
+                    vscode_url = self._build_suggestion_cursor_url(
                         title=suggestion_summary,
                         file_path=relevant_file,
                         line_number=relevant_lines_start,
                         description=suggestion_content,
                         diff_code=patch,
                     )
-                    pr_body += f"""<td align=center><a href="{cursor_url}"><kbd>🔧&nbsp;Fix</kbd></a></td>"""
+                    
+                    cursor_prompt = self._build_cursor_prompt(
+                        title=suggestion_summary,
+                        file_path=relevant_file,
+                        line_number=relevant_lines_start,
+                        description=suggestion_content,
+                        diff_code=patch,
+                    )
+                    escaped_prompt = cursor_prompt.replace('"', '&quot;').replace('\n', '&#10;')[:500]
+                    
+                    pr_body += f"""<td align=center><a href="{vscode_url}" title="Open in VS Code Web. For Cursor: copy prompt from expanded suggestion"><kbd>📂&nbsp;Open</kbd></a></td>"""
                     
                     pr_body += f"</tr>"
 
@@ -373,12 +394,33 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         description: str,
         diff_code: str,
     ) -> str:
-        """Build cursor://agent/prompt URL with full suggestion context."""
+        """
+        Build a URL for the Fix in Cursor button.
+        
+        GitHub blocks custom URL schemes (cursor://) for security.
+        We use vscode.dev as a fallback which GitHub allows, and include
+        instructions in the link title for using Cursor.
+        """
         from urllib.parse import quote
         
+        org = self.comment_formatter.org
+        repo = self.comment_formatter.repo
+        branch = self.comment_formatter.branch
+        
+        return f"https://vscode.dev/github/{org}/{repo}/blob/{branch}/{file_path}#L{line_number}"
+    
+    def _build_cursor_prompt(
+        self,
+        title: str,
+        file_path: str,
+        line_number: int,
+        description: str,
+        diff_code: str,
+    ) -> str:
+        """Build the prompt text for Cursor agent."""
         clean_description = re.sub(r'<br\s*/?>', '\n', description)
         
-        prompt = f"""Apply this code suggestion from a PR review:
+        return f"""Apply this code suggestion from a PR review:
 
 ## Suggestion: {title}
 
@@ -394,13 +436,10 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
 
 ## Instructions:
 1. First verify the file and line number are correct
-2. Review the suggested diff carefully
+2. Review the suggested diff carefully  
 3. Apply the changes if they make sense
 4. Ensure the fix doesn't break existing functionality
 5. Follow the project's coding standards"""
-        
-        encoded_prompt = quote(prompt, safe='')
-        return f"cursor://agent/prompt?prompt={encoded_prompt}"
 
     def get_workiz_suggestions_summary(self) -> dict[str, Any]:
         """Get summary of Workiz-specific suggestions context."""
