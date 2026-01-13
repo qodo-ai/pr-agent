@@ -408,22 +408,23 @@ After this phase, you can deploy a basic working version to GKE.
 - [ ] Verify Datadog logs show analyzer activity
 - [ ] Tune rules based on feedback
 
-#### 4.13 "Fix in Cursor" Button ✅ COMPLETED
-- [x] Add "Fix in Cursor" link to all review comments ✅
-- [x] Add "Fix in Cursor" link to code suggestions ✅
-- [x] Implement URL scheme support: ✅
-  - [x] Primary: `cursor://agent/prompt?prompt={encoded}` - opens Agent with pre-filled fix prompt ✅
-  - [x] Secondary: `cursor://open?file={path}&line={line}` - opens file at line ✅
-  - [x] Web fallback: `https://vscode.dev/github/{org}/{repo}` link ✅
-- [x] Build fix prompt with full context: ✅
-  - [x] Issue type and description ✅
-  - [x] File path and line number ✅
-  - [x] Suggested fix ✅
-  - [x] Verification instruction: "First verify the issue still exists" ✅
-- [x] Create `pr_agent/tools/comment_formatter.py` with `CommentFormatter` class ✅
-- [x] Integrate into `WorkizPRReviewer` output formatting ✅
-- [x] Integrate into `WorkizPRCodeSuggestions` output formatting ✅
+#### 4.13 "Fix in Cursor" Button 🔄 IN PROGRESS
+> **⚠️ Important Discovery**: GitHub's HTML sanitizer blocks custom URL schemes like `cursor://`. The buttons render but are not clickable. A different approach is needed.
+
+**Current Status (Partial):**
+- [x] Add copyable Cursor prompt to code suggestions ✅
+- [x] Add vscode.dev fallback link (HTTPS, works in GitHub) ✅
+- [x] Create `pr_agent/tools/comment_formatter.py` ✅
 - [x] Add `[workiz.cursor_integration]` config section ✅
+
+**🔴 Blocked Items (GitHub blocks cursor:// URLs):**
+- [ ] ~~cursor://agent/prompt URLs~~ - GitHub strips these
+- [ ] ~~cursor://open URLs~~ - GitHub strips these
+- [ ] Action buttons are not clickable
+
+**📋 New Implementation Plan:**
+See Phase 4B below for the corrected approach using GitHub Check Runs.
+
   > 📖 Reference: [ARCHITECTURE_AND_FEATURES.md - Fix in Cursor Integration](#14-fix-in-cursor-integration)
 
 ### ✅ Phase 4 Completion Criteria
@@ -431,10 +432,153 @@ After this phase, you can deploy a basic working version to GKE.
 - [x] Custom rules working ✅
 - [x] SQL analyzer finds issues ✅
 - [x] Security analyzer finds issues ✅
-- [x] "Fix in Cursor" button implemented ✅
+- [x] "Fix in Cursor" basic implementation (prompts, fallbacks) ✅
 - [ ] **Deployed and tested on real PRs** (SKIPPED for now)
 
-**Phase 4 Status: ✅ COMPLETED** (deployment skipped)
+**Phase 4 Status: ✅ COMPLETED** (deployment skipped, Fix in Cursor continues in 4B)
+
+---
+
+## Phase 4B: Fix in Cursor - Complete Implementation (NEW)
+
+**Goal**: Implement proper "Fix in Cursor" functionality using GitHub Check Runs with action buttons
+
+**Background**: GitHub blocks custom URL schemes (`cursor://`) in comments. The solution is to use GitHub's Check Runs API which supports native action buttons that trigger webhooks.
+
+### Architecture Overview
+
+```
+GitHub PR → Check Run with Annotations → User clicks "Fix in Cursor" button
+                                                        │
+                                                        ▼
+                          Webhook: check_run.requested_action
+                                                        │
+                                                        ▼
+              PR Agent Server → Generate cursor:// URL or show prompt
+```
+
+### Tasks
+
+#### 4B.1 Individual Inline Comments (Quick Win)
+- [ ] Add `publish_individual_review_comment()` method to `GithubProvider`
+  ```python
+  def publish_individual_review_comment(self, file_path: str, line: int, body: str):
+      """POST /repos/{owner}/{repo}/pulls/{pull_number}/comments"""
+      payload = {
+          "body": body,
+          "commit_id": self.last_commit_id.sha,
+          "path": file_path,
+          "line": line,
+          "side": "RIGHT"
+      }
+      headers, data = self.pr._requester.requestJsonAndCheck(
+          "POST", f"{self.pr.url}/comments", input=payload
+      )
+      return data
+  ```
+- [ ] Create new review output mode: individual comments per finding
+- [ ] Each comment appears inline on the affected code line (not batched)
+- [ ] Include collapsible Cursor prompt in each comment
+
+#### 4B.2 GitHub Check Runs Support
+- [ ] Add `create_check_run()` method to `GithubProvider`
+  ```python
+  def create_check_run(self, name: str, head_sha: str, status: str, 
+                       conclusion: str, output: dict, actions: list = None):
+      """POST /repos/{owner}/{repo}/check-runs"""
+      payload = {
+          "name": name,
+          "head_sha": head_sha,
+          "status": status,
+          "conclusion": conclusion,
+          "output": output,
+          "actions": actions or []
+      }
+      # Implementation...
+  ```
+- [ ] Add `add_check_annotations()` method for batch annotations
+- [ ] Support up to 50 annotations per request (GitHub limit)
+- [ ] Handle pagination for more than 50 findings
+
+#### 4B.3 Check Run Action Buttons
+- [ ] Define action button structure:
+  ```json
+  {
+    "label": "Fix in Cursor",
+    "description": "Open Cursor AI to fix",
+    "identifier": "fix_cursor_{file_hash}_{line}"
+  }
+  ```
+- [ ] Maximum 3 actions per check run (GitHub limit)
+- [ ] Create unique identifier encoding file/line info
+
+#### 4B.4 Handle check_run.requested_action Webhook
+- [ ] Add webhook handler in `github_app.py`:
+  ```python
+  async def handle_check_run_requested_action(body: dict):
+      identifier = body["requested_action"]["identifier"]
+      # Parse identifier to get file, line, issue
+      # Generate response...
+  ```
+- [ ] Parse action identifier to extract context
+- [ ] Create `/api/cursor-redirect` endpoint
+- [ ] Post reply comment with Cursor prompt
+
+#### 4B.5 Cursor Redirect Page
+- [ ] Create simple HTML page for cursor:// redirect
+- [ ] Hosted at HTTPS URL (works in GitHub)
+- [ ] Page attempts `window.location = "cursor://..."` 
+- [ ] Fallback: display prompt with copy button
+- [ ] Can be hosted on GitHub Pages or our server
+
+Example redirect page:
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Opening Cursor...</title></head>
+<body>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const prompt = params.get('prompt');
+    window.location = `cursor://agent/prompt?prompt=${prompt}`;
+    setTimeout(() => {
+      document.body.innerHTML = `
+        <h2>Copy this prompt into Cursor:</h2>
+        <textarea id="prompt">${decodeURIComponent(prompt)}</textarea>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('prompt').value)">
+          Copy to Clipboard
+        </button>
+      `;
+    }, 2000);
+  </script>
+  <p>Opening Cursor... If nothing happens, your browser may have blocked the redirect.</p>
+</body>
+</html>
+```
+
+#### 4B.6 Update WorkizPRReviewer for Check Runs
+- [ ] Add option to use check runs instead of PR comments
+- [ ] Create check run with all findings as annotations
+- [ ] Include "Fix in Cursor" action button for top issues
+- [ ] Add config option: `use_check_runs = true`
+
+#### 4B.7 Update WorkizPRCodeSuggestions for Check Runs  
+- [ ] Similar updates for code suggestions
+- [ ] Each suggestion as an annotation with fix button
+- [ ] Preserve existing table format in PR comment (summary)
+
+### 📖 References
+- [GitHub Checks API Documentation](https://docs.github.com/en/rest/checks)
+- [GitHub check_run.requested_action Webhook](https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_run)
+- [ARCHITECTURE_AND_FEATURES.md - Fix in Cursor](#14-fix-in-cursor-integration)
+
+### ✅ Phase 4B Completion Criteria
+- [ ] Individual inline comments work on specific lines
+- [ ] Check run created with annotations for all findings
+- [ ] "Fix in Cursor" button appears in GitHub Checks tab
+- [ ] Clicking button triggers webhook to our server
+- [ ] Server responds with cursor:// redirect or prompt
+- [ ] End-to-end tested on real PR
 
 ---
 

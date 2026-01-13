@@ -63,7 +63,7 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 |---------|-------------|--------|
 | **WorkizPRReviewer** | Enhanced `/review` with Workiz coding standards | ✅ Implemented |
 | **WorkizPRCodeSuggestions** | Enhanced `/improve` with Workiz patterns | ✅ Implemented |
-| **🔧 Fix in Cursor** | One-click links to open issues in Cursor IDE | ✅ Planned |
+| **🔧 Fix in Cursor** | One-click buttons to open issues in Cursor IDE | 🔄 In Progress |
 | **Custom Rules Engine** | Workiz-specific code style rules | ✅ Implemented |
 | **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Implemented |
 | **Database Analyzers** | MySQL, MongoDB, Elasticsearch, PostgreSQL | ✅ Planned |
@@ -90,26 +90,40 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **🤖 Knowledge Assistant** | Ask questions about your codebase | ✅ Planned |
 | **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
 
-### 🔧 Fix in Cursor (NEW!)
+### 🔧 Fix in Cursor (IN PROGRESS)
 
-Every review comment includes a **"Fix in Cursor"** link that opens Cursor with the AI agent **pre-filled with fix instructions**:
+Every code suggestion includes a **"Fix in Cursor"** option:
+
+**Current Implementation:**
+- **📂 Open** button → Opens file in VS Code Web (vscode.dev) at the exact line
+- **🔧 Fix with Cursor AI** section → Expandable prompt you can copy into Cursor
 
 ```
-🔍 Issue: Let Usage Detected
-File: src/services/user.service.ts (line 42)
-
-[🔧 Fix in Cursor](cursor://agent/prompt?prompt=...) | [📂 Open File](cursor://open?...)
+┌─────────────────────────────────────────────────────────────┐
+│ Category │ Suggestion           │ Impact │ Fix              │
+├─────────────────────────────────────────────────────────────┤
+│ Issue    │ ▶ Use const instead  │ High   │ [📂 Open]        │
+└─────────────────────────────────────────────────────────────┘
+                    │
+                    ▼ (expand)
+            🔧 Fix with Cursor AI - Click to copy prompt
+            ┌─────────────────────────────────────────┐
+            │ Apply this code suggestion...           │
+            │ File: src/user.service.ts               │
+            │ Line: 42                                │
+            │ ...                                     │
+            └─────────────────────────────────────────┘
 ```
 
-**How it works:**
-1. Click "🔧 Fix in Cursor" → Cursor opens with Agent pre-filled with the fix prompt
-2. Hit Enter → AI fixes the issue automatically
-3. No copy-paste needed! Uses `cursor://agent/prompt` deep link
+**Why not direct cursor:// links?**
+> ⚠️ GitHub blocks custom URL schemes (`cursor://`) for security reasons. Only `http://`, `https://`, `mailto:` are allowed.
 
-**URL Schemes:**
-- `cursor://agent/prompt?prompt={encoded}` - Opens Agent with pre-filled instructions
-- `cursor://open?file={path}&line={num}` - Opens file at specific line
-- `vscode.dev` - Web fallback for users without Cursor
+**Coming Soon (Phase 4B):**
+- GitHub Check Runs with native **action buttons**
+- Button click → webhook → server redirects to cursor://
+- True one-click experience!
+
+See [DEVELOPMENT_PLAN.md - Phase 4B](./DEVELOPMENT_PLAN.md#phase-4b-fix-in-cursor---complete-implementation-new) for implementation details.
 
 ### 🤖 Knowledge Assistant (NEW!)
 

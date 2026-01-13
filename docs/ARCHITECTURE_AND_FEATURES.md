@@ -3912,11 +3912,179 @@ show_web_fallback = true
 | `cursor://open?file={path}&line={num}` | Open file at line | `cursor://open?file=src/app.ts&line=42` |
 | `cursor://anysphere.cursor-deeplink/mcp/install?...` | Install MCP server | (for extensions) |
 
+### Important: GitHub URL Scheme Limitations
+
+**⚠️ GitHub's HTML sanitizer blocks custom URL schemes** like `cursor://` for security reasons. Only `http://`, `https://`, `mailto:`, and `tel:` are allowed.
+
+This means:
+- `cursor://agent/prompt?prompt=...` links **will not work** when clicked in GitHub comments
+- `cursor://open?file=...` links **will not work** in GitHub comments
+- We need a different approach for the "Fix in Cursor" button
+
+### Solution: GitHub Check Runs with Action Buttons
+
+The correct approach (used by Bugbot) is to use **GitHub Check Runs API** which supports native action buttons:
+
+```
+POST /repos/{owner}/{repo}/check-runs
+```
+
+#### How Check Runs Work
+
+1. **Create a Check Run** for each finding with annotations pointing to specific lines
+2. **Add Action Buttons** via the `actions` array - these are native GitHub UI elements, not markdown
+3. **Handle Webhook**: When user clicks button, GitHub sends `check_run.requested_action` webhook
+4. **Server Responds**: Our server handles the webhook and redirects to cursor:// or shows the prompt
+
+#### Example Check Run with Action Button
+
+```json
+{
+  "name": "Workiz PR Review",
+  "head_sha": "abc123...",
+  "status": "completed",
+  "conclusion": "action_required",
+  "output": {
+    "title": "Found 3 issues",
+    "summary": "PR has potential improvements",
+    "annotations": [
+      {
+        "path": "src/user.service.ts",
+        "start_line": 42,
+        "end_line": 42,
+        "annotation_level": "warning",
+        "message": "Using `let` instead of `const` - variable is never reassigned",
+        "title": "Use const for immutable variables"
+      }
+    ]
+  },
+  "actions": [
+    {
+      "label": "Fix in Cursor",
+      "description": "Open Cursor AI to fix this issue",
+      "identifier": "fix_cursor_42_src_user_service_ts"
+    }
+  ]
+}
+```
+
+#### Implementation Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    GitHub PR View                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Checks Tab:                                                 │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ ✓ Workiz PR Review                                   │    │
+│  │   Found 3 issues in this PR                          │    │
+│  │                                                       │    │
+│  │   ⚠️ src/user.service.ts:42                          │    │
+│  │      Use const instead of let                        │    │
+│  │      [Fix in Cursor] [Dismiss]  ← Native buttons!    │    │
+│  │                                                       │    │
+│  │   ⚠️ src/api.controller.ts:15                        │    │
+│  │      Business logic in controller                     │    │
+│  │      [Fix in Cursor] [Dismiss]                       │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+│  Files Changed Tab:                                          │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  41 |   const users = [];                            │    │
+│  │  42 |   let result = await this.repo.find();  ← ⚠️   │    │
+│  │      └──────────────────────────────────────────────┐│    │
+│  │      │ ⚠️ Use const - variable never reassigned     ││    │
+│  │      └──────────────────────────────────────────────┘│    │
+│  │  43 |   return result;                               │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+           │
+           │ User clicks "Fix in Cursor"
+           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ GitHub sends check_run.requested_action webhook             │
+│                                                              │
+│  POST /webhook                                               │
+│  {                                                           │
+│    "action": "requested_action",                             │
+│    "requested_action": {                                     │
+│      "identifier": "fix_cursor_42_src_user_service_ts"      │
+│    },                                                        │
+│    "check_run": { ... }                                      │
+│  }                                                           │
+└─────────────────────────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ PR Agent Server                                              │
+│                                                              │
+│  1. Parse identifier to get file/line/issue                  │
+│  2. Generate cursor://agent/prompt URL                       │
+│  3. Either:                                                  │
+│     a) Return redirect response (if browser context)         │
+│     b) Add comment with the prompt to copy                   │
+│     c) Use GitHub API to post a comment with the prompt     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Alternative: Individual Inline Comments
+
+For immediate implementation without Check Runs, we can:
+
+1. **Change from batch reviews to individual comments**
+   - Current: `pr.create_review(comments=[...])`  - all in one batch
+   - New: `POST /pulls/{pull_number}/comments` - one per finding
+
+2. **Include copyable prompt** in each comment
+   - Since cursor:// URLs don't work, include a collapsible section with the full prompt
+   - User can copy and paste into Cursor
+
+```python
+# Individual review comment structure
+def publish_individual_comment(file_path: str, line: int, body: str):
+    """
+    POST /repos/{owner}/{repo}/pulls/{pull_number}/comments
+    """
+    payload = {
+        "body": body,
+        "commit_id": last_commit_sha,
+        "path": file_path,
+        "line": line,
+        "side": "RIGHT"
+    }
+    # This creates a SINGLE inline comment on the specific line
+```
+
+### Implementation Phases
+
+#### Phase A: Individual Comments (Quick Win)
+- [ ] Add `publish_individual_review_comment()` to GitHub provider
+- [ ] Modify review output to create separate comments per finding
+- [ ] Include copyable Cursor prompt in each comment
+- [ ] Each comment appears inline on the affected code line
+
+#### Phase B: Check Runs with Annotations (Full Feature)
+- [ ] Add `create_check_run()` to GitHub provider
+- [ ] Add `add_check_annotations()` method
+- [ ] Create check run per review with all annotations
+- [ ] Add "Fix in Cursor" action button
+- [ ] Handle `check_run.requested_action` webhook
+- [ ] Add `/api/cursor-redirect` endpoint to generate cursor:// URLs
+
+#### Phase C: Cursor Redirect Service
+- [ ] Create hosted redirect page (HTTPS → cursor://)
+- [ ] Encode prompt in URL query parameters
+- [ ] Page attempts to open cursor:// scheme
+- [ ] Fallback: displays prompt for copy/paste
+
 ### Future Enhancements
 
 - [ ] Include repo/workspace context in the prompt for better AI understanding
 - [ ] Integration with GitHub Codespaces for cloud-based fixing
 - [ ] Add "Apply All Fixes" button that chains multiple agent calls
+- [ ] Batch action: Fix all issues with one click
 
 ---
 
