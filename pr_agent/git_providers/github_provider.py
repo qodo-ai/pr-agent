@@ -1191,6 +1191,168 @@ class GithubProvider(GitProvider):
                 get_logger().error(f"Failed to process patch for committable comment, error: {e}")
         return code_suggestions_copy
 
+    # Check Runs API Methods
+    def create_check_run(
+        self,
+        name: str,
+        head_sha: str,
+        status: str = "completed",
+        conclusion: str = "neutral",
+        output: dict = None,
+        actions: list = None,
+        details_url: str = None,
+    ) -> dict:
+        """
+        Create a GitHub Check Run with annotations and action buttons.
+        
+        Args:
+            name: Name of the check (e.g., "Workiz PR Review")
+            head_sha: The SHA of the commit to attach the check to
+            status: "queued", "in_progress", or "completed"
+            conclusion: "action_required", "cancelled", "failure", "neutral", "success", "skipped"
+            output: Dict with title, summary, text, and annotations
+            actions: List of action buttons (max 3), each with label, description, identifier
+            details_url: URL for "Details" link
+            
+        Returns:
+            Dict with check run data including id
+        """
+        payload = {
+            "name": name,
+            "head_sha": head_sha,
+            "status": status,
+        }
+        
+        if status == "completed":
+            payload["conclusion"] = conclusion
+            
+        if output:
+            payload["output"] = output
+            
+        if actions:
+            payload["actions"] = actions[:3]
+            
+        if details_url:
+            payload["details_url"] = details_url
+            
+        try:
+            headers, data = self.pr._requester.requestJsonAndCheck(
+                "POST", f"{self.base_url}/repos/{self.repo}/check-runs", input=payload
+            )
+            get_logger().info(f"Created check run: {data.get('id')}", {"check_run_id": data.get("id"), "name": name})
+            return data
+        except Exception as e:
+            get_logger().error(f"Failed to create check run: {e}", {"error": str(e), "name": name})
+            raise
+
+    def update_check_run(
+        self,
+        check_run_id: int,
+        status: str = None,
+        conclusion: str = None,
+        output: dict = None,
+        actions: list = None,
+    ) -> dict:
+        """
+        Update an existing check run.
+        
+        Args:
+            check_run_id: ID of the check run to update
+            status: New status
+            conclusion: New conclusion (required if status is "completed")
+            output: Updated output with annotations
+            actions: Updated action buttons
+            
+        Returns:
+            Dict with updated check run data
+        """
+        payload = {}
+        
+        if status:
+            payload["status"] = status
+            
+        if conclusion:
+            payload["conclusion"] = conclusion
+            
+        if output:
+            payload["output"] = output
+            
+        if actions:
+            payload["actions"] = actions[:3]
+            
+        try:
+            headers, data = self.pr._requester.requestJsonAndCheck(
+                "PATCH", f"{self.base_url}/repos/{self.repo}/check-runs/{check_run_id}", input=payload
+            )
+            get_logger().info(f"Updated check run: {check_run_id}", {"check_run_id": check_run_id})
+            return data
+        except Exception as e:
+            get_logger().error(f"Failed to update check run: {e}", {"error": str(e), "check_run_id": check_run_id})
+            raise
+
+    def get_check_run(self, check_run_id: int) -> dict:
+        """Get a check run by ID."""
+        try:
+            headers, data = self.pr._requester.requestJsonAndCheck(
+                "GET", f"{self.base_url}/repos/{self.repo}/check-runs/{check_run_id}"
+            )
+            return data
+        except Exception as e:
+            get_logger().error(f"Failed to get check run: {e}", {"error": str(e), "check_run_id": check_run_id})
+            raise
+
+    def publish_individual_review_comment(
+        self,
+        file_path: str,
+        line: int,
+        body: str,
+        side: str = "RIGHT",
+        start_line: int = None,
+    ) -> dict:
+        """
+        Publish a single inline review comment on a specific line.
+        
+        Unlike publish_inline_comments which batches comments into a review,
+        this creates an individual comment that appears inline on the code.
+        
+        Args:
+            file_path: Path to the file relative to repo root
+            line: Line number to comment on
+            body: Comment body (markdown)
+            side: "LEFT" (deletion) or "RIGHT" (addition/context)
+            start_line: Start line for multi-line comments
+            
+        Returns:
+            Dict with comment data
+        """
+        body = self.limit_output_characters(body, self.max_comment_chars)
+        
+        payload = {
+            "body": body,
+            "commit_id": self.last_commit_id.sha,
+            "path": file_path,
+            "line": line,
+            "side": side,
+        }
+        
+        if start_line and start_line != line:
+            payload["start_line"] = start_line
+            payload["start_side"] = side
+            
+        try:
+            headers, data = self.pr._requester.requestJsonAndCheck(
+                "POST", f"{self.pr.url}/comments", input=payload
+            )
+            get_logger().info(f"Published individual comment on {file_path}:{line}", {
+                "file": file_path, "line": line
+            })
+            return data
+        except Exception as e:
+            get_logger().error(f"Failed to publish individual comment: {e}", {
+                "error": str(e), "file": file_path, "line": line
+            })
+            raise
+
     #Clone related
     def _prepare_clone_url_with_token(self, repo_url_to_clone: str) -> str | None:
         scheme = "https://"

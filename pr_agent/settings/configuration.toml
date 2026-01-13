@@ -431,10 +431,18 @@ internal_package_scope = "@workiz"
 # with the AI agent pre-filled with fix instructions
 [workiz.cursor_integration]
 enabled = true
+# Use GitHub Check Runs for annotations with action buttons (recommended)
+# When true: Creates check run with "Fix in Cursor" button that triggers webhook
+# When false: Uses inline comments with copyable prompts (fallback)
+use_check_runs = true
+# Base URL for cursor redirect endpoint (leave empty to use current server URL)
+redirect_base_url = ""
 # Include "Open File" link (cursor://open)
 include_open_file_link = true
 # Include vscode.dev web fallback link
 show_web_fallback = true
+# Check run name displayed in GitHub Checks tab
+check_run_name = "Workiz Code Review"
 
 [workiz.logging]
 # Datadog integration via JSON stdout

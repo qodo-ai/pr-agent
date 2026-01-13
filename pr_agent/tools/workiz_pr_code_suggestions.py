@@ -7,8 +7,10 @@ Extends the base PRCodeSuggestions with Workiz-specific features:
 - Custom rules-based suggestions
 - NestJS/React/PHP idiomatic patterns
 - Fix in Cursor deep links
+- GitHub Check Runs with action buttons
 """
 
+import os
 import re
 import time
 from functools import partial
@@ -20,6 +22,11 @@ from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 from pr_agent.tools.comment_formatter import CommentFormatter
+from pr_agent.tools.check_run_builder import (
+    CheckRunBuilder,
+    AnnotationLevel,
+    encode_action_identifier,
+)
 
 
 class WorkizPRCodeSuggestions(PRCodeSuggestions):
@@ -59,6 +66,11 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         self.cursor_enabled = cursor_config.get("enabled", True)
         self.cursor_include_open_file = cursor_config.get("include_open_file_link", True)
         self.cursor_show_web_fallback = cursor_config.get("show_web_fallback", True)
+        self.use_check_runs = cursor_config.get("use_check_runs", True)
+        self.check_run_name = cursor_config.get("check_run_name", "Workiz Code Review") + " - Suggestions"
+        self.redirect_base_url = cursor_config.get("redirect_base_url", "") or os.environ.get("WEBHOOK_URL", "")
+        
+        self._suggestions_data = None
 
     async def run(self):
         """
@@ -100,6 +112,9 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
             self._enhance_suggestion_vars()
             
             result = await super().run()
+            
+            if self.use_check_runs and self.cursor_enabled and self._suggestions_data:
+                await self._create_check_run_with_suggestions()
             
             await self._track_api_usage()
             
@@ -250,10 +265,134 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         # - Store in database
         pass
 
+    async def _create_check_run_with_suggestions(self) -> None:
+        """
+        Create a GitHub Check Run with annotations for all suggestions.
+        
+        This enables:
+        - Inline annotations on the PR's Files Changed tab
+        - "Fix in Cursor" action buttons for high-impact suggestions
+        """
+        if not self._suggestions_data:
+            return
+            
+        suggestions = self._suggestions_data.get('code_suggestions', [])
+        if not suggestions:
+            get_logger().debug("No suggestions to create check run for", {
+                "pr_url": self.pr_url
+            })
+            return
+        
+        try:
+            head_sha = self.git_provider.last_commit_id.sha
+            
+            builder = CheckRunBuilder(self.check_run_name, head_sha)
+            
+            high_impact = sum(1 for s in suggestions if int(s.get('score', 0)) >= 7)
+            medium_impact = sum(1 for s in suggestions if 4 <= int(s.get('score', 0)) < 7)
+            low_impact = len(suggestions) - high_impact - medium_impact
+            
+            if high_impact > 0:
+                conclusion = "action_required"
+            elif medium_impact > 0:
+                conclusion = "neutral"
+            else:
+                conclusion = "success"
+            
+            builder.set_status("completed", conclusion)
+            
+            summary = f"Found {len(suggestions)} improvement suggestions: "
+            summary += f"{high_impact} high impact, {medium_impact} medium, {low_impact} low"
+            
+            builder.set_output(
+                title=f"Suggestions: {len(suggestions)} improvements",
+                summary=summary,
+                text="Review the suggestions to improve code quality. Click 'Fix in Cursor' to apply fixes automatically."
+            )
+            
+            from pr_agent.servers.github_app import store_action_context
+            
+            sorted_suggestions = sorted(suggestions, key=lambda x: int(x.get('score', 0)), reverse=True)
+            
+            for i, suggestion in enumerate(sorted_suggestions[:50]):
+                file_path = suggestion.get('relevant_file', 'unknown').strip()
+                start_line = int(suggestion.get('relevant_lines_start', 1))
+                end_line = int(suggestion.get('relevant_lines_end', start_line))
+                score = int(suggestion.get('score', 0))
+                summary_text = suggestion.get('one_sentence_summary', 'Suggestion').strip()
+                content = suggestion.get('suggestion_content', '').strip()
+                label = suggestion.get('label', 'improvement').strip()
+                
+                if score >= 7:
+                    level = AnnotationLevel.WARNING
+                elif score >= 4:
+                    level = AnnotationLevel.NOTICE
+                else:
+                    level = AnnotationLevel.NOTICE
+                
+                message = f"{summary_text}\n\n{content}"
+                
+                builder.add_annotation(
+                    path=file_path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    message=message,
+                    level=level,
+                    title=f"[{label}] Impact: {score}/10"[:255],
+                )
+            
+            action_candidates = [s for s in sorted_suggestions if int(s.get('score', 0)) >= 7][:3]
+            
+            for suggestion in action_candidates:
+                file_path = suggestion.get('relevant_file', 'unknown').strip()
+                start_line = int(suggestion.get('relevant_lines_start', 1))
+                summary_text = suggestion.get('one_sentence_summary', 'Fix')
+                content = suggestion.get('suggestion_content', '')
+                existing_code = suggestion.get('existing_code', '')
+                improved_code = suggestion.get('improved_code', '')
+                
+                identifier = encode_action_identifier(file_path, start_line, summary_text[:10])
+                
+                store_action_context(identifier, {
+                    "file_path": file_path,
+                    "line": start_line,
+                    "issue_type": summary_text,
+                    "message": content,
+                    "suggestion": f"Replace:\n{existing_code}\n\nWith:\n{improved_code}",
+                    "code_context": existing_code,
+                    "pr_url": self.pr_url,
+                })
+                
+                short_file = file_path.split("/")[-1][:10]
+                builder.add_action(
+                    label=f"Fix {short_file}:{start_line}"[:20],
+                    identifier=identifier,
+                    description="Open Cursor AI to fix"[:40],
+                )
+            
+            check_run_data = builder.build()
+            
+            self.git_provider.create_check_run(**check_run_data)
+            
+            get_logger().info("Created check run with suggestions", {
+                "pr_url": self.pr_url,
+                "suggestions_count": len(suggestions),
+                "annotations_count": min(len(suggestions), 50),
+                "actions_count": len(action_candidates),
+            })
+            
+        except Exception as e:
+            get_logger().error("Failed to create check run for suggestions", {
+                "pr_url": self.pr_url,
+                "error": str(e),
+            })
+
     def generate_summarized_suggestions(self, data: Dict) -> str:
         """
         Override base method to add Fix in Cursor column to the suggestions table.
         """
+        self._suggestions_data = data
+        
         if not self.cursor_enabled:
             return super().generate_summarized_suggestions(data)
         

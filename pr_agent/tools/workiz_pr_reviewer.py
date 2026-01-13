@@ -9,8 +9,11 @@ Extends the base PRReviewer with Workiz-specific features:
 - Review history storage
 - API usage tracking
 - Fix in Cursor deep links
+- GitHub Check Runs with action buttons
 """
 
+import os
+import re
 import time
 from functools import partial
 from typing import Any
@@ -25,7 +28,12 @@ from pr_agent.tools.custom_rules_engine import get_rules_engine
 from pr_agent.tools.sql_analyzer import get_sql_analyzer
 from pr_agent.tools.security_analyzer import get_security_analyzer
 from pr_agent.tools.comment_formatter import CommentFormatter, add_cursor_links_to_review_text
-import re
+from pr_agent.tools.check_run_builder import (
+    CheckRunBuilder,
+    AnnotationLevel,
+    encode_action_identifier,
+    build_cursor_prompt,
+)
 
 
 class WorkizPRReviewer(PRReviewer):
@@ -69,6 +77,9 @@ class WorkizPRReviewer(PRReviewer):
         self.cursor_enabled = cursor_config.get("enabled", True)
         self.cursor_include_open_file = cursor_config.get("include_open_file_link", True)
         self.cursor_show_web_fallback = cursor_config.get("show_web_fallback", True)
+        self.use_check_runs = cursor_config.get("use_check_runs", True)
+        self.check_run_name = cursor_config.get("check_run_name", "Workiz Code Review")
+        self.redirect_base_url = cursor_config.get("redirect_base_url", "") or os.environ.get("WEBHOOK_URL", "")
 
     async def run(self) -> None:
         """
@@ -116,6 +127,9 @@ class WorkizPRReviewer(PRReviewer):
             self._enhance_review_vars()
             
             await super().run()
+            
+            if self.use_check_runs and self.cursor_enabled:
+                await self._create_check_run_with_findings()
             
             await self._store_review_history()
             
@@ -320,6 +334,155 @@ class WorkizPRReviewer(PRReviewer):
                 "files_checked": len(files_content),
             }}
         )
+
+    async def _create_check_run_with_findings(self) -> None:
+        """
+        Create a GitHub Check Run with annotations for all findings.
+        
+        This enables:
+        - Inline annotations on the PR's Files Changed tab
+        - "Fix in Cursor" action buttons
+        - Better visibility of issues in the Checks tab
+        """
+        all_findings = []
+        
+        for f in self.workiz_context.get("analyzer_findings", []):
+            all_findings.append({
+                "type": "analyzer",
+                "source": f.get("analyzer", "unknown"),
+                **f
+            })
+        
+        for f in self.workiz_context.get("rules_findings", []):
+            all_findings.append({
+                "type": "rule",
+                "source": f.get("rule", "unknown"),
+                **f
+            })
+        
+        if not all_findings:
+            get_logger().debug("No findings to create check run for", {
+                "pr_url": self.pr_url
+            })
+            return
+        
+        try:
+            head_sha = self.git_provider.last_commit_id.sha
+            
+            builder = CheckRunBuilder(self.check_run_name, head_sha)
+            
+            severity_counts = {"failure": 0, "warning": 0, "notice": 0}
+            for f in all_findings:
+                sev = f.get("severity", "warning").lower()
+                if sev in ("error", "failure", "critical", "high"):
+                    severity_counts["failure"] += 1
+                elif sev in ("warning", "medium"):
+                    severity_counts["warning"] += 1
+                else:
+                    severity_counts["notice"] += 1
+            
+            if severity_counts["failure"] > 0:
+                conclusion = "failure"
+            elif severity_counts["warning"] > 0:
+                conclusion = "action_required"
+            else:
+                conclusion = "neutral"
+            
+            builder.set_status("completed", conclusion)
+            
+            summary = f"Found {len(all_findings)} issues: "
+            summary += f"{severity_counts['failure']} errors, "
+            summary += f"{severity_counts['warning']} warnings, "
+            summary += f"{severity_counts['notice']} notices"
+            
+            builder.set_output(
+                title=f"Review: {len(all_findings)} issues found",
+                summary=summary,
+                text="Click on annotations to see details. Use the 'Fix in Cursor' button to open fixes in your IDE."
+            )
+            
+            from pr_agent.servers.github_app import store_action_context
+            
+            action_candidates = []
+            
+            for i, finding in enumerate(all_findings[:50]):
+                file_path = finding.get("file", "unknown")
+                line = finding.get("line", 1)
+                message = finding.get("message", "Issue detected")
+                severity = finding.get("severity", "warning").lower()
+                source = finding.get("source", "analyzer")
+                suggestion = finding.get("suggestion", "")
+                
+                if severity in ("error", "failure", "critical", "high"):
+                    level = AnnotationLevel.FAILURE
+                elif severity in ("warning", "medium"):
+                    level = AnnotationLevel.WARNING
+                else:
+                    level = AnnotationLevel.NOTICE
+                
+                title = f"[{source}] {finding.get('rule_id', '')}".strip("[] ")
+                
+                annotation_message = message
+                if suggestion:
+                    annotation_message += f"\n\nSuggested fix: {suggestion}"
+                
+                builder.add_annotation(
+                    path=file_path,
+                    start_line=line,
+                    message=annotation_message,
+                    level=level,
+                    title=title[:255],
+                )
+                
+                if level in (AnnotationLevel.FAILURE, AnnotationLevel.WARNING):
+                    action_candidates.append({
+                        "finding": finding,
+                        "index": i,
+                        "severity_rank": 0 if level == AnnotationLevel.FAILURE else 1
+                    })
+            
+            action_candidates.sort(key=lambda x: (x["severity_rank"], x["index"]))
+            
+            for candidate in action_candidates[:3]:
+                finding = candidate["finding"]
+                file_path = finding.get("file", "unknown")
+                line = finding.get("line", 1)
+                
+                identifier = encode_action_identifier(file_path, line, finding.get("rule_id", ""))
+                
+                store_action_context(identifier, {
+                    "file_path": file_path,
+                    "line": line,
+                    "issue_type": finding.get("rule_id") or finding.get("source", "Issue"),
+                    "message": finding.get("message", ""),
+                    "suggestion": finding.get("suggestion", ""),
+                    "code_context": "",
+                    "pr_url": self.pr_url,
+                })
+                
+                short_file = file_path.split("/")[-1][:10]
+                builder.add_action(
+                    label=f"Fix {short_file}:{line}"[:20],
+                    identifier=identifier,
+                    description="Open Cursor AI to fix"[:40],
+                )
+            
+            check_run_data = builder.build()
+            
+            self.git_provider.create_check_run(**check_run_data)
+            
+            get_logger().info("Created check run with findings", {
+                "pr_url": self.pr_url,
+                "findings_count": len(all_findings),
+                "annotations_count": min(len(all_findings), 50),
+                "actions_count": min(len(action_candidates), 3),
+            })
+            
+        except Exception as e:
+            get_logger().error("Failed to create check run", {
+                "pr_url": self.pr_url,
+                "error": str(e),
+            })
 
     def _enhance_review_vars(self) -> None:
         """Add Workiz context to review variables for prompt injection."""
