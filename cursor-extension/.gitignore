@@ -1,0 +1,12 @@
+# Build output
+out/
+*.vsix
+
+# Dependencies
+node_modules/
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode-test/

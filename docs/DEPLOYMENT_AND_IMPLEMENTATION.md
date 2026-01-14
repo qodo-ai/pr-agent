@@ -178,6 +178,61 @@ python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" wor
 python pr_agent/cli.py --pr_url="https://github.com/Workiz/test-repo/pull/1" workiz_improve
 ```
 
+### Bugbot-Style Inline Comments
+
+Reviews and suggestions are posted as **individual inline comments** on specific code lines, just like Cursor Bugbot!
+
+**How it works:**
+
+1. PR Agent analyzes the PR using language analyzers and custom rules
+2. Each finding becomes an individual inline comment on the affected line
+3. Comments appear in BOTH "Files Changed" AND "Conversation" tabs
+4. Each comment includes action buttons for fixing
+
+| Button | URL Format | Opens |
+|--------|------------|-------|
+| 🔧 Fix in Cursor | `https://your-server/api/v1/cursor-redirect?prompt={encoded}` | Redirect page that opens Cursor Agent |
+| ↗ Fix in Web | `https://vscode.dev/github/{org}/{repo}/blob/{branch}/{file}#L{line}` | VS Code Web at the exact line |
+
+**Configuration:**
+
+```toml
+[workiz.inline_comments]
+enabled = true           # Enable inline comments (default: true)
+max_comments = 20        # Maximum comments per PR
+severity_threshold = "low"  # "high", "medium", or "low"
+cursor_redirect_url = "" # See configuration table below
+show_web_fallback = true # Include vscode.dev link
+```
+
+**cursor_redirect_url Configuration:**
+
+| Environment | Setting | How It Works |
+|-------------|---------|--------------|
+| **Local dev (ngrok)** | `""` (empty) | Auto-uses `WEBHOOK_URL` env var + `/api/v1/cursor-redirect` |
+| **Production** | `"https://pr-agent.workiz.com/api/v1/cursor-redirect"` | Direct production URL |
+| **Staging** | `"https://pr-agent-staging.workiz.com/api/v1/cursor-redirect"` | Staging server URL |
+
+**Local Development Setup:**
+```bash
+# 1. Start ngrok
+ngrok http 8000
+
+# 2. Set WEBHOOK_URL to ngrok URL (or add to .env)
+export WEBHOOK_URL=https://abc123.ngrok-free.app
+
+# 3. Start server
+python -m uvicorn pr_agent.servers.github_app:app --port 8000 --reload
+
+# 4. Leave cursor_redirect_url empty in configuration.toml
+# The system auto-builds: https://abc123.ngrok-free.app/api/v1/cursor-redirect
+```
+
+**Requirements:**
+- GitHub App must have "Pull requests: Read & write" permissions
+- Cursor must be installed for "Fix in Cursor" to work (version 1.0+)
+- Web fallback always works (opens vscode.dev in browser)
+
 ---
 
 ## 2. Production Deployment (GKE + Helm)

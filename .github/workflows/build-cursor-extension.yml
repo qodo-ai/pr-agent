@@ -1,0 +1,81 @@
+name: Build Cursor Extension
+
+on:
+  push:
+    paths:
+      - 'cursor-extension/**'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.1)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        working-directory: cursor-extension
+        run: npm ci
+      
+      - name: Compile TypeScript
+        working-directory: cursor-extension
+        run: npm run compile
+      
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+      
+      - name: Update version (if specified)
+        if: github.event.inputs.version != ''
+        working-directory: cursor-extension
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version
+      
+      - name: Package extension
+        working-directory: cursor-extension
+        run: vsce package --out workiz-pr-agent-fix.vsix
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-extension-vsix
+          path: cursor-extension/workiz-pr-agent-fix.vsix
+          retention-days: 90
+      
+      - name: Get version
+        id: version
+        working-directory: cursor-extension
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: cursor-ext-v${{ steps.version.outputs.version }}
+          name: Cursor Extension v${{ steps.version.outputs.version }}
+          body: |
+            ## Workiz PR Agent - Fix in Cursor Extension
+            
+            ### Installation
+            1. Download `workiz-pr-agent-fix.vsix` below
+            2. In Cursor: `Cmd+Shift+P` → "Extensions: Install from VSIX..."
+            3. Select the downloaded file
+            
+            ### What's New
+            See [cursor-extension/README.md](https://github.com/Workiz/workiz-pr-agent/blob/main/cursor-extension/README.md)
+          files: cursor-extension/workiz-pr-agent-fix.vsix
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

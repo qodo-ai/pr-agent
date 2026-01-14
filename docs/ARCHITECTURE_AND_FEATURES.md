@@ -17,6 +17,7 @@ This document covers the system architecture and all features of the Workiz PR A
 11. [NPM Package Management](#11-npm-package-management)
 12. [Admin UI](#12-admin-ui)
 13. [Error Handling](#13-error-handling)
+14. [Fix in Cursor Integration](#14-fix-in-cursor-integration)
 
 ---
 
@@ -3703,6 +3704,404 @@ class CircuitBreaker:
             return True
         return datetime.now() - self.last_failure_time > timedelta(seconds=self.recovery_timeout)
 ```
+
+---
+
+## 14. Bugbot-Style Inline Review Comments
+
+The Workiz PR Agent uses **individual inline review comments** (like Cursor Bugbot) instead of batched comments or Check Runs. Each finding appears as a separate comment directly on the affected code line.
+
+### Key Design Decisions
+
+| Aspect | Our Approach | Why |
+|--------|--------------|-----|
+| **Comment Style** | Individual inline comments | Visible in both "Conversation" AND "Files Changed" tabs |
+| **Blocking** | Non-blocking (`event: "COMMENT"`) | Informational, doesn't prevent merge |
+| **Buttons** | Markdown links via HTTPS redirect | GitHub blocks `cursor://` URLs |
+| **Batching** | No batched summary | Each finding is separate and actionable |
+
+### Visual Reference (What We Implement)
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 🤖 workiz-pr-agent [bot] reviewed just now         View reviewed changes   │
+├────────────────────────────────────────────────────────────────────────────┤
+│  src/services/user.service.ts                                              │
+│       41 |   const users = [];                                             │
+│       42 | + let result = await this.repo.find();                          │
+│       43 |   return result;                                                │
+├────────────────────────────────────────────────────────────────────────────┤
+│ 🤖 workiz-pr-agent [bot] just now                                          │
+│                                                                            │
+│ **Use const instead of let**                                               │
+│                                                                            │
+│ **Medium Severity**                                                        │
+│                                                                            │
+│ The variable `result` is never reassigned. Per Workiz coding standards,    │
+│ use `const` for variables that don't change. This improves code clarity    │
+│ and prevents accidental reassignment.                                      │
+│                                                                            │
+│ **Suggested fix:** Change `let result` to `const result`                   │
+│                                                                            │
+│ [🔧 Fix in Cursor](https://...) | [↗ Fix in Web](https://vscode.dev/...)   │
+│                                                                            │
+│ 😊                                                                         │
+│ ┌────────────────────────────────────────────────────────────────────────┐│
+│ │ Reply...                                                               ││
+│ └────────────────────────────────────────────────────────────────────────┘│
+│ [Resolve conversation]                                                     │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### GitHub Pull Request Review API
+
+We use GitHub's **Pull Request Review API** to create inline comments:
+
+```
+POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews
+```
+
+**Request body:**
+```json
+{
+  "commit_id": "abc123def456...",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "src/services/user.service.ts",
+      "line": 42,
+      "body": "**Use const instead of let**\n\n**Medium Severity**\n\nThe variable `result` is never reassigned..."
+    },
+    {
+      "path": "src/api/controller.ts", 
+      "line": 15,
+      "body": "**Business logic in controller**\n\n**High Severity**\n\nMove this logic to a service..."
+    }
+  ]
+}
+```
+
+**Key Points:**
+- `event: "COMMENT"` = **Non-blocking** (doesn't prevent merge)
+- `event: "REQUEST_CHANGES"` = Blocking (we DON'T use this)
+- Each comment appears inline on the specific code line
+- Comments show in BOTH "Conversation" tab AND "Files Changed" tab
+
+### Cursor Redirect Service
+
+Since GitHub blocks `cursor://` URLs, we host an HTTPS redirect page that:
+1. Opens the file at the correct line via `cursor://file/{path}:{line}:1`
+2. Shows the prompt for copy/paste (user must manually paste into Cursor's AI chat)
+
+**⚠️ Important Limitation:** Cursor's `cursor://agent/prompt?prompt=...` URL scheme **only works for Cursor's own Bugbot**. Third-party tools cannot pre-fill prompts via URL for security reasons. See: [Cursor Forum Discussion](https://forum.cursor.com/t/does-cursor-schema-support-prompts/133027)
+
+**What works:**
+- `cursor://file/{path}:{line}:{column}` - Opens file at specific location ✅
+- `cursor://file/{path}` - Opens file ✅
+
+**What doesn't work:**
+- `cursor://agent/prompt?prompt=...` - Only works for Bugbot ❌
+
+**Redirect endpoint:** `GET /api/v1/cursor-redirect?prompt={encoded}&file={path}&line={num}`
+
+```python
+# pr_agent/servers/github_app.py
+
+@router.get("/api/v1/cursor-redirect")
+async def cursor_redirect(prompt: str, file: str = "", line: int = 0):
+    """
+    Opens file in Cursor and shows prompt for copy/paste.
+    """
+    # Build cursor://file URL to open file at correct location
+    if file:
+        cursor_url = f"cursor://file/{file}"
+        if line:
+            cursor_url = f"{cursor_url}:{line}:1"
+    else:
+        cursor_url = "cursor://"
+    
+    # HTML page that:
+    # 1. Tries to open the file via cursor://file/...
+    # 2. Shows the prompt prominently for copy/paste
+  
+  <h3>Prompt:</h3>
+  <div class="prompt-box" id="prompt">{decoded_prompt}</div>
+  
+  <script>
+    // Try to open Cursor automatically
+    window.location = "{cursor_url}";
+    
+    function copyPrompt() {{
+      navigator.clipboard.writeText(document.getElementById('prompt').textContent);
+      alert('Copied to clipboard!');
+    }}
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+```
+
+### Comment Formatter
+
+```python
+# pr_agent/tools/inline_comment_formatter.py
+
+from urllib.parse import quote
+from typing import Optional
+
+def format_inline_comment(
+    title: str,
+    severity: str,
+    description: str,
+    file_path: str,
+    line: int,
+    suggestion: str = "",
+    org: str = "",
+    repo: str = "",
+    branch: str = "main",
+    cursor_redirect_base: str = "",
+) -> str:
+    """
+    Format a single inline review comment in Bugbot style.
+    
+    Args:
+        title: Issue title (e.g., "Use const instead of let")
+        severity: "High", "Medium", or "Low"
+        description: Detailed explanation
+        file_path: Path to file
+        line: Line number
+        suggestion: Suggested fix (optional)
+        org: GitHub org name
+        repo: Repository name
+        branch: Branch name
+        cursor_redirect_base: Base URL for cursor redirect service
+    
+    Returns:
+        Formatted markdown comment body
+    """
+    body = f"**{title}**\n\n"
+    body += f"**{severity} Severity**\n\n"
+    body += f"{description}\n"
+    
+    if suggestion:
+        body += f"\n**Suggested fix:** {suggestion}\n"
+    
+    # Build fix button URLs
+    prompt = _build_cursor_prompt(title, file_path, line, description, suggestion)
+    
+    if cursor_redirect_base:
+        cursor_url = f"{cursor_redirect_base}?prompt={quote(prompt)}&file={quote(file_path)}&line={line}"
+        body += f"\n[🔧 Fix in Cursor]({cursor_url})"
+    
+    if org and repo:
+        vscode_url = f"https://vscode.dev/github/{org}/{repo}/blob/{branch}/{file_path}#L{line}"
+        body += f" | [↗ Fix in Web]({vscode_url})"
+    
+    return body
+
+
+def _build_cursor_prompt(
+    title: str,
+    file_path: str,
+    line: int,
+    description: str,
+    suggestion: str
+) -> str:
+    """Build the prompt text for Cursor AI."""
+    prompt = f"""Fix the following code review issue:
+
+## Issue: {title}
+
+**File:** {file_path}
+**Line:** {line}
+
+**Problem:** {description}
+"""
+    if suggestion:
+        prompt += f"\n**Suggested Fix:** {suggestion}\n"
+    
+    prompt += """
+## Instructions:
+1. First verify this issue exists at the specified location
+2. Apply the suggested fix or an appropriate solution
+3. Ensure the fix follows project coding standards
+4. Check that the fix doesn't break existing functionality
+"""
+    return prompt
+```
+
+### Configuration
+
+Add to `configuration.toml`:
+
+```toml
+[workiz.inline_comments]
+# Use individual inline comments instead of batched review
+enabled = true
+
+# Maximum comments per review (to avoid spam)
+max_comments = 20
+
+# Minimum severity to show ("high", "medium", "low")
+severity_threshold = "low"
+
+# Base URL for cursor redirect service
+cursor_redirect_url = "https://pr-agent.workiz.com/api/v1/cursor-redirect"
+
+# Show Fix in Web button (vscode.dev)
+show_web_fallback = true
+```
+
+### GithubProvider Integration
+
+```python
+# pr_agent/git_providers/github_provider.py
+
+def create_review_with_inline_comments(
+    self,
+    comments: list[dict],
+    event: str = "COMMENT"
+) -> dict:
+    """
+    Create a PR review with individual inline comments.
+    
+    Each comment appears:
+    - Inline on the code in "Files Changed" tab
+    - In the "Conversation" tab
+    
+    Args:
+        comments: List of {path, line, body} dicts
+        event: "COMMENT" (non-blocking) or "REQUEST_CHANGES" (blocking)
+    
+    Returns:
+        API response dict
+    """
+    payload = {
+        "commit_id": self.last_commit_id.sha,
+        "event": event,  # "COMMENT" = non-blocking!
+        "comments": [
+            {
+                "path": c["path"],
+                "line": c["line"],
+                "body": c["body"]
+            }
+            for c in comments
+        ]
+    }
+    
+    headers, data = self.pr._requester.requestJsonAndCheck(
+        "POST",
+        f"{self.pr.url}/reviews",
+        input=payload
+    )
+    return data
+```
+
+### WorkizPRReviewer Integration
+
+```python
+# pr_agent/tools/workiz_pr_reviewer.py
+
+async def _publish_inline_comments(self, findings: list[dict]) -> None:
+    """
+    Publish each finding as an individual inline comment.
+    
+    This replaces the batched review comment approach.
+    """
+    if not findings:
+        return
+    
+    # Sort by severity (high first) and limit
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: {"high": 0, "medium": 1, "low": 2}.get(f.get("severity", "").lower(), 3)
+    )
+    max_comments = get_settings().workiz.inline_comments.max_comments
+    limited_findings = sorted_findings[:max_comments]
+    
+    # Format each as inline comment
+    comments = []
+    for finding in limited_findings:
+        body = format_inline_comment(
+            title=finding["title"],
+            severity=finding["severity"],
+            description=finding["message"],
+            file_path=finding["file"],
+            line=finding["line"],
+            suggestion=finding.get("suggestion", ""),
+            org=self.git_provider.repo.split("/")[0],
+            repo=self.git_provider.repo.split("/")[1],
+            cursor_redirect_base=get_settings().workiz.inline_comments.cursor_redirect_url,
+        )
+        comments.append({
+            "path": finding["file"],
+            "line": finding["line"],
+            "body": body
+        })
+    
+    # Create non-blocking review with inline comments
+    self.git_provider.create_review_with_inline_comments(
+        comments=comments,
+        event="COMMENT"  # Non-blocking!
+    )
+    
+    get_logger().info(f"Published {len(comments)} inline review comments", {
+        "pr_url": self.pr_url,
+        "comment_count": len(comments),
+        "total_findings": len(findings),
+    })
+```
+
+### User Experience Flow
+
+```
+1. Developer creates PR
+                │
+                ▼
+2. PR Agent reviews (triggered by webhook)
+   - Runs language analyzers
+   - Runs custom rules
+   - Generates AI review
+                │
+                ▼
+3. Individual inline comments created
+   - Each finding → separate comment on the code line
+   - Visible in "Files Changed" AND "Conversation" tabs
+   - Non-blocking (doesn't prevent merge)
+                │
+                ▼
+4. Developer sees inline comment on their code:
+   ┌─────────────────────────────────────────────────┐
+   │ 🤖 workiz-pr-agent [bot]                        │
+   │                                                  │
+   │ **Use const instead of let**                    │
+   │ **Medium Severity**                              │
+   │                                                  │
+   │ The variable is never reassigned...             │
+   │                                                  │
+   │ [🔧 Fix in Cursor] | [↗ Fix in Web]            │
+   └─────────────────────────────────────────────────┘
+                │
+                ▼
+5. Developer clicks "Fix in Cursor"
+   - Browser opens redirect page
+   - Redirect page tries cursor:// deep link
+   - Cursor opens with pre-filled prompt
+   - (Fallback: copy prompt manually)
+                │
+                ▼
+6. Developer applies fix in Cursor
+   - AI assistant fixes the code
+   - Commit and push
+   - Resolve conversation on GitHub
+```
+
+### Important Notes
+
+1. **Non-Blocking**: We use `event: "COMMENT"` which is purely informational and doesn't block merge
+2. **GitHub Limits**: Max ~60 comments per review; we limit to 20 by default
+3. **Redirect Required**: GitHub blocks `cursor://` URLs, so we use HTTPS redirect page
+4. **Both Tabs**: Inline comments appear in BOTH "Conversation" AND "Files Changed" tabs
 
 ---
 

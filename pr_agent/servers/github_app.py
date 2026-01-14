@@ -1,12 +1,16 @@
 import asyncio.locks
 import copy
+import html
+import json
 import os
 import re
 import uuid
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import quote
 
 import uvicorn
-from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
 from starlette.background import BackgroundTasks
 from starlette.middleware import Middleware
 from starlette_context import context
@@ -217,6 +221,64 @@ def handle_closed_pr(body, event, action, log_context):
     get_logger().info("PR-Agent statistics for closed PR", analytics=True, pr_statistics=pr_statistics, **log_context)
 
 
+async def handle_push_to_main_branch(body: Dict[str, Any], event: str, log_context: Dict[str, Any]) -> dict:
+    """
+    Handle push events to main branches for indexing/RepoSwarm updates.
+    
+    This handler:
+    1. Filters for pushes to main branches (workiz.com, main, master)
+    2. Triggers repository indexing for RAG updates
+    3. Queues RepoSwarm analysis if enabled
+    """
+    if event != "push":
+        return {}
+    
+    ref = body.get("ref", "")
+    if not ref.startswith("refs/heads/"):
+        return {}
+    
+    branch = ref.replace("refs/heads/", "")
+    
+    main_branches = get_settings().get("workiz.main_branches", ["workiz.com", "main", "master"])
+    if branch not in main_branches:
+        get_logger().debug(
+            f"Ignoring push to non-main branch",
+            extra={"context": {"branch": branch, "main_branches": main_branches}}
+        )
+        return {}
+    
+    repo = body.get("repository", {})
+    repo_full_name = repo.get("full_name", "")
+    commits = body.get("commits", [])
+    before_sha = body.get("before", "")
+    after_sha = body.get("after", "")
+    
+    get_logger().info(
+        "Push to main branch detected",
+        extra={"context": {
+            "repository": repo_full_name,
+            "branch": branch,
+            "commits_count": len(commits),
+            "before_sha": before_sha[:8] if before_sha else "",
+            "after_sha": after_sha[:8] if after_sha else "",
+        }}
+    )
+    
+    # TODO: Phase 5 - Trigger repository indexing
+    # await trigger_repository_indexing(repo_full_name, branch, commits)
+    
+    # TODO: Phase 5 - Trigger RepoSwarm analysis if significant changes
+    # if should_trigger_reposwarm_analysis(commits):
+    #     await queue_reposwarm_analysis(repo_full_name)
+    
+    get_logger().debug(
+        "Push handler completed (indexing not yet implemented)",
+        extra={"context": {"repository": repo_full_name, "branch": branch}}
+    )
+    
+    return {"status": "received", "repository": repo_full_name, "branch": branch}
+
+
 def get_log_context(body, event, action, build_number):
     sender = ""
     sender_id = ""
@@ -315,8 +377,15 @@ async def handle_request(body: Dict[str, Any], event: str):
 
     Args:
         body: The request body.
-        event: The GitHub event type (e.g. "pull_request", "issue_comment", etc.).
+        event: The GitHub event type (e.g. "pull_request", "issue_comment", "push", etc.).
     """
+    # Handle push events first (they don't have an action field)
+    if event == 'push':
+        log_context, sender, sender_id, sender_type = get_log_context(body, event, "push", build_number)
+        if not is_bot_user(sender, sender_type):
+            await handle_push_to_main_branch(body, event, log_context)
+        return {}
+    
     action = body.get("action")  # "created", "opened", "reopened", "ready_for_review", "review_requested", "synchronize"
     get_logger().debug(f"Handling request with event: {event}, action: {action}")
     if not action:
@@ -334,9 +403,12 @@ async def handle_request(body: Dict[str, Any], event: str):
             get_logger().debug(f"Request ignored: PR logic filtering")
             return {}
 
-    if 'check_run' in body:  # handle failed checks
-        # get_logger().debug(f'Request body', artifact=body, event=event) # added inside handle_checks
-        pass
+    if 'check_run' in body:  # handle check run events
+        if action == 'requested_action':
+            await handle_check_run_requested_action(body, log_context)
+            return {}
+        else:
+            pass
     # handle comments on PRs
     elif action == 'created':
         get_logger().debug(f'Request body', artifact=body, event=event)
@@ -413,6 +485,365 @@ async def _perform_auto_commands_github(commands_conf: str, agent: PRAgent, body
         new_command = ' '.join([command] + other_args)
         get_logger().info(f"{commands_conf}. Performing auto command '{new_command}', for {api_url=}")
         await agent.handle_request(api_url, new_command)
+
+
+# ============================================================================
+# Cursor Integration Endpoints
+# ============================================================================
+
+# In-memory store for action context (maps identifier -> context)
+# In production, this should be Redis or similar
+_action_context_store: Dict[str, dict] = {}
+
+
+def store_action_context(identifier: str, context_data: dict, ttl_seconds: int = 3600) -> None:
+    """Store context data for an action identifier."""
+    _action_context_store[identifier] = context_data
+
+
+def get_action_context(identifier: str) -> Optional[dict]:
+    """Retrieve context data for an action identifier."""
+    return _action_context_store.get(identifier)
+
+
+@router.get("/api/v1/cursor-redirect", response_class=HTMLResponse)
+async def cursor_redirect(
+    prompt: str = Query(..., description="URL-encoded prompt for Cursor AI"),
+    file: Optional[str] = Query(None, description="File path"),
+    line: Optional[int] = Query(None, description="Line number"),
+):
+    """
+    Redirect endpoint for opening Cursor IDE with our extension.
+    
+    This endpoint serves an HTML page that:
+    1. First tries our extension: cursor://workiz.workiz-pr-agent-fix/fix?prompt=...&file=...&line=...
+    2. Falls back to cursor://file/{path}:{line} if extension not installed
+    3. Shows the prompt for copy/paste as final fallback
+    
+    With the Workiz PR Agent extension installed, the prompt can be pre-filled in AI chat!
+    Without the extension, only file opening works.
+    
+    GitHub blocks custom URL schemes in comments, so we use this
+    HTTPS endpoint as an intermediary.
+    """
+    # Encode prompt for URL
+    encoded_prompt = quote(prompt, safe="")
+    
+    # Primary: Use our extension URI (with prompt support!)
+    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?prompt={encoded_prompt}"
+    if file:
+        extension_url += f"&file={quote(file, safe='')}"
+    if line:
+        extension_url += f"&line={line}"
+    
+    # Fallback: cursor://file (works without extension, but no prompt)
+    if file:
+        fallback_file_url = f"cursor://file/{file}"
+        if line:
+            fallback_file_url += f":{line}:1"
+    else:
+        fallback_file_url = "cursor://"
+    
+    # Use extension URL as primary
+    cursor_url = extension_url
+    
+    # HTML-escape the prompt for display in the fallback section
+    display_prompt = html.escape(prompt)
+    
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opening Cursor IDE...</title>
+    <style>
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            color: #e0e0e0;
+        }}
+        .container {{
+            max-width: 700px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+        h1 {{
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            color: #fff;
+        }}
+        .status {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 30px;
+            padding: 16px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }}
+        .spinner {{
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }}
+        @keyframes spin {{
+            to {{ transform: rotate(360deg); }}
+        }}
+        .success {{
+            background: rgba(34, 197, 94, 0.1);
+            border-color: rgba(34, 197, 94, 0.3);
+        }}
+        .fallback {{
+            display: none;
+        }}
+        .fallback.visible {{
+            display: block;
+        }}
+        .prompt-container {{
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px 0;
+            border: 1px solid #30363d;
+        }}
+        .prompt-text {{
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #c9d1d9;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+        }}
+        .btn {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            text-decoration: none;
+        }}
+        .btn-primary {{
+            background: #3b82f6;
+            color: white;
+        }}
+        .btn-primary:hover {{
+            background: #2563eb;
+        }}
+        .btn-secondary {{
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }}
+        .btn-secondary:hover {{
+            background: rgba(255, 255, 255, 0.15);
+        }}
+        .btn-group {{
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }}
+        .copied {{
+            background: #22c55e !important;
+        }}
+        .info {{
+            margin-top: 20px;
+            font-size: 13px;
+            color: #8b949e;
+        }}
+        .file-info {{
+            margin-bottom: 20px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix in Cursor</h1>
+        
+        {"<div class='file-info'>📁 " + file + (f":{line}" if line else "") + "</div>" if file else ""}
+        
+        <div class="status" id="status">
+            <div class="spinner" id="spinner"></div>
+            <span id="status-text">Opening file in Cursor IDE...</span>
+        </div>
+        
+        <div class="fallback" id="fallback">
+            <p style="margin-bottom: 16px; font-weight: 500;">
+                📋 <strong>Step 2:</strong> Copy this prompt and paste it in Cursor's AI chat (Cmd+L or Ctrl+L):
+            </p>
+            
+            <div class="prompt-container">
+                <pre class="prompt-text" id="prompt">{display_prompt}</pre>
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="copyPrompt()">
+                    📋 Copy Prompt
+                </button>
+                <a href="{cursor_url}" class="btn btn-secondary">
+                    🔄 Try Again
+                </a>
+            </div>
+            
+            <p class="info">
+                💡 <strong>Pro tip:</strong> Install the <a href="https://github.com/Workiz/workiz-pr-agent/tree/main/cursor-extension" target="_blank" style="color: #3b82f6;">Workiz PR Agent extension</a> 
+                for automatic prompt pre-filling! Without the extension, copy the prompt above and paste it into Cursor's AI chat (Cmd+L or Ctrl+L).
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        const cursorUrl = "{cursor_url}";
+        const statusEl = document.getElementById('status');
+        const statusText = document.getElementById('status-text');
+        const spinner = document.getElementById('spinner');
+        const fallbackEl = document.getElementById('fallback');
+        
+        // Try to open Cursor
+        window.location.href = cursorUrl;
+        
+        // After 2 seconds, show fallback with prompt
+        setTimeout(() => {{
+            statusText.textContent = "✓ File should be open in Cursor. Now copy the prompt below:";
+            spinner.style.display = 'none';
+            statusEl.classList.add('success');
+            fallbackEl.classList.add('visible');
+        }}, 2000);
+        
+        function copyPrompt() {{
+            const prompt = document.getElementById('prompt').textContent;
+            navigator.clipboard.writeText(prompt).then(() => {{
+                const btn = event.target;
+                btn.textContent = '✓ Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {{
+                    btn.textContent = '📋 Copy Prompt';
+                    btn.classList.remove('copied');
+                }}, 2000);
+            }});
+        }}
+    </script>
+</body>
+</html>
+"""
+    return HTMLResponse(content=html_content)
+
+
+async def handle_check_run_requested_action(body: dict, log_context: dict) -> dict:
+    """
+    Handle check_run.requested_action webhook event.
+    
+    When a user clicks a "Fix in Cursor" button on a check run,
+    GitHub sends this webhook. We then post a comment with the
+    redirect link to open Cursor.
+    """
+    try:
+        check_run = body.get("check_run", {})
+        requested_action = body.get("requested_action", {})
+        repository = body.get("repository", {})
+        
+        identifier = requested_action.get("identifier", "")
+        check_run_id = check_run.get("id")
+        
+        get_logger().info(f"Received check_run.requested_action", {
+            "identifier": identifier,
+            "check_run_id": check_run_id,
+            "repo": repository.get("full_name"),
+        })
+        
+        if not identifier.startswith("fix_"):
+            get_logger().warning(f"Unknown action identifier: {identifier}")
+            return {}
+        
+        context_data = get_action_context(identifier)
+        
+        if context_data:
+            from pr_agent.tools.check_run_builder import build_cursor_prompt, build_cursor_redirect_url
+            
+            prompt = build_cursor_prompt(
+                issue_type=context_data.get("issue_type", "Code Issue"),
+                file_path=context_data.get("file_path", ""),
+                line_number=context_data.get("line", 0),
+                message=context_data.get("message", ""),
+                suggestion=context_data.get("suggestion", ""),
+                code_context=context_data.get("code_context", ""),
+            )
+            
+            redirect_base = get_settings().get("workiz.cursor_integration.redirect_base_url", "")
+            if not redirect_base:
+                redirect_base = os.environ.get("WEBHOOK_URL", "http://localhost:8000")
+            
+            redirect_url = build_cursor_redirect_url(
+                base_url=redirect_base,
+                prompt=prompt,
+                file_path=context_data.get("file_path"),
+                line=context_data.get("line"),
+            )
+            
+            pull_requests = check_run.get("pull_requests", [])
+            if pull_requests:
+                pr_url = pull_requests[0].get("url", "")
+                if pr_url:
+                    git_provider = get_git_provider_with_context(pr_url)
+                    
+                    comment_body = f"""### 🔧 Fix in Cursor
+
+Click the link below to open Cursor with the fix prompt pre-loaded:
+
+👉 **[Open in Cursor]({redirect_url})**
+
+<details>
+<summary>📋 Or copy the prompt manually</summary>
+
+```
+{prompt}
+```
+
+</details>
+"""
+                    git_provider.publish_comment(comment_body)
+                    get_logger().info(f"Posted Cursor redirect comment for action {identifier}")
+        else:
+            get_logger().warning(f"No context found for action identifier: {identifier}")
+        
+        return {}
+        
+    except Exception as e:
+        get_logger().error(f"Error handling check_run.requested_action: {e}", {
+            "error": str(e),
+            "identifier": body.get("requested_action", {}).get("identifier"),
+        })
+        return {}
 
 
 @router.get("/")

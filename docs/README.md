@@ -63,10 +63,11 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 |---------|-------------|--------|
 | **WorkizPRReviewer** | Enhanced `/review` with Workiz coding standards | ✅ Implemented |
 | **WorkizPRCodeSuggestions** | Enhanced `/improve` with Workiz patterns | ✅ Implemented |
-| **Custom Rules Engine** | Workiz-specific code style rules | ✅ Planned |
-| **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Planned |
+| **🔧 Inline Comments** | Bugbot-style inline comments with Fix in Cursor buttons | ✅ Implemented |
+| **Custom Rules Engine** | Workiz-specific code style rules | ✅ Implemented |
+| **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Implemented |
 | **Database Analyzers** | MySQL, MongoDB, Elasticsearch, PostgreSQL | ✅ Planned |
-| **Security Analyzer** | Traefik-aware security checks | ✅ Planned |
+| **Security Analyzer** | Traefik-aware security checks | ✅ Implemented |
 | **PubSub Analyzer** | Event topology and pattern validation | ✅ Planned |
 
 ### Integrations
@@ -88,6 +89,71 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **Admin UI** | Web dashboard for management | ✅ Planned |
 | **🤖 Knowledge Assistant** | Ask questions about your codebase | ✅ Planned |
 | **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
+
+### 🔧 Bugbot-Style Inline Comments (NEW!)
+
+Every code finding and suggestion is posted as an **individual inline comment** on the specific code line, appearing in both "Files Changed" and "Conversation" tabs - just like Cursor Bugbot!
+
+**Features:**
+- **Individual comments** - Each issue becomes its own inline comment on the affected line
+- **Visible in both tabs** - Shows in "Files Changed" AND "Conversation" 
+- **Non-blocking** - Comments don't block PR merging
+- **Fix buttons** - Each comment includes action buttons:
+  - **🔧 Fix in Cursor** → Opens redirect page to launch Cursor with AI prompt
+  - **↗ Fix in Web** → Opens VS Code Web (vscode.dev) at the exact line
+
+```
+                    Files Changed Tab
+    ┌────────────────────────────────────────────────────────┐
+    │ src/user.service.ts                                    │
+    ├────────────────────────────────────────────────────────┤
+    │  41 │   let count = 0;                                 │
+    │     │   ┌──────────────────────────────────────────┐  │
+    │     │   │ **[TS001] Use const instead of let**     │  │
+    │     │   │ **High Severity**                        │  │
+    │     │   │                                          │  │
+    │     │   │ Variable 'count' is never reassigned.    │  │
+    │     │   │ Use const for immutability.              │  │
+    │     │   │                                          │  │
+    │     │   │ [🔧 Fix in Cursor] | [↗ Fix in Web]     │  │
+    │     │   └──────────────────────────────────────────┘  │
+    │  42 │   users.forEach(user => {                       │
+    └────────────────────────────────────────────────────────┘
+```
+
+**Configuration** (`configuration.toml`):
+
+```toml
+[workiz.inline_comments]
+enabled = true              # Enable inline comments (disable for legacy behavior)
+max_comments = 20           # Maximum comments per PR
+severity_threshold = "low"  # "high", "medium", or "low"
+cursor_redirect_url = ""    # See below for configuration options
+show_web_fallback = true    # Include vscode.dev link
+```
+
+**Cursor Redirect URL Configuration:**
+
+| Environment | cursor_redirect_url Setting |
+|-------------|----------------------------|
+| **Local dev (ngrok)** | Leave empty `""` - auto-uses `WEBHOOK_URL` env var + `/api/v1/cursor-redirect` |
+| **Production** | `"https://pr-agent.workiz.com/api/v1/cursor-redirect"` |
+
+**🔌 Cursor Extension (Optional but Recommended):**
+
+Install the **Workiz PR Agent Cursor Extension** for the best experience:
+- **With extension**: Clicking "Fix in Cursor" opens the file AND pre-fills the AI chat with the fix prompt!
+- **Without extension**: Opens the file only; prompt shown on redirect page for copy/paste
+
+See [`cursor-extension/README.md`](../cursor-extension/README.md) for installation.
+
+**For local development with ngrok:**
+1. Start ngrok: `ngrok http 8000`
+2. Set `WEBHOOK_URL` environment variable to the ngrok URL
+3. Leave `cursor_redirect_url = ""` in config
+4. The system automatically appends `/api/v1/cursor-redirect`
+
+See [ARCHITECTURE_AND_FEATURES.md - Inline Comments](./ARCHITECTURE_AND_FEATURES.md) for implementation details.
 
 ### 🤖 Knowledge Assistant (NEW!)
 

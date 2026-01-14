@@ -263,7 +263,7 @@ pr_commands = [
     "/improve",
 ]
 # settings for "pull_request" event with "synchronize" action - used to detect and handle push triggers for new commits
-handle_push_trigger = false
+handle_push_trigger = true
 push_trigger_ignore_bot_commits = true
 push_trigger_ignore_merge_commits = true
 push_trigger_wait_for_initial_review = true
@@ -425,6 +425,27 @@ autofix_max_iterations = 5
 # NPM package tracking
 track_internal_packages = true
 internal_package_scope = "@workiz"
+
+# Bugbot-Style Inline Review Comments
+# Replaces batched review comments with individual inline comments on specific code lines
+# Each comment appears in both "Files Changed" tab AND "Conversation" tab
+# Comments include "Fix in Cursor" and "Fix in Web" action buttons
+[workiz.inline_comments]
+enabled = true
+# Maximum number of inline comments per PR (prevents spam)
+max_comments = 20
+# Minimum severity to publish: "high", "medium", or "low"
+# high = only critical issues, medium = warnings+, low = all findings
+severity_threshold = "low"
+# Base URL for the cursor redirect service that handles cursor:// deep links
+# Configuration options:
+#   - Empty string "": Falls back to WEBHOOK_URL environment variable (for local dev with ngrok)
+#   - Production: "https://pr-agent.workiz.com/api/v1/cursor-redirect"
+#   - Local dev: Set WEBHOOK_URL env var to your ngrok URL, then append /api/v1/cursor-redirect
+# The redirect service converts HTTPS links to cursor:// deep links
+cursor_redirect_url = ""
+# Include "Fix in Web" (vscode.dev) link as fallback
+show_web_fallback = true
 
 [workiz.logging]
 # Datadog integration via JSON stdout

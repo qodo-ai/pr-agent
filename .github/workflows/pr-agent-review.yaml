@@ -5,8 +5,10 @@
 name: PR-Agent
 
 on:
-# pull_request:
-# issue_comment:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
 
 permissions:

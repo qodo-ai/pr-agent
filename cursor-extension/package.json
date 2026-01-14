@@ -1,0 +1,49 @@
+{
+  "name": "workiz-pr-agent-fix",
+  "displayName": "Workiz PR Agent - Fix in Cursor",
+  "description": "Handle 'Fix in Cursor' links from Workiz PR Agent code reviews",
+  "version": "1.0.0",
+  "publisher": "workiz",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onUri"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "workiz-pr-agent-fix.openFix",
+        "title": "Workiz: Open Fix in AI Chat"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "18.x",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Workiz/workiz-pr-agent"
+  },
+  "keywords": [
+    "cursor",
+    "pr-agent",
+    "code-review",
+    "fix",
+    "ai"
+  ],
+  "license": "MIT"
+}
