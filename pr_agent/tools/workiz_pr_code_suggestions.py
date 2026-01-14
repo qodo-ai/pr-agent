@@ -63,14 +63,16 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         self.severity_threshold = inline_config.get("severity_threshold", "low")
         self.show_web_fallback = inline_config.get("show_web_fallback", True)
         
-        # Build cursor redirect URL - use config value or fall back to WEBHOOK_URL env var
+        # Build cursor redirect URL - priority: CURSOR_REDIRECT_URL env > config > WEBHOOK_URL env
+        env_cursor_url = os.environ.get("CURSOR_REDIRECT_URL", "")
         config_redirect_url = inline_config.get("cursor_redirect_url", "")
-        if config_redirect_url:
+        if env_cursor_url:
+            self.cursor_redirect_url = env_cursor_url
+        elif config_redirect_url:
             self.cursor_redirect_url = config_redirect_url
         else:
             webhook_url = os.environ.get("WEBHOOK_URL", "")
             if webhook_url:
-                # Ensure we have the correct endpoint path
                 base_url = webhook_url.rstrip("/")
                 self.cursor_redirect_url = f"{base_url}/api/v1/cursor-redirect"
             else:
@@ -250,7 +252,7 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         if not findings:
             return ""
         
-        if not self.cursor_enabled:
+        if not self.use_inline_comments:
             return "\n".join(
                 f"- [{f['severity']}] {f['rule']}: {f['message']} (line {f.get('line', '?')})"
                 for f in findings
@@ -561,7 +563,7 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         """
         self._suggestions_data = data
         
-        if not self.cursor_enabled:
+        if not self.use_inline_comments:
             return super().generate_summarized_suggestions(data)
         
         try:
