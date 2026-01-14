@@ -1,7 +1,7 @@
 # Workiz PR Agent - Development Plan & Tracking
 
-> **Status**: 🟢 Phase 3 & 4 Complete - Ready for Phase 5  
-> **Last Updated**: January 11, 2026  
+> **Status**: ✅ Phase 4B Complete - Bugbot-Style Inline Comments  
+> **Last Updated**: January 13, 2026  
 > **Total Phases**: 8  
 > **Estimated Duration**: 8-10 weeks
 
@@ -417,10 +417,11 @@ After this phase, you can deploy a basic working version to GKE.
 - [x] Create `pr_agent/tools/comment_formatter.py` ✅
 - [x] Add `[workiz.cursor_integration]` config section ✅
 
-**🔴 Blocked Items (GitHub blocks cursor:// URLs):**
-- [ ] ~~cursor://agent/prompt URLs~~ - GitHub strips these
-- [ ] ~~cursor://open URLs~~ - GitHub strips these
-- [ ] Action buttons are not clickable
+**🔴 Blocked Items (Cursor security restriction):**
+- [ ] ~~cursor://agent/prompt URLs~~ - Only works for Cursor's own Bugbot, not third-party tools
+- [x] cursor://file URLs work via redirect page ✅
+
+**💡 Note:** `cursor://agent/prompt?prompt=...` is restricted for security reasons. Only Cursor's Bugbot can pre-fill prompts. Our redirect page opens the file via `cursor://file/{path}:{line}` and shows the prompt for copy/paste.
 
 **📋 New Implementation Plan:**
 See Phase 4B below for the corrected approach using GitHub Check Runs.
@@ -439,146 +440,309 @@ See Phase 4B below for the corrected approach using GitHub Check Runs.
 
 ---
 
-## Phase 4B: Fix in Cursor - Complete Implementation (NEW)
+## Phase 4B: Bugbot-Style Inline Review Comments (REVISED)
 
-**Goal**: Implement proper "Fix in Cursor" functionality using GitHub Check Runs with action buttons
+**Goal**: Replace the default batched review comments with **individual inline review comments** on each finding, styled like Cursor Bugbot, with working "Fix in Cursor" and "Fix in Web" buttons.
 
-**Background**: GitHub blocks custom URL schemes (`cursor://`) in comments. The solution is to use GitHub's Check Runs API which supports native action buttons that trigger webhooks.
+**Key Insight**: Cursor Bugbot uses GitHub's **Pull Request Review API** to create individual review comments placed inline on specific code lines. These appear in BOTH the "Conversation" tab AND the "Files Changed" tab. The buttons are markdown/HTML styled links that go to an HTTPS redirect page.
 
-### Architecture Overview
+### Architecture Overview (Bugbot Style)
 
 ```
-GitHub PR → Check Run with Annotations → User clicks "Fix in Cursor" button
-                                                        │
-                                                        ▼
-                          Webhook: check_run.requested_action
-                                                        │
-                                                        ▼
-              PR Agent Server → Generate cursor:// URL or show prompt
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  CURRENT (Wrong) Approach                                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  • Single batched comment with all findings in a table                      │
+│  • Appears only in "Conversation" tab                                       │
+│  • Check Runs with annotations (limited, not clickable buttons)             │
+│  • Blocking check status                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  NEW (Bugbot) Approach                                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  • Individual PR review comments per finding                                │
+│  • Inline on code (Files Changed tab) + Conversation tab                    │
+│  • "Fix in Cursor" / "Fix in Web" as markdown button links                  │
+│  • NOT a blocking check - just informational comments                       │
+│  • No batched summary comment - only inline comments                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Visual Reference (Cursor Bugbot)
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│ 📝 cursor [bot] reviewed 4 hours ago          View reviewed changes        │
+├────────────────────────────────────────────────────────────────────────────┤
+│  react/containers/geniusAi/settingsPage/SettingsPage.tsx                   │
+│       85 | +     } else {                                                  │
+│       86 | +         directToBilling();                                    │
+│       87 | +     }                                                         │
+│       88 | + };                                                            │
+├────────────────────────────────────────────────────────────────────────────┤
+│ 🤖 cursor [bot] 4 hours ago                                                │
+│                                                                            │
+│ **Upgrade action bypasses unsaved changes confirmation**                   │
+│                                                                            │
+│ **Medium Severity**                                                        │
+│                                                                            │
+│ The `onClickUpgrade` function calls `onClose?.(false)` which triggers      │
+│ `handleClose` in `SettingsModal`. If the form has unsaved changes,         │
+│ `handleClose` shows a confirmation modal and returns early. However,       │
+│ execution in `onClickUpgrade` continues regardless...                      │
+│                                                                            │
+│ ┌──────────────┐  ┌─────────────┐                                         │
+│ │ 🔧 Fix in Cursor │  │ ↗ Fix in Web │                                     │
+│ └──────────────┘  └─────────────┘                                         │
+│                                                                            │
+│ 😊                                                                         │
+│ ┌────────────────────────────────────────────────────────────────────────┐│
+│ │ Reply...                                                               ││
+│ └────────────────────────────────────────────────────────────────────────┘│
+│ [Resolve conversation]                                                     │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Tasks
 
-#### 4B.1 Individual Inline Comments (Quick Win)
-- [ ] Add `publish_individual_review_comment()` method to `GithubProvider`
+#### 4B.1 Remove Default Batched Output ✅ COMPLETED
+- [x] **Disable** the existing `publish_comment()` for review findings ✅
+- [x] **Disable** the existing code suggestions table format ✅
+- [x] Remove Check Run approach (too limited, not the right UX) ✅
+- [x] Config flag: `use_inline_comments = true` (default) ✅
+
+#### 4B.2 GitHub PR Review API Integration ✅ COMPLETED
+- [x] Add `create_review_with_inline_comments()` to `GithubProvider`: ✅
   ```python
-  def publish_individual_review_comment(self, file_path: str, line: int, body: str):
-      """POST /repos/{owner}/{repo}/pulls/{pull_number}/comments"""
+  def create_review_with_comments(
+      self,
+      comments: list[dict],  # [{path, line, body}, ...]
+      event: str = "COMMENT"  # "COMMENT" = non-blocking, "REQUEST_CHANGES" = blocking
+  ) -> dict:
+      """
+      Create a PR review with multiple inline comments.
+      
+      POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews
+      
+      Each comment appears:
+      - Inline on the code in "Files Changed" tab
+      - In the "Conversation" tab as part of the review thread
+      """
       payload = {
-          "body": body,
           "commit_id": self.last_commit_id.sha,
-          "path": file_path,
-          "line": line,
-          "side": "RIGHT"
+          "event": event,  # "COMMENT" for non-blocking
+          "comments": [
+              {
+                  "path": c["path"],
+                  "line": c["line"],  # or "start_line" + "line" for multi-line
+                  "body": c["body"]
+              }
+              for c in comments
+          ]
       }
-      headers, data = self.pr._requester.requestJsonAndCheck(
-          "POST", f"{self.pr.url}/comments", input=payload
-      )
-      return data
+      # POST to /repos/{owner}/{repo}/pulls/{pull_number}/reviews
   ```
-- [ ] Create new review output mode: individual comments per finding
-- [ ] Each comment appears inline on the affected code line (not batched)
-- [ ] Include collapsible Cursor prompt in each comment
+- [x] Support multi-line comments with `start_line` + `line` for code ranges ✅
+- [x] Always use `event: "COMMENT"` (non-blocking) ✅
 
-#### 4B.2 GitHub Check Runs Support
-- [ ] Add `create_check_run()` method to `GithubProvider`
-  ```python
-  def create_check_run(self, name: str, head_sha: str, status: str, 
-                       conclusion: str, output: dict, actions: list = None):
-      """POST /repos/{owner}/{repo}/check-runs"""
-      payload = {
-          "name": name,
-          "head_sha": head_sha,
-          "status": status,
-          "conclusion": conclusion,
-          "output": output,
-          "actions": actions or []
-      }
-      # Implementation...
-  ```
-- [ ] Add `add_check_annotations()` method for batch annotations
-- [ ] Support up to 50 annotations per request (GitHub limit)
-- [ ] Handle pagination for more than 50 findings
+#### 4B.3 Cursor Redirect Service ✅ COMPLETED
+- [x] Host HTTPS redirect page at our server: `/api/v1/cursor-redirect` ✅
+- [x] The page: ✅
+  1. Opens file via `cursor://file/{path}:{line}:1`
+  2. Shows "Opening file in Cursor..." message
+  3. Shows prompt prominently for copy/paste (Cursor doesn't support pre-filling prompts from third-party)
+- [x] URL format: `https://our-server.com/api/v1/cursor-redirect?prompt={encoded_prompt}&file={path}&line={num}` ✅
 
-#### 4B.3 Check Run Action Buttons
-- [ ] Define action button structure:
-  ```json
-  {
-    "label": "Fix in Cursor",
-    "description": "Open Cursor AI to fix",
-    "identifier": "fix_cursor_{file_hash}_{line}"
-  }
-  ```
-- [ ] Maximum 3 actions per check run (GitHub limit)
-- [ ] Create unique identifier encoding file/line info
+**⚠️ Important:** `cursor://agent/prompt` only works for Cursor's own Bugbot. Third-party tools must use `cursor://file/` and show prompts for copy/paste.
 
-#### 4B.4 Handle check_run.requested_action Webhook
-- [ ] Add webhook handler in `github_app.py`:
-  ```python
-  async def handle_check_run_requested_action(body: dict):
-      identifier = body["requested_action"]["identifier"]
-      # Parse identifier to get file, line, issue
-      # Generate response...
-  ```
-- [ ] Parse action identifier to extract context
-- [ ] Create `/api/cursor-redirect` endpoint
-- [ ] Post reply comment with Cursor prompt
-
-#### 4B.5 Cursor Redirect Page
-- [ ] Create simple HTML page for cursor:// redirect
-- [ ] Hosted at HTTPS URL (works in GitHub)
-- [ ] Page attempts `window.location = "cursor://..."` 
-- [ ] Fallback: display prompt with copy button
-- [ ] Can be hosted on GitHub Pages or our server
-
-Example redirect page:
+Example HTML page:
 ```html
 <!DOCTYPE html>
 <html>
-<head><title>Opening Cursor...</title></head>
+<head>
+  <title>Opening Cursor...</title>
+  <style>
+    body { font-family: system-ui; max-width: 600px; margin: 50px auto; padding: 20px; }
+    .prompt-box { background: #f4f4f4; padding: 15px; border-radius: 8px; white-space: pre-wrap; }
+    button { margin-top: 10px; padding: 10px 20px; cursor: pointer; }
+  </style>
+</head>
 <body>
+  <h2>Opening Cursor...</h2>
+  <p>If Cursor doesn't open automatically, copy the prompt below:</p>
+  <div class="prompt-box" id="prompt"></div>
+  <button onclick="copyPrompt()">📋 Copy Prompt</button>
   <script>
     const params = new URLSearchParams(window.location.search);
-    const prompt = params.get('prompt');
-    window.location = `cursor://agent/prompt?prompt=${prompt}`;
-    setTimeout(() => {
-      document.body.innerHTML = `
-        <h2>Copy this prompt into Cursor:</h2>
-        <textarea id="prompt">${decodeURIComponent(prompt)}</textarea>
-        <button onclick="navigator.clipboard.writeText(document.getElementById('prompt').value)">
-          Copy to Clipboard
-        </button>
-      `;
-    }, 2000);
+    const prompt = decodeURIComponent(params.get('prompt') || '');
+    document.getElementById('prompt').textContent = prompt;
+    
+    // Try to open file in Cursor (prompt pre-fill doesn't work for third-party)
+    // Use cursor://file/{path}:{line}:{column} to open at the correct location
+    const file = params.get('file') || '';
+    const line = params.get('line') || '1';
+    const cursorUrl = file ? `cursor://file/${file}:${line}:1` : 'cursor://'
+    window.location = cursorUrl;
+    
+    function copyPrompt() {
+      navigator.clipboard.writeText(prompt);
+      alert('Copied!');
+    }
   </script>
-  <p>Opening Cursor... If nothing happens, your browser may have blocked the redirect.</p>
 </body>
 </html>
 ```
 
-#### 4B.6 Update WorkizPRReviewer for Check Runs
-- [ ] Add option to use check runs instead of PR comments
-- [ ] Create check run with all findings as annotations
-- [ ] Include "Fix in Cursor" action button for top issues
-- [ ] Add config option: `use_check_runs = true`
+#### 4B.4 Format Individual Comment Body ✅ COMPLETED
+- [x] Create `format_inline_comment()` in `inline_comment_formatter.py` ✅:
+  ```python
+  def format_inline_review_comment(
+      title: str,
+      severity: str,  # "High", "Medium", "Low"
+      description: str,
+      file_path: str,
+      line: int,
+      suggestion: str = "",
+      cursor_redirect_url: str = "",
+  ) -> str:
+      """
+      Format a single inline review comment like Cursor Bugbot.
+      """
+      body = f"""**{title}**
 
-#### 4B.7 Update WorkizPRCodeSuggestions for Check Runs  
-- [ ] Similar updates for code suggestions
-- [ ] Each suggestion as an annotation with fix button
-- [ ] Preserve existing table format in PR comment (summary)
+**{severity} Severity**
+
+{description}
+"""
+      if suggestion:
+          body += f"\n**Suggested fix:** {suggestion}\n"
+      
+      # Buttons as markdown links styled with emoji
+      cursor_url = f"{cursor_redirect_url}?prompt={encode_prompt(...)}&file={file_path}&line={line}"
+      vscode_url = f"https://vscode.dev/github/{repo}/{branch}/{file_path}#L{line}"
+      
+      body += f"""
+[🔧 Fix in Cursor]({cursor_url}) | [↗ Fix in Web]({vscode_url})
+"""
+      return body
+  ```
+
+#### 4B.5 Update WorkizPRReviewer ✅ COMPLETED
+- [x] **Replace** current review output completely ✅
+- [x] Collect all findings (analyzer + rules + AI review) ✅
+- [x] For each finding, format as individual inline comment ✅
+- [x] Call `create_review_with_inline_comments()` with all comments ✅
+- [x] Use `event: "COMMENT"` (non-blocking) ✅
+- [x] Remove the batched persistent comment (disabled via publish_output=False) ✅
+- [x] Remove Check Run creation (no longer called) ✅
+
+New flow:
+```python
+async def run(self):
+    # ... existing analysis ...
+    
+    # Collect all findings
+    all_findings = self._collect_all_findings()
+    
+    # Format each as inline comment
+    review_comments = []
+    for finding in all_findings:
+        body = format_inline_review_comment(
+            title=finding["title"],
+            severity=finding["severity"],
+            description=finding["message"],
+            file_path=finding["file"],
+            line=finding["line"],
+            suggestion=finding.get("suggestion", ""),
+            cursor_redirect_url=self.cursor_redirect_url,
+        )
+        review_comments.append({
+            "path": finding["file"],
+            "line": finding["line"],
+            "body": body
+        })
+    
+    # Create non-blocking review with inline comments
+    self.git_provider.create_review_with_comments(
+        comments=review_comments,
+        event="COMMENT"  # Non-blocking!
+    )
+```
+
+#### 4B.6 Update WorkizPRCodeSuggestions ✅ COMPLETED
+- [x] Same approach for code suggestions ✅
+- [x] Each suggestion as an individual inline comment ✅
+- [x] Include "Fix in Cursor" and "Fix in Web" buttons ✅
+- [x] Remove the batched suggestions table (disabled via publish_output=False) ✅
+
+#### 4B.7 Configuration ✅ COMPLETED
+- [x] Add config options: ✅
+  ```toml
+  [workiz.inline_comments]
+  enabled = true                    # Use inline comments instead of batched
+  max_comments = 20                 # Limit to avoid spam
+  cursor_redirect_url = ""          # Uses server URL if empty
+  show_web_fallback = true          # Include vscode.dev link
+  severity_threshold = "low"        # Only show findings >= this severity
+  ```
+
+#### 4B.8 Handle Comment Limitations ✅ COMPLETED
+- [x] GitHub limits reviews to ~60 comments max ✅
+- [x] Implement smart filtering: ✅
+  - Prioritize higher severity findings
+  - Limit by max_comments config
+  - Severity threshold filtering
+- [x] Log when limit is reached ✅
 
 ### 📖 References
-- [GitHub Checks API Documentation](https://docs.github.com/en/rest/checks)
-- [GitHub check_run.requested_action Webhook](https://docs.github.com/en/webhooks/webhook-events-and-payloads#check_run)
-- [ARCHITECTURE_AND_FEATURES.md - Fix in Cursor](#14-fix-in-cursor-integration)
+- [GitHub Pull Request Review API](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request)
+- [GitHub PR Review Comments](https://docs.github.com/en/rest/pulls/comments)
+- Cursor Bugbot behavior analysis (from screenshots)
 
-### ✅ Phase 4B Completion Criteria
-- [ ] Individual inline comments work on specific lines
-- [ ] Check run created with annotations for all findings
-- [ ] "Fix in Cursor" button appears in GitHub Checks tab
-- [ ] Clicking button triggers webhook to our server
-- [ ] Server responds with cursor:// redirect or prompt
-- [ ] End-to-end tested on real PR
+### ✅ Phase 4B Completion Criteria ✅ ALL COMPLETED
+- [x] Individual inline comments appear on each finding ✅
+- [x] Comments visible in BOTH "Conversation" tab AND "Files Changed" tab ✅
+- [x] "Fix in Cursor" button opens redirect page → Cursor ✅
+- [x] "Fix in Web" button opens vscode.dev at correct file/line ✅
+- [x] NOT a blocking check - uses `event: "COMMENT"` ✅
+- [x] Default batched review/suggestions DISABLED ✅
+- [ ] End-to-end tested on real PR (next step)
+- [x] Matches Cursor Bugbot UX ✅
+
+**Phase 4B Status: ✅ IMPLEMENTATION COMPLETE** (pending end-to-end test)
+
+### Phase 4B.9: Bug Fixes and Improvements ✅ COMPLETED
+
+**Issues fixed:**
+
+1. **File Type Filtering** ✅
+   - Added `SKIP_ANALYZER_EXTENSIONS` to skip non-code files (.md, .json, .toml, etc.)
+   - Prevents false positives from analyzers pattern-matching documentation
+   - Files: `workiz_pr_reviewer.py`
+
+2. **Finding Deduplication** ✅
+   - Added `_deduplicate_findings()` to remove duplicate findings by (file, line, rule_id)
+   - Prevents same issue being reported multiple times
+   - Files: `workiz_pr_reviewer.py`
+
+3. **cursor_redirect_url Configuration** ✅
+   - Removed hardcoded ngrok URL from config
+   - Auto-builds from `WEBHOOK_URL` env var when empty
+   - Documented configuration options for local/production
+   - Files: `configuration.toml`, `workiz_pr_reviewer.py`, `workiz_pr_code_suggestions.py`
+
+4. **Org/Repo/Branch Extraction** ✅
+   - Fixed `_parse_repo_info()` to use `git_provider` for accurate data
+   - Properly extracts org, repo, and HEAD branch
+   - Fixes "Fix in Web" vscode.dev URLs pointing to wrong location
+   - Files: `workiz_pr_reviewer.py`, `workiz_pr_code_suggestions.py`
+
+5. **URL Encoding Fix** ✅
+   - Removed double-encoding of prompt in cursor redirect
+   - FastAPI auto-decodes query params, so extra `unquote()` was breaking prompts
+   - Added HTML escaping for XSS prevention
+   - Files: `github_app.py`
 
 ---
 

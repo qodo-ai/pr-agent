@@ -6,8 +6,7 @@ Extends the base PRCodeSuggestions with Workiz-specific features:
 - Cross-repository context for better suggestions
 - Custom rules-based suggestions
 - NestJS/React/PHP idiomatic patterns
-- Fix in Cursor deep links
-- GitHub Check Runs with action buttons
+- Bugbot-style inline review comments with Fix in Cursor buttons
 """
 
 import os
@@ -22,11 +21,7 @@ from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 from pr_agent.tools.comment_formatter import CommentFormatter
-from pr_agent.tools.check_run_builder import (
-    CheckRunBuilder,
-    AnnotationLevel,
-    encode_action_identifier,
-)
+from pr_agent.tools.inline_comment_formatter import format_suggestion_comment
 
 
 class WorkizPRCodeSuggestions(PRCodeSuggestions):
@@ -62,15 +57,31 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         
         self.comment_formatter = CommentFormatter.from_pr_url(pr_url)
         
-        cursor_config = self.workiz_config.get("cursor_integration", {})
-        self.cursor_enabled = cursor_config.get("enabled", True)
-        self.cursor_include_open_file = cursor_config.get("include_open_file_link", True)
-        self.cursor_show_web_fallback = cursor_config.get("show_web_fallback", True)
-        self.use_check_runs = cursor_config.get("use_check_runs", True)
-        self.check_run_name = cursor_config.get("check_run_name", "Workiz Code Review") + " - Suggestions"
-        self.redirect_base_url = cursor_config.get("redirect_base_url", "") or os.environ.get("WEBHOOK_URL", "")
+        inline_config = self.workiz_config.get("inline_comments", {})
+        self.use_inline_comments = inline_config.get("enabled", True)
+        self.max_inline_comments = inline_config.get("max_comments", 20)
+        self.severity_threshold = inline_config.get("severity_threshold", "low")
+        self.show_web_fallback = inline_config.get("show_web_fallback", True)
+        
+        # Build cursor redirect URL - use config value or fall back to WEBHOOK_URL env var
+        config_redirect_url = inline_config.get("cursor_redirect_url", "")
+        if config_redirect_url:
+            self.cursor_redirect_url = config_redirect_url
+        else:
+            webhook_url = os.environ.get("WEBHOOK_URL", "")
+            if webhook_url:
+                # Ensure we have the correct endpoint path
+                base_url = webhook_url.rstrip("/")
+                self.cursor_redirect_url = f"{base_url}/api/v1/cursor-redirect"
+            else:
+                self.cursor_redirect_url = ""
         
         self._suggestions_data = None
+        
+        self._org = ""
+        self._repo = ""
+        self._branch = "main"
+        self._parse_repo_info(pr_url)
 
     async def run(self):
         """
@@ -80,8 +91,13 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         1. Load cross-repo context (if enabled)
         2. Run custom rules to find violations
         3. Inject Workiz coding standards into prompts
-        4. Execute base suggestions with enhanced context
-        5. Track API usage
+        4. Execute AI model to generate suggestions (without publishing)
+        5. Publish Bugbot-style inline suggestion comments
+        6. Track API usage
+        
+        Note: When inline comments are enabled (default), the base suggestions'
+        batched comment is disabled. Each suggestion becomes an individual
+        inline comment on the specific code line.
         """
         if not self.workiz_enabled:
             get_logger().debug("Workiz enhancements disabled, running base code suggestions")
@@ -102,6 +118,7 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
                 extra={"context": {
                     "pr_url": self.pr_url,
                     "files_count": len(self.git_provider.get_files()),
+                    "use_inline_comments": self.use_inline_comments,
                 }}
             )
 
@@ -111,10 +128,19 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
             
             self._enhance_suggestion_vars()
             
-            result = await super().run()
-            
-            if self.use_check_runs and self.cursor_enabled and self._suggestions_data:
-                await self._create_check_run_with_suggestions()
+            if self.use_inline_comments:
+                original_publish_output = get_settings().config.publish_output
+                get_settings().config.publish_output = False
+                
+                try:
+                    result = await super().run()
+                finally:
+                    get_settings().config.publish_output = original_publish_output
+                
+                if self._suggestions_data:
+                    await self._publish_inline_suggestion_comments()
+            else:
+                result = await super().run()
             
             await self._track_api_usage()
             
@@ -124,6 +150,7 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
                     "pr_url": self.pr_url,
                     "duration_seconds": time.time() - self._start_time,
                     "rules_findings": len(self.workiz_context["rules_findings"]),
+                    "inline_comments_enabled": self.use_inline_comments,
                 }}
             )
             
@@ -264,6 +291,146 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         # - Log estimated cost
         # - Store in database
         pass
+
+    def _parse_repo_info(self, pr_url: str) -> None:
+        """
+        Extract org, repo, and branch using git_provider.
+        
+        Prefers git_provider data for accuracy, falls back to URL parsing.
+        """
+        try:
+            # Try to get accurate info from git_provider
+            if hasattr(self, 'git_provider') and self.git_provider:
+                # Get org/repo from repository object
+                if hasattr(self.git_provider, 'repo') and self.git_provider.repo:
+                    full_name = self.git_provider.repo.full_name  # "Workiz/repo-name"
+                    if full_name and '/' in full_name:
+                        parts = full_name.split('/')
+                        self._org = parts[0]
+                        self._repo = parts[1]
+                
+                # Get branch from PR head
+                if hasattr(self.git_provider, 'pr') and self.git_provider.pr:
+                    if hasattr(self.git_provider.pr, 'head') and self.git_provider.pr.head:
+                        self._branch = self.git_provider.pr.head.ref
+            
+            # Fallback to URL parsing if git_provider didn't provide the info
+            if not self._org or not self._repo:
+                parts = pr_url.replace("https://", "").split("/")
+                if "github.com" in pr_url and len(parts) >= 5:
+                    self._org = parts[1]
+                    self._repo = parts[2]
+        except Exception:
+            pass
+
+    def _should_include_suggestion(self, score: int) -> bool:
+        """Check if suggestion passes the impact score threshold."""
+        threshold_map = {"high": 7, "medium": 4, "low": 1}
+        threshold = threshold_map.get(self.severity_threshold.lower(), 1)
+        return score >= threshold
+
+    async def _publish_inline_suggestion_comments(self) -> None:
+        """
+        Publish each code suggestion as an individual inline review comment.
+        
+        Creates Bugbot-style comments that appear:
+        - Inline on the specific code lines in "Files Changed" tab
+        - In the "Conversation" tab as part of a review thread
+        
+        Uses event="COMMENT" to ensure comments are non-blocking.
+        """
+        if not self._suggestions_data:
+            get_logger().info("No suggestions data to publish", {
+                "pr_url": self.pr_url,
+            })
+            return
+        
+        suggestions = self._suggestions_data.get('code_suggestions', [])
+        if not suggestions:
+            get_logger().info("No code suggestions to publish as inline comments", {
+                "pr_url": self.pr_url,
+            })
+            return
+        
+        try:
+            branch = self.git_provider.pr.head.ref if hasattr(self.git_provider.pr, 'head') else "main"
+            self._branch = branch
+        except Exception:
+            self._branch = "main"
+        
+        sorted_suggestions = sorted(suggestions, key=lambda x: int(x.get('score', 0)), reverse=True)
+        
+        comments = []
+        for suggestion in sorted_suggestions:
+            score = int(suggestion.get('score', 0))
+            if not self._should_include_suggestion(score):
+                continue
+            
+            if len(comments) >= self.max_inline_comments:
+                get_logger().info(f"Reached max inline comments limit ({self.max_inline_comments})", {
+                    "pr_url": self.pr_url,
+                    "total_suggestions": len(suggestions),
+                })
+                break
+            
+            file_path = suggestion.get('relevant_file', 'unknown').strip()
+            line_start = int(suggestion.get('relevant_lines_start', 1))
+            line_end = int(suggestion.get('relevant_lines_end', line_start))
+            summary = suggestion.get('one_sentence_summary', 'Suggestion').strip()
+            content = suggestion.get('suggestion_content', '').strip()
+            label = suggestion.get('label', 'improvement').strip()
+            existing_code = suggestion.get('existing_code', '').strip()
+            improved_code = suggestion.get('improved_code', '').strip()
+            
+            body = format_suggestion_comment(
+                summary=summary,
+                description=re.sub(r'<br\s*/?>', '\n', content),
+                file_path=file_path,
+                line_start=line_start,
+                line_end=line_end,
+                existing_code=existing_code,
+                improved_code=improved_code,
+                label=label,
+                cursor_redirect_url=self.cursor_redirect_url if self.cursor_redirect_url else "",
+                org=self._org,
+                repo=self._repo,
+                branch=self._branch,
+            )
+            
+            comments.append({
+                "path": file_path,
+                "line": line_end,
+                "body": body,
+            })
+        
+        if not comments:
+            get_logger().info("No suggestions passed impact threshold", {
+                "pr_url": self.pr_url,
+                "threshold": self.severity_threshold,
+                "total_suggestions": len(suggestions),
+            })
+            return
+        
+        try:
+            self.git_provider.create_review_with_inline_comments(
+                comments=comments,
+                event="COMMENT",
+            )
+            
+            get_logger().info("Published inline suggestion comments", {
+                "pr_url": self.pr_url,
+                "comment_count": len(comments),
+                "total_suggestions": len(suggestions),
+                "threshold": self.severity_threshold,
+            })
+            
+        except Exception as e:
+            get_logger().error("Failed to publish inline suggestion comments", {
+                "pr_url": self.pr_url,
+                "error": str(e),
+                "comment_count": len(comments),
+            })
+            raise
 
     async def _create_check_run_with_suggestions(self) -> None:
         """

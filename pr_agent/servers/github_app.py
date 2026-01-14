@@ -1,11 +1,12 @@
 import asyncio.locks
 import copy
+import html
 import json
 import os
 import re
 import uuid
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
@@ -512,18 +513,42 @@ async def cursor_redirect(
     line: Optional[int] = Query(None, description="Line number"),
 ):
     """
-    Redirect endpoint for opening Cursor IDE with a pre-filled prompt.
+    Redirect endpoint for opening Cursor IDE with our extension.
     
     This endpoint serves an HTML page that:
-    1. Attempts to redirect to cursor://agent/prompt?prompt=...
-    2. If redirect fails, shows the prompt for copy/paste
+    1. First tries our extension: cursor://workiz.workiz-pr-agent-fix/fix?prompt=...&file=...&line=...
+    2. Falls back to cursor://file/{path}:{line} if extension not installed
+    3. Shows the prompt for copy/paste as final fallback
+    
+    With the Workiz PR Agent extension installed, the prompt can be pre-filled in AI chat!
+    Without the extension, only file opening works.
     
     GitHub blocks custom URL schemes in comments, so we use this
     HTTPS endpoint as an intermediary.
     """
-    decoded_prompt = unquote(prompt)
-    encoded_prompt = quote(decoded_prompt, safe="")
-    cursor_url = f"cursor://agent/prompt?prompt={encoded_prompt}"
+    # Encode prompt for URL
+    encoded_prompt = quote(prompt, safe="")
+    
+    # Primary: Use our extension URI (with prompt support!)
+    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?prompt={encoded_prompt}"
+    if file:
+        extension_url += f"&file={quote(file, safe='')}"
+    if line:
+        extension_url += f"&line={line}"
+    
+    # Fallback: cursor://file (works without extension, but no prompt)
+    if file:
+        fallback_file_url = f"cursor://file/{file}"
+        if line:
+            fallback_file_url += f":{line}:1"
+    else:
+        fallback_file_url = "cursor://"
+    
+    # Use extension URL as primary
+    cursor_url = extension_url
+    
+    # HTML-escape the prompt for display in the fallback section
+    display_prompt = html.escape(prompt)
     
     html_content = f"""
 <!DOCTYPE html>
@@ -669,16 +694,16 @@ async def cursor_redirect(
         
         <div class="status" id="status">
             <div class="spinner" id="spinner"></div>
-            <span id="status-text">Opening Cursor IDE...</span>
+            <span id="status-text">Opening file in Cursor IDE...</span>
         </div>
         
         <div class="fallback" id="fallback">
-            <p style="margin-bottom: 16px;">
-                If Cursor didn't open automatically, copy this prompt and paste it in Cursor's AI chat:
+            <p style="margin-bottom: 16px; font-weight: 500;">
+                📋 <strong>Step 2:</strong> Copy this prompt and paste it in Cursor's AI chat (Cmd+L or Ctrl+L):
             </p>
             
             <div class="prompt-container">
-                <pre class="prompt-text" id="prompt">{decoded_prompt}</pre>
+                <pre class="prompt-text" id="prompt">{display_prompt}</pre>
             </div>
             
             <div class="btn-group">
@@ -691,7 +716,8 @@ async def cursor_redirect(
             </div>
             
             <p class="info">
-                💡 Make sure Cursor IDE is installed. The cursor:// URL scheme must be registered.
+                💡 <strong>Pro tip:</strong> Install the <a href="https://github.com/Workiz/workiz-pr-agent/tree/main/cursor-extension" target="_blank" style="color: #3b82f6;">Workiz PR Agent extension</a> 
+                for automatic prompt pre-filling! Without the extension, copy the prompt above and paste it into Cursor's AI chat (Cmd+L or Ctrl+L).
             </p>
         </div>
     </div>
@@ -706,9 +732,9 @@ async def cursor_redirect(
         // Try to open Cursor
         window.location.href = cursorUrl;
         
-        // After 2 seconds, show fallback if still on this page
+        // After 2 seconds, show fallback with prompt
         setTimeout(() => {{
-            statusText.textContent = "Cursor may have opened. If not, use the prompt below:";
+            statusText.textContent = "✓ File should be open in Cursor. Now copy the prompt below:";
             spinner.style.display = 'none';
             statusEl.classList.add('success');
             fallbackEl.classList.add('visible');

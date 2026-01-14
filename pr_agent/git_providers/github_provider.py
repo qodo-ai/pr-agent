@@ -430,7 +430,106 @@ class GithubProvider(GitProvider):
             except Exception as e:
                 get_logger().error(f"Failed to publish inline code comments fallback, error: {e}")
                 raise e    
-    
+
+    def create_review_with_inline_comments(
+        self,
+        comments: list[dict],
+        event: str = "COMMENT",
+        body: str = "",
+    ) -> dict:
+        """
+        Create a PR review with individual inline comments using the GitHub Reviews API.
+        
+        This method creates comments that appear:
+        - Inline on the specific code lines in the "Files Changed" tab
+        - In the "Conversation" tab as part of a review thread
+        
+        Unlike publish_inline_comments(), this method:
+        - Uses the `event` parameter to control review state (COMMENT = non-blocking)
+        - Returns the API response
+        - Does not fall back to individual comment posting on failure
+        
+        Args:
+            comments: List of comment dicts with keys:
+                - path: File path relative to repo root
+                - line: Line number (for single-line comments)
+                - body: Comment text (markdown supported)
+                Optional for multi-line:
+                - start_line: Starting line number
+                - start_side: "LEFT" or "RIGHT" (default RIGHT)
+                - side: "LEFT" or "RIGHT" (default RIGHT)
+            event: Review event type:
+                - "COMMENT": Non-blocking, informational only (default)
+                - "APPROVE": Approve the PR
+                - "REQUEST_CHANGES": Request changes (blocking)
+            body: Optional review body text (appears as summary)
+            
+        Returns:
+            API response dict with review details
+            
+        Raises:
+            GithubException: If the API call fails
+        """
+        if not comments:
+            get_logger().warning("No comments provided for inline review", {
+                "pr_url": self.pr.html_url,
+            })
+            return {}
+        
+        formatted_comments = []
+        for comment in comments:
+            formatted = {
+                "path": comment["path"],
+                "body": comment["body"],
+            }
+            
+            if "line" in comment:
+                formatted["line"] = comment["line"]
+            if "start_line" in comment:
+                formatted["start_line"] = comment["start_line"]
+            if "side" in comment:
+                formatted["side"] = comment["side"]
+            else:
+                formatted["side"] = "RIGHT"
+            if "start_side" in comment:
+                formatted["start_side"] = comment["start_side"]
+                
+            formatted_comments.append(formatted)
+        
+        payload = {
+            "commit_id": self.last_commit_id.sha,
+            "event": event,
+            "comments": formatted_comments,
+        }
+        
+        if body:
+            payload["body"] = body
+        
+        try:
+            headers, data = self.pr._requester.requestJsonAndCheck(
+                "POST",
+                f"{self.pr.url}/reviews",
+                input=payload
+            )
+            
+            get_logger().info("Created inline review comments", {
+                "pr_url": self.pr.html_url,
+                "event": event,
+                "comment_count": len(formatted_comments),
+                "review_id": data.get("id"),
+            })
+            
+            return data
+            
+        except Exception as e:
+            get_logger().error("Failed to create inline review comments", {
+                "pr_url": self.pr.html_url,
+                "event": event,
+                "comment_count": len(formatted_comments),
+                "error": str(e),
+            })
+            raise
+
     def get_review_thread_comments(self, comment_id: int) -> list[dict]:
         """
         Retrieves all comments in the same thread as the given comment.
@@ -1239,10 +1338,10 @@ class GithubProvider(GitProvider):
             headers, data = self.pr._requester.requestJsonAndCheck(
                 "POST", f"{self.base_url}/repos/{self.repo}/check-runs", input=payload
             )
-            get_logger().info(f"Created check run: {data.get('id')}", {"check_run_id": data.get("id"), "name": name})
+            get_logger().info("Created check run", {"check_run_id": data.get("id"), "name": name})
             return data
         except Exception as e:
-            get_logger().error(f"Failed to create check run: {e}", {"error": str(e), "name": name})
+            get_logger().error("Failed to create check run", {"error": str(e), "name": name})
             raise
 
     def update_check_run(

@@ -8,8 +8,7 @@ Extends the base PRReviewer with Workiz-specific features:
 - Language-specific analyzers
 - Review history storage
 - API usage tracking
-- Fix in Cursor deep links
-- GitHub Check Runs with action buttons
+- Bugbot-style inline review comments with Fix in Cursor buttons
 """
 
 import os
@@ -28,12 +27,55 @@ from pr_agent.tools.custom_rules_engine import get_rules_engine
 from pr_agent.tools.sql_analyzer import get_sql_analyzer
 from pr_agent.tools.security_analyzer import get_security_analyzer
 from pr_agent.tools.comment_formatter import CommentFormatter, add_cursor_links_to_review_text
-from pr_agent.tools.check_run_builder import (
-    CheckRunBuilder,
-    AnnotationLevel,
-    encode_action_identifier,
-    build_cursor_prompt,
-)
+from pr_agent.tools.inline_comment_formatter import format_inline_comment
+
+
+# File extensions to skip during analysis (non-code files)
+SKIP_ANALYZER_EXTENSIONS = {
+    '.md', '.markdown', '.txt', '.rst',  # Documentation
+    '.json', '.toml', '.yaml', '.yml', '.xml',  # Config files
+    '.gitignore', '.dockerignore', '.editorconfig',  # Ignore files
+    '.lock', '.sum',  # Lock files
+    '.svg', '.png', '.jpg', '.jpeg', '.gif', '.ico',  # Images
+    '.env', '.env.example',  # Environment files
+    '.css', '.scss', '.less',  # Stylesheets (optional, but lower priority)
+}
+
+
+def _should_analyze_file(file_path: str) -> bool:
+    """
+    Check if a file should be analyzed based on its extension.
+    
+    Skips non-code files like markdown, JSON, TOML, etc. that can cause
+    false positives when pattern-matching analyzers run on them.
+    """
+    if '.' not in file_path:
+        return True  # No extension, assume it's code
+    
+    ext = '.' + file_path.rsplit('.', 1)[-1].lower()
+    return ext not in SKIP_ANALYZER_EXTENSIONS
+
+
+def _deduplicate_findings(findings: list[dict]) -> list[dict]:
+    """
+    Deduplicate findings by (file, line, rule_id).
+    
+    Multiple analyzers might report the same issue, or the same rule
+    might match multiple times on the same line. This ensures we only
+    report each unique issue once.
+    """
+    seen = set()
+    unique = []
+    for finding in findings:
+        key = (
+            finding.get('file', ''),
+            finding.get('line', 0),
+            finding.get('rule_id', '') or finding.get('title', ''),
+        )
+        if key not in seen:
+            seen.add(key)
+            unique.append(finding)
+    return unique
 
 
 class WorkizPRReviewer(PRReviewer):
@@ -73,13 +115,29 @@ class WorkizPRReviewer(PRReviewer):
         
         self.comment_formatter = CommentFormatter.from_pr_url(pr_url)
         
-        cursor_config = self.workiz_config.get("cursor_integration", {})
-        self.cursor_enabled = cursor_config.get("enabled", True)
-        self.cursor_include_open_file = cursor_config.get("include_open_file_link", True)
-        self.cursor_show_web_fallback = cursor_config.get("show_web_fallback", True)
-        self.use_check_runs = cursor_config.get("use_check_runs", True)
-        self.check_run_name = cursor_config.get("check_run_name", "Workiz Code Review")
-        self.redirect_base_url = cursor_config.get("redirect_base_url", "") or os.environ.get("WEBHOOK_URL", "")
+        inline_config = self.workiz_config.get("inline_comments", {})
+        self.use_inline_comments = inline_config.get("enabled", True)
+        self.max_inline_comments = inline_config.get("max_comments", 20)
+        self.severity_threshold = inline_config.get("severity_threshold", "low")
+        self.show_web_fallback = inline_config.get("show_web_fallback", True)
+        
+        # Build cursor redirect URL - use config value or fall back to WEBHOOK_URL env var
+        config_redirect_url = inline_config.get("cursor_redirect_url", "")
+        if config_redirect_url:
+            self.cursor_redirect_url = config_redirect_url
+        else:
+            webhook_url = os.environ.get("WEBHOOK_URL", "")
+            if webhook_url:
+                # Ensure we have the correct endpoint path
+                base_url = webhook_url.rstrip("/")
+                self.cursor_redirect_url = f"{base_url}/api/v1/cursor-redirect"
+            else:
+                self.cursor_redirect_url = ""
+        
+        self._org = ""
+        self._repo = ""
+        self._branch = "main"
+        self._parse_repo_info(pr_url)
 
     async def run(self) -> None:
         """
@@ -90,9 +148,13 @@ class WorkizPRReviewer(PRReviewer):
         2. Load Jira context (if ticket linked)
         3. Run language analyzers
         4. Run custom rules engine
-        5. Execute base review with enhanced context
+        5. Publish Bugbot-style inline review comments
         6. Store review history
         7. Track API usage
+        
+        Note: When inline comments are enabled (default), the base review's
+        batched comment is disabled. Each finding becomes an individual
+        inline comment on the specific code line.
         """
         if not self.workiz_enabled:
             get_logger().debug("Workiz enhancements disabled, running base reviewer")
@@ -113,6 +175,7 @@ class WorkizPRReviewer(PRReviewer):
                 extra={"context": {
                     "pr_url": self.pr_url,
                     "files_count": len(self.git_provider.get_files()),
+                    "use_inline_comments": self.use_inline_comments,
                 }}
             )
 
@@ -126,10 +189,18 @@ class WorkizPRReviewer(PRReviewer):
             
             self._enhance_review_vars()
             
-            await super().run()
-            
-            if self.use_check_runs and self.cursor_enabled:
-                await self._create_check_run_with_findings()
+            if self.use_inline_comments:
+                original_publish_output = get_settings().config.publish_output
+                get_settings().config.publish_output = False
+                
+                try:
+                    await super().run()
+                finally:
+                    get_settings().config.publish_output = original_publish_output
+                
+                await self._publish_inline_review_comments()
+            else:
+                await super().run()
             
             await self._store_review_history()
             
@@ -142,6 +213,7 @@ class WorkizPRReviewer(PRReviewer):
                     "duration_seconds": time.time() - self._start_time,
                     "rules_findings": len(self.workiz_context["rules_findings"]),
                     "analyzer_findings": len(self.workiz_context["analyzer_findings"]),
+                    "inline_comments_enabled": self.use_inline_comments,
                 }}
             )
 
@@ -200,9 +272,15 @@ class WorkizPRReviewer(PRReviewer):
         sql_analyzer = get_sql_analyzer()
         security_analyzer = get_security_analyzer()
         
+        skipped_files = 0
         for file in files:
             try:
                 file_path = file.filename if hasattr(file, 'filename') else str(file)
+                
+                # Skip non-code files (markdown, JSON, TOML, etc.)
+                if not _should_analyze_file(file_path):
+                    skipped_files += 1
+                    continue
                 
                 try:
                     content = self.git_provider.get_pr_file_content(file_path, self.git_provider.pr.head.ref)
@@ -282,7 +360,8 @@ class WorkizPRReviewer(PRReviewer):
             extra={"context": {
                 "pr_url": self.pr_url,
                 "findings_count": len(findings),
-                "files_analyzed": len(files),
+                "files_analyzed": len(files) - skipped_files,
+                "files_skipped": skipped_files,
             }}
         )
 
@@ -302,6 +381,11 @@ class WorkizPRReviewer(PRReviewer):
         for file in files:
             try:
                 file_path = file.filename if hasattr(file, 'filename') else str(file)
+                
+                # Skip non-code files
+                if not _should_analyze_file(file_path):
+                    continue
+                
                 try:
                     content = self.git_provider.get_pr_file_content(file_path, self.git_provider.pr.head.ref)
                     if content:
@@ -334,6 +418,298 @@ class WorkizPRReviewer(PRReviewer):
                 "files_checked": len(files_content),
             }}
         )
+
+    def _parse_repo_info(self, pr_url: str) -> None:
+        """
+        Extract org, repo, and branch using git_provider.
+        
+        Prefers git_provider data for accuracy, falls back to URL parsing.
+        """
+        try:
+            # Try to get accurate info from git_provider
+            if hasattr(self, 'git_provider') and self.git_provider:
+                # Get org/repo from repository object
+                if hasattr(self.git_provider, 'repo') and self.git_provider.repo:
+                    full_name = self.git_provider.repo.full_name  # "Workiz/repo-name"
+                    if full_name and '/' in full_name:
+                        parts = full_name.split('/')
+                        self._org = parts[0]
+                        self._repo = parts[1]
+                
+                # Get branch from PR head
+                if hasattr(self.git_provider, 'pr') and self.git_provider.pr:
+                    if hasattr(self.git_provider.pr, 'head') and self.git_provider.pr.head:
+                        self._branch = self.git_provider.pr.head.ref
+            
+            # Fallback to URL parsing if git_provider didn't provide the info
+            if not self._org or not self._repo:
+                parts = pr_url.replace("https://", "").split("/")
+                if "github.com" in pr_url and len(parts) >= 5:
+                    self._org = parts[1]
+                    self._repo = parts[2]
+        except Exception:
+            pass
+
+    def _collect_all_findings(self) -> list[dict]:
+        """
+        Collect all findings from analyzers and rules into a unified list.
+        
+        Returns:
+            List of normalized finding dicts with keys:
+            - title: Issue title
+            - severity: "High", "Medium", or "Low"
+            - message: Detailed description
+            - file: File path
+            - line: Line number
+            - suggestion: Suggested fix (optional)
+            - rule_id: Rule/analyzer identifier
+            - source: "analyzer" or "rule"
+        """
+        all_findings = []
+        
+        for f in self.workiz_context.get("analyzer_findings", []):
+            all_findings.append({
+                "title": f.get("rule_id", f.get("analyzer", "Issue")),
+                "severity": self._normalize_severity(f.get("severity", "warning")),
+                "message": f.get("message", "Issue detected"),
+                "file": f.get("file", "unknown"),
+                "line": f.get("line", 1),
+                "suggestion": f.get("suggestion", ""),
+                "rule_id": f.get("rule_id", ""),
+                "source": "analyzer",
+            })
+        
+        for f in self.workiz_context.get("rules_findings", []):
+            all_findings.append({
+                "title": f.get("rule_name", f.get("rule", "Rule Violation")),
+                "severity": self._normalize_severity(f.get("severity", "warning")),
+                "message": f.get("message", "Rule violation detected"),
+                "file": f.get("file", "unknown"),
+                "line": f.get("line", 1),
+                "suggestion": f.get("suggestion", ""),
+                "rule_id": f.get("rule", ""),
+                "source": "rule",
+            })
+        
+        # Deduplicate findings by (file, line, rule_id)
+        return _deduplicate_findings(all_findings)
+    
+    def _normalize_severity(self, severity: str) -> str:
+        """Normalize severity string to High/Medium/Low."""
+        sev_lower = severity.lower().strip()
+        if sev_lower in ("error", "failure", "critical", "high"):
+            return "High"
+        elif sev_lower in ("warning", "medium"):
+            return "Medium"
+        else:
+            return "Low"
+    
+    def _should_include_finding(self, severity: str) -> bool:
+        """Check if finding passes severity threshold."""
+        severity_order = {"high": 3, "medium": 2, "low": 1}
+        threshold_value = severity_order.get(self.severity_threshold.lower(), 1)
+        finding_value = severity_order.get(severity.lower(), 1)
+        return finding_value >= threshold_value
+
+    def _get_diff_hunk_ranges(self) -> dict[str, list[dict]]:
+        """
+        Get the valid line ranges for each file in the PR diff.
+        
+        GitHub only allows inline comments on lines that are actually in the diff.
+        This parses the patch to extract the hunk ranges (start/end lines).
+        
+        Returns:
+            Dict mapping file paths to list of {start, end} line ranges
+        """
+        import re
+        RE_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+        
+        hunk_ranges = {}
+        try:
+            diff_files = self.git_provider.get_diff_files()
+            for file in diff_files:
+                file_path = file.filename
+                patch_str = file.patch if hasattr(file, 'patch') and file.patch else ""
+                
+                if not patch_str:
+                    continue
+                    
+                ranges = []
+                for line in patch_str.splitlines():
+                    if line.startswith('@@'):
+                        match = RE_HUNK_HEADER.match(line)
+                        if match:
+                            # Extract new file start line and size
+                            start = int(match.group(3))
+                            size = int(match.group(4)) if match.group(4) else 1
+                            ranges.append({'start': start, 'end': start + size - 1})
+                
+                if ranges:
+                    hunk_ranges[file_path] = ranges
+        except Exception as e:
+            get_logger().warning("Failed to extract diff hunk ranges", {
+                "error": str(e),
+                "pr_url": self.pr_url,
+            })
+        
+        return hunk_ranges
+
+    def _is_line_in_diff(self, file_path: str, line: int, hunk_ranges: dict[str, list[dict]]) -> bool:
+        """Check if a specific line is within any diff hunk for the file."""
+        if file_path not in hunk_ranges:
+            return False
+        
+        for hunk in hunk_ranges[file_path]:
+            if hunk['start'] <= line <= hunk['end']:
+                return True
+        return False
+
+    async def _publish_inline_review_comments(self) -> None:
+        """
+        Publish each finding as an individual inline review comment.
+        
+        Creates Bugbot-style comments that appear:
+        - Inline on the specific code lines in "Files Changed" tab
+        - In the "Conversation" tab as part of a review thread
+        
+        Uses event="COMMENT" to ensure comments are non-blocking.
+        Only posts comments on lines that are actually in the PR diff.
+        """
+        all_findings = self._collect_all_findings()
+        
+        if not all_findings:
+            get_logger().info("No findings to publish as inline comments", {
+                "pr_url": self.pr_url,
+            })
+            return
+        
+        try:
+            branch = self.git_provider.pr.head.ref if hasattr(self.git_provider.pr, 'head') else "main"
+            self._branch = branch
+        except Exception:
+            self._branch = "main"
+        
+        # Get valid diff hunk ranges to filter comments
+        hunk_ranges = self._get_diff_hunk_ranges()
+        
+        comments = []
+        skipped_not_in_diff = 0
+        skipped_severity = 0
+        
+        for finding in all_findings:
+            if not self._should_include_finding(finding["severity"]):
+                skipped_severity += 1
+                continue
+            
+            # Only include comments on lines that are in the diff
+            if not self._is_line_in_diff(finding["file"], finding["line"], hunk_ranges):
+                skipped_not_in_diff += 1
+                continue
+            
+            if len(comments) >= self.max_inline_comments:
+                get_logger().info(f"Reached max inline comments limit ({self.max_inline_comments})", {
+                    "pr_url": self.pr_url,
+                    "total_findings": len(all_findings),
+                })
+                break
+            
+            body = format_inline_comment(
+                title=finding["title"],
+                severity=finding["severity"],
+                description=finding["message"],
+                file_path=finding["file"],
+                line=finding["line"],
+                suggestion=finding.get("suggestion", ""),
+                cursor_redirect_url=self.cursor_redirect_url if self.cursor_redirect_url else "",
+                org=self._org,
+                repo=self._repo,
+                branch=self._branch,
+                rule_id=finding.get("rule_id", ""),
+            )
+            
+            comments.append({
+                "path": finding["file"],
+                "line": finding["line"],
+                "body": body,
+            })
+        
+        get_logger().info("Filtered findings for inline comments", {
+            "pr_url": self.pr_url,
+            "total_findings": len(all_findings),
+            "valid_comments": len(comments),
+            "skipped_not_in_diff": skipped_not_in_diff,
+            "skipped_severity": skipped_severity,
+        })
+        
+        if not comments:
+            get_logger().info("No comments passed severity threshold", {
+                "pr_url": self.pr_url,
+                "threshold": self.severity_threshold,
+                "total_findings": len(all_findings),
+            })
+            return
+        
+        try:
+            self.git_provider.create_review_with_inline_comments(
+                comments=comments,
+                event="COMMENT",
+            )
+            
+            get_logger().info("Published inline review comments", {
+                "pr_url": self.pr_url,
+                "comment_count": len(comments),
+                "total_findings": len(all_findings),
+                "threshold": self.severity_threshold,
+            })
+            
+        except Exception as e:
+            error_str = str(e)
+            if "422" in error_str and "Line could not be resolved" in error_str:
+                get_logger().warning("Some inline comments couldn't be posted (lines not in diff)", {
+                    "pr_url": self.pr_url,
+                    "comment_count": len(comments),
+                    "error": error_str[:200],
+                })
+                await self._publish_inline_comments_with_fallback(comments)
+            else:
+                get_logger().error("Failed to publish inline review comments", {
+                    "pr_url": self.pr_url,
+                    "error": str(e),
+                    "comment_count": len(comments),
+                })
+                raise
+    
+    async def _publish_inline_comments_with_fallback(self, comments: list[dict]) -> None:
+        """
+        Fallback: Try posting comments one by one, skipping those that fail.
+        
+        GitHub returns 422 when a comment line isn't in the diff. This method
+        posts comments individually, logging which ones fail.
+        """
+        success_count = 0
+        failed_count = 0
+        
+        for comment in comments:
+            try:
+                self.git_provider.create_review_with_inline_comments(
+                    comments=[comment],
+                    event="COMMENT",
+                )
+                success_count += 1
+            except Exception as e:
+                failed_count += 1
+                get_logger().debug("Skipped comment (line not in diff)", {
+                    "file": comment.get("path"),
+                    "line": comment.get("line"),
+                    "error": str(e)[:100],
+                })
+        
+        get_logger().info("Published inline comments (with fallback)", {
+            "pr_url": self.pr_url,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "total": len(comments),
+        })
 
     async def _create_check_run_with_findings(self) -> None:
         """
@@ -479,9 +855,11 @@ class WorkizPRReviewer(PRReviewer):
             })
             
         except Exception as e:
+            import traceback
             get_logger().error("Failed to create check run", {
                 "pr_url": self.pr_url,
                 "error": str(e),
+                "traceback": traceback.format_exc(),
             })
 
     def _enhance_review_vars(self) -> None:
@@ -546,7 +924,7 @@ class WorkizPRReviewer(PRReviewer):
         Returns:
             Formatted markdown string with Cursor links
         """
-        if not self.cursor_enabled or not findings:
+        if self.use_inline_comments or not findings:
             if finding_type == "rule":
                 return "\n".join(
                     f"- [{f.get('severity', 'warning')}] {f.get('rule', 'unknown')}: {f.get('message', '')}"
@@ -581,7 +959,7 @@ class WorkizPRReviewer(PRReviewer):
         """
         markdown_text = super()._prepare_pr_review()
         
-        if not self.cursor_enabled or not markdown_text:
+        if self.use_inline_comments or not markdown_text:
             return markdown_text
         
         markdown_text = self._add_cursor_links_to_issues(markdown_text)
