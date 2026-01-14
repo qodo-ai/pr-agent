@@ -52,3 +52,4 @@ if __name__ == "__main__":
     prices = [10.0, 20.0, 30.0]
     total = calculate_total(prices)
     print(f"Final total: {total}")
+# Test smart line adjustment - Wed Jan 14 20:24:00 IST 2026
