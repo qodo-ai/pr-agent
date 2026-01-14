@@ -430,7 +430,8 @@ class WorkizPRReviewer(PRReviewer):
             if hasattr(self, 'git_provider') and self.git_provider:
                 # Get org/repo from repository object
                 if hasattr(self.git_provider, 'repo') and self.git_provider.repo:
-                    full_name = self.git_provider.repo.full_name  # "Workiz/repo-name"
+                    repo = self.git_provider.repo
+                    full_name = repo.full_name if hasattr(repo, 'full_name') else str(repo)
                     if full_name and '/' in full_name:
                         parts = full_name.split('/')
                         self._org = parts[0]
@@ -1050,7 +1051,10 @@ class WorkizPRReviewer(PRReviewer):
             
             pr_info = self.git_provider.pr
             repository = getattr(self.git_provider, 'repo', None)
-            repo_name = repository.full_name if repository else self._extract_repo_from_url()
+            if repository:
+                repo_name = repository.full_name if hasattr(repository, 'full_name') else str(repository)
+            else:
+                repo_name = self._extract_repo_from_url()
             
             pr_number = pr_info.number if hasattr(pr_info, 'number') else 0
             pr_title = pr_info.title if hasattr(pr_info, 'title') else ""

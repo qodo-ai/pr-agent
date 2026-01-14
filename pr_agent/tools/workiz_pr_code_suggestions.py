@@ -303,7 +303,8 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
             if hasattr(self, 'git_provider') and self.git_provider:
                 # Get org/repo from repository object
                 if hasattr(self.git_provider, 'repo') and self.git_provider.repo:
-                    full_name = self.git_provider.repo.full_name  # "Workiz/repo-name"
+                    repo = self.git_provider.repo
+                    full_name = repo.full_name if hasattr(repo, 'full_name') else str(repo)
                     if full_name and '/' in full_name:
                         parts = full_name.split('/')
                         self._org = parts[0]
