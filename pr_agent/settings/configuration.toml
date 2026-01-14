@@ -447,7 +447,7 @@ severity_threshold = "low"
 #   - Production: "https://pr-agent.workiz.com/api/v1/cursor-redirect"
 #   - Local dev: Set WEBHOOK_URL env var to your ngrok URL, then append /api/v1/cursor-redirect
 # The redirect service converts HTTPS links to cursor:// deep links
-cursor_redirect_url = ""
+cursor_redirect_url = "https://cff882ccc75d.ngrok-free.app/api/v1/cursor-redirect"
 # Include "Fix in Web" (vscode.dev) link as fallback
 show_web_fallback = true
 
