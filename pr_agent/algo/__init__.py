@@ -40,6 +40,7 @@ MAX_TOKENS = {
     'gpt-5.2': 400000,  # 400K, but may be limited by config.max_model_tokens
     'gpt-5.2-2025-12-11': 400000,  # 400K, but may be limited by config.max_model_tokens
     'gpt-5.2-chat-latest': 128000,  # 128K, but may be limited by config.max_model_tokens
+    'gpt-5.2-codex': 400000,  # 400K, but may be limited by config.max_model_tokens
     'o1-mini': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-mini-2024-09-12': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
@@ -223,6 +224,7 @@ NO_SUPPORT_TEMPERATURE_MODELS = [
     "o4-mini-2025-04-16",
     "gpt-5.1-codex",
     "gpt-5.1-codex-mini",
+    "gpt-5.2-codex",
     "gpt-5-mini"
 ]
 
