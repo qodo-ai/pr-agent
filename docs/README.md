@@ -92,10 +92,15 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 
 ### 🔧 Bugbot-Style Inline Comments (NEW!)
 
+**How it works:**
+- **`/review`**: AI review summary is **always published** + static analyzer findings as inline comments
+- **`/improve`**: AI suggestions are published as **individual inline comments** (not batched)
+
 Every code finding and suggestion is posted as an **individual inline comment** on the specific code line, appearing in both "Files Changed" and "Conversation" tabs - just like Cursor Bugbot!
 
 **Features:**
-- **Individual comments** - Each issue becomes its own inline comment on the affected line
+- **AI Review Always Published** - PR description, type, and walkthrough are always visible
+- **Individual inline comments** - Each static analyzer finding and AI suggestion becomes its own comment
 - **Visible in both tabs** - Shows in "Files Changed" AND "Conversation" 
 - **Non-blocking** - Comments don't block PR merging
 - **Fix buttons** - Each comment includes action buttons:
@@ -125,7 +130,7 @@ Every code finding and suggestion is posted as an **individual inline comment** 
 
 ```toml
 [workiz.inline_comments]
-enabled = true              # Enable inline comments (disable for legacy behavior)
+enabled = true              # Enable inline comments (in addition to standard AI review)
 max_comments = 20           # Maximum comments per PR
 severity_threshold = "low"  # "high", "medium", or "low"
 cursor_redirect_url = ""    # See below for configuration options

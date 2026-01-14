@@ -189,18 +189,12 @@ class WorkizPRReviewer(PRReviewer):
             
             self._enhance_review_vars()
             
+            # Always run and publish the AI review
+            await super().run()
+            
+            # Additionally publish static analyzer findings as inline comments
             if self.use_inline_comments:
-                original_publish_output = get_settings().config.publish_output
-                get_settings().config.publish_output = False
-                
-                try:
-                    await super().run()
-                finally:
-                    get_settings().config.publish_output = original_publish_output
-                
                 await self._publish_inline_review_comments()
-            else:
-                await super().run()
             
             await self._store_review_history()
             

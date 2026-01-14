@@ -3709,16 +3709,24 @@ class CircuitBreaker:
 
 ## 14. Bugbot-Style Inline Review Comments
 
-The Workiz PR Agent uses **individual inline review comments** (like Cursor Bugbot) instead of batched comments or Check Runs. Each finding appears as a separate comment directly on the affected code line.
+The Workiz PR Agent uses **individual inline review comments** (like Cursor Bugbot) for code findings and suggestions. Each finding appears as a separate comment directly on the affected code line.
+
+### How It Works
+
+| Command | Output |
+|---------|--------|
+| **`/review`** | AI review summary is **always published** + static analyzer findings as inline comments |
+| **`/improve`** | AI suggestions are published as **individual inline comments** (not batched) |
 
 ### Key Design Decisions
 
 | Aspect | Our Approach | Why |
 |--------|--------------|-----|
-| **Comment Style** | Individual inline comments | Visible in both "Conversation" AND "Files Changed" tabs |
+| **AI Review** | Always published | PR description, type, and file walkthrough always visible |
+| **Findings** | Individual inline comments | Visible in both "Conversation" AND "Files Changed" tabs |
+| **Suggestions** | Individual inline comments | Each AI suggestion is a separate, actionable comment |
 | **Blocking** | Non-blocking (`event: "COMMENT"`) | Informational, doesn't prevent merge |
 | **Buttons** | Markdown links via HTTPS redirect | GitHub blocks `cursor://` URLs |
-| **Batching** | No batched summary | Each finding is separate and actionable |
 
 ### Visual Reference (What We Implement)
 
@@ -3936,7 +3944,9 @@ Add to `configuration.toml`:
 
 ```toml
 [workiz.inline_comments]
-# Use individual inline comments instead of batched review
+# Enable inline comments (in addition to standard AI review)
+# - /review: AI review summary always published + static analyzer findings as inline comments
+# - /improve: AI suggestions published as individual inline comments
 enabled = true
 
 # Maximum comments per review (to avoid spam)
@@ -4006,7 +4016,7 @@ async def _publish_inline_comments(self, findings: list[dict]) -> None:
     """
     Publish each finding as an individual inline comment.
     
-    This replaces the batched review comment approach.
+    Called in addition to the standard AI review (which is always published).
     """
     if not findings:
         return
@@ -4059,18 +4069,24 @@ async def _publish_inline_comments(self, findings: list[dict]) -> None:
                 │
                 ▼
 2. PR Agent reviews (triggered by webhook)
-   - Runs language analyzers
-   - Runs custom rules
-   - Generates AI review
+   - Generates and PUBLISHES AI review summary (PR type, description, walkthrough)
+   - Runs static analyzers (language analyzers, custom rules)
+   - Generates AI suggestions (if /improve runs)
                 │
                 ▼
-3. Individual inline comments created
-   - Each finding → separate comment on the code line
+3. AI review summary published
+   - PR description, type, file walkthrough
+   - Always visible as a regular GitHub comment
+                │
+                ▼
+4. Individual inline comments created
+   - Static analyzer findings → inline comments on code lines
+   - AI suggestions → inline comments on code lines (from /improve)
    - Visible in "Files Changed" AND "Conversation" tabs
    - Non-blocking (doesn't prevent merge)
                 │
                 ▼
-4. Developer sees inline comment on their code:
+5. Developer sees inline comment on their code:
    ┌─────────────────────────────────────────────────┐
    │ 🤖 workiz-pr-agent [bot]                        │
    │                                                  │
@@ -4083,14 +4099,14 @@ async def _publish_inline_comments(self, findings: list[dict]) -> None:
    └─────────────────────────────────────────────────┘
                 │
                 ▼
-5. Developer clicks "Fix in Cursor"
+6. Developer clicks "Fix in Cursor"
    - Browser opens redirect page
    - Redirect page tries cursor:// deep link
    - Cursor opens with pre-filled prompt
    - (Fallback: copy prompt manually)
                 │
                 ▼
-6. Developer applies fix in Cursor
+7. Developer applies fix in Cursor
    - AI assistant fixes the code
    - Commit and push
    - Resolve conversation on GitHub
