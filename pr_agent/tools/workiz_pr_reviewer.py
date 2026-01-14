@@ -516,7 +516,7 @@ class WorkizPRReviewer(PRReviewer):
         This parses the patch to extract the hunk ranges (start/end lines).
         
         Returns:
-            Dict mapping file paths to list of {start, end} line ranges
+            Dict mapping file paths to list of {start, end, side} line ranges
         """
         import re
         RE_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -536,10 +536,17 @@ class WorkizPRReviewer(PRReviewer):
                     if line.startswith('@@'):
                         match = RE_HUNK_HEADER.match(line)
                         if match:
-                            # Extract new file start line and size
-                            start = int(match.group(3))
-                            size = int(match.group(4)) if match.group(4) else 1
-                            ranges.append({'start': start, 'end': start + size - 1})
+                            old_start = int(match.group(1))
+                            old_size = int(match.group(2)) if match.group(2) else 1
+                            new_start = int(match.group(3))
+                            new_size = int(match.group(4)) if match.group(4) else 1
+                            ranges.append({
+                                'start': new_start, 
+                                'end': new_start + new_size - 1,
+                                'side': 'RIGHT',
+                                'old_start': old_start,
+                                'old_end': old_start + old_size - 1,
+                            })
                 
                 if ranges:
                     hunk_ranges[file_path] = ranges
@@ -561,6 +568,79 @@ class WorkizPRReviewer(PRReviewer):
                 return True
         return False
 
+    def _adjust_finding_to_diff(
+        self, 
+        finding: dict, 
+        hunk_ranges: dict,
+        max_distance: int = 10
+    ) -> dict:
+        """
+        Adjust finding line number to fit inside a valid diff hunk.
+        
+        Strategy:
+        1. If line is inside a hunk → use as-is
+        2. If line is within max_distance of a hunk → adjust to hunk boundary
+        3. If line is far from any hunk → mark for skipping (skip_inline=True)
+        
+        Args:
+            finding: Dict with file, line, and other finding data
+            hunk_ranges: Output from _get_diff_hunk_ranges()
+            max_distance: Max lines away from hunk to still adjust (default 10)
+            
+        Returns:
+            Modified finding dict with potentially adjusted line and side parameter
+        """
+        file_path = finding.get('file', '').strip()
+        line = int(finding.get('line', 1))
+        
+        if file_path not in hunk_ranges:
+            finding['skip_inline'] = True
+            finding['skip_reason'] = 'file_not_in_diff'
+            return finding
+        
+        ranges = hunk_ranges[file_path]
+        
+        for hunk in ranges:
+            if hunk['start'] <= line <= hunk['end']:
+                finding['side'] = hunk['side']
+                finding['adjusted'] = False
+                return finding
+        
+        min_distance = float('inf')
+        nearest_hunk = None
+        best_adjusted_line = None
+        
+        for hunk in ranges:
+            dist_to_end = line - hunk['end']
+            dist_from_start = hunk['start'] - line
+            
+            if dist_to_end > 0 and dist_to_end < min_distance:
+                min_distance = dist_to_end
+                nearest_hunk = hunk
+                best_adjusted_line = hunk['end']
+            elif dist_from_start > 0 and dist_from_start < min_distance:
+                min_distance = dist_from_start
+                nearest_hunk = hunk
+                best_adjusted_line = hunk['start']
+        
+        if nearest_hunk and min_distance <= max_distance:
+            finding['original_line'] = line
+            finding['line'] = best_adjusted_line
+            finding['side'] = nearest_hunk['side']
+            finding['adjusted'] = True
+            finding['adjustment_distance'] = min_distance
+            get_logger().info(f"Adjusted finding line from {line} to {best_adjusted_line} (distance: {min_distance})", {
+                "file": file_path,
+                "original_line": line,
+                "adjusted_line": best_adjusted_line,
+                "rule_id": finding.get('rule_id', 'unknown'),
+            })
+            return finding
+        
+        finding['skip_inline'] = True
+        finding['skip_reason'] = f'too_far_from_diff (distance: {min_distance})'
+        return finding
+
     async def _publish_inline_review_comments(self) -> None:
         """
         Publish each finding as an individual inline review comment.
@@ -569,8 +649,12 @@ class WorkizPRReviewer(PRReviewer):
         - Inline on the specific code lines in "Files Changed" tab
         - In the "Conversation" tab as part of a review thread
         
+        Uses smart line adjustment to ensure comments land on valid diff lines:
+        - If finding line is inside a diff hunk → post directly
+        - If finding line is near a hunk (within 10 lines) → adjust to hunk boundary
+        - If finding line is far from any hunk → skip (log warning)
+        
         Uses event="COMMENT" to ensure comments are non-blocking.
-        Only posts comments on lines that are actually in the PR diff.
         """
         all_findings = self._collect_all_findings()
         
@@ -586,22 +670,37 @@ class WorkizPRReviewer(PRReviewer):
         except Exception:
             self._branch = "main"
         
-        # Get valid diff hunk ranges to filter comments
         hunk_ranges = self._get_diff_hunk_ranges()
+        
+        if not hunk_ranges:
+            get_logger().warning("No diff hunks found - cannot post inline comments", {
+                "pr_url": self.pr_url,
+            })
+            return
         
         comments = []
         skipped_not_in_diff = 0
         skipped_severity = 0
+        adjusted_count = 0
         
         for finding in all_findings:
             if not self._should_include_finding(finding["severity"]):
                 skipped_severity += 1
                 continue
             
-            # Only include comments on lines that are in the diff
-            if not self._is_line_in_diff(finding["file"], finding["line"], hunk_ranges):
+            adjusted_finding = self._adjust_finding_to_diff(finding, hunk_ranges)
+            
+            if adjusted_finding.get('skip_inline', False):
                 skipped_not_in_diff += 1
+                get_logger().debug(f"Skipping finding - {adjusted_finding.get('skip_reason', 'unknown')}", {
+                    "file": adjusted_finding.get('file'),
+                    "line": adjusted_finding.get('original_line', adjusted_finding.get('line')),
+                    "rule_id": adjusted_finding.get('rule_id', 'unknown'),
+                })
                 continue
+            
+            if adjusted_finding.get('adjusted', False):
+                adjusted_count += 1
             
             if len(comments) >= self.max_inline_comments:
                 get_logger().info(f"Reached max inline comments limit ({self.max_inline_comments})", {
@@ -610,30 +709,34 @@ class WorkizPRReviewer(PRReviewer):
                 })
                 break
             
+            side = adjusted_finding.get('side', 'RIGHT')
+            
             body = format_inline_comment(
-                title=finding["title"],
-                severity=finding["severity"],
-                description=finding["message"],
-                file_path=finding["file"],
-                line=finding["line"],
-                suggestion=finding.get("suggestion", ""),
+                title=adjusted_finding["title"],
+                severity=adjusted_finding["severity"],
+                description=adjusted_finding["message"],
+                file_path=adjusted_finding["file"],
+                line=adjusted_finding["line"],
+                suggestion=adjusted_finding.get("suggestion", ""),
                 cursor_redirect_url=self.cursor_redirect_url if self.cursor_redirect_url else "",
                 org=self._org,
                 repo=self._repo,
                 branch=self._branch,
-                rule_id=finding.get("rule_id", ""),
+                rule_id=adjusted_finding.get("rule_id", ""),
             )
             
             comments.append({
-                "path": finding["file"],
-                "line": finding["line"],
+                "path": adjusted_finding["file"],
+                "line": adjusted_finding["line"],
+                "side": side,
                 "body": body,
             })
         
-        get_logger().info("Filtered findings for inline comments", {
+        get_logger().info("Prepared findings for inline comments", {
             "pr_url": self.pr_url,
             "total_findings": len(all_findings),
-            "valid_comments": len(comments),
+            "comments_to_post": len(comments),
+            "adjusted_to_hunk": adjusted_count,
             "skipped_not_in_diff": skipped_not_in_diff,
             "skipped_severity": skipped_severity,
         })
