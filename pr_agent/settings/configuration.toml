@@ -272,6 +272,7 @@ push_trigger_pending_tasks_ttl = 300
 push_commands = [
     "/describe",
     "/review",
+    "/improve",
 ]
 
 [gitlab]
