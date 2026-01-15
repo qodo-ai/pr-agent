@@ -420,43 +420,55 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         ranges = hunk_ranges[file_path]
         
         for hunk in ranges:
-            if hunk['start'] <= line_end <= hunk['end']:
+            overlap_start = max(line_start, hunk['start'])
+            overlap_end = min(line_end, hunk['end'])
+            
+            if overlap_start <= overlap_end:
+                was_adjusted = (line_start != overlap_start or line_end != overlap_end)
+                suggestion['relevant_lines_start'] = overlap_start
+                suggestion['relevant_lines_end'] = overlap_end
                 suggestion['side'] = hunk['side']
-                suggestion['adjusted'] = False
-                return suggestion
-            if hunk['start'] <= line_start <= hunk['end']:
-                suggestion['relevant_lines_end'] = min(line_end, hunk['end'])
-                suggestion['side'] = hunk['side']
-                suggestion['adjusted'] = True
+                suggestion['adjusted'] = was_adjusted
+                if was_adjusted:
+                    get_logger().debug(f"Adjusted suggestion range from [{line_start}-{line_end}] to [{overlap_start}-{overlap_end}]", {
+                        "file": file_path,
+                        "original_range": f"{line_start}-{line_end}",
+                        "adjusted_range": f"{overlap_start}-{overlap_end}",
+                    })
                 return suggestion
         
         min_distance = float('inf')
         nearest_hunk = None
-        best_adjusted_line = None
+        best_adjusted_start = None
+        best_adjusted_end = None
         
         for hunk in ranges:
-            dist_to_start = line_end - hunk['end']
-            dist_from_end = hunk['start'] - line_start
+            dist_after_hunk = line_start - hunk['end']
+            dist_before_hunk = hunk['start'] - line_end
             
-            if dist_to_start > 0 and dist_to_start < min_distance:
-                min_distance = dist_to_start
+            if dist_after_hunk > 0 and dist_after_hunk < min_distance:
+                min_distance = dist_after_hunk
                 nearest_hunk = hunk
-                best_adjusted_line = hunk['end']
-            elif dist_from_end > 0 and dist_from_end < min_distance:
-                min_distance = dist_from_end
+                best_adjusted_start = hunk['end']
+                best_adjusted_end = hunk['end']
+            elif dist_before_hunk > 0 and dist_before_hunk < min_distance:
+                min_distance = dist_before_hunk
                 nearest_hunk = hunk
-                best_adjusted_line = hunk['start']
+                best_adjusted_start = hunk['start']
+                best_adjusted_end = hunk['start']
         
         if nearest_hunk and min_distance <= max_distance:
+            suggestion['original_line_start'] = line_start
             suggestion['original_line_end'] = line_end
-            suggestion['relevant_lines_end'] = best_adjusted_line
+            suggestion['relevant_lines_start'] = best_adjusted_start
+            suggestion['relevant_lines_end'] = best_adjusted_end
             suggestion['side'] = nearest_hunk['side']
             suggestion['adjusted'] = True
             suggestion['adjustment_distance'] = min_distance
-            get_logger().info(f"Adjusted suggestion line from {line_end} to {best_adjusted_line} (distance: {min_distance})", {
+            get_logger().info(f"Adjusted suggestion range from [{line_start}-{line_end}] to [{best_adjusted_start}-{best_adjusted_end}] (distance: {min_distance})", {
                 "file": file_path,
-                "original_line": line_end,
-                "adjusted_line": best_adjusted_line,
+                "original_range": f"{line_start}-{line_end}",
+                "adjusted_range": f"{best_adjusted_start}-{best_adjusted_end}",
             })
             return suggestion
         
