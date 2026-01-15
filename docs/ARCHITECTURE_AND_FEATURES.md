@@ -4119,6 +4119,62 @@ async def _publish_inline_comments(self, findings: list[dict]) -> None:
 3. **Redirect Required**: GitHub blocks `cursor://` URLs, so we use HTTPS redirect page
 4. **Both Tabs**: Inline comments appear in BOTH "Conversation" AND "Files Changed" tabs
 
+### Smart Line Adjustment
+
+**Problem:** AI suggestions often target "context lines" (unchanged lines shown around changes in the diff). GitHub's API only allows inline comments on lines that are actually in the diff hunks.
+
+**Solution:** Smart line adjustment validates and adjusts comment line numbers:
+
+```python
+def _adjust_suggestion_to_diff(self, suggestion: dict, hunk_ranges: dict) -> dict:
+    """
+    Adjust suggestion line to valid diff line.
+    
+    - Inside hunk: Use as-is
+    - Within PROXIMITY_THRESHOLD (10) lines: Adjust to nearest hunk boundary
+    - Far from any hunk: Mark as skip_inline=True
+    """
+    file_ranges = hunk_ranges.get(suggestion['file'], [])
+    suggested_line = suggestion.get('line', 1)
+    
+    # Check if inside any hunk
+    for hunk in file_ranges:
+        if hunk['start'] <= suggested_line <= hunk['end']:
+            return suggestion  # Valid, use as-is
+    
+    # Try to adjust to nearest hunk
+    PROXIMITY_THRESHOLD = 10
+    for hunk in file_ranges:
+        if abs(suggested_line - hunk['start']) <= PROXIMITY_THRESHOLD:
+            return {**suggestion, 'line': hunk['start'], 'adjusted': True}
+        if abs(suggested_line - hunk['end']) <= PROXIMITY_THRESHOLD:
+            return {**suggestion, 'line': hunk['end'], 'adjusted': True}
+    
+    # Too far from any hunk
+    return {**suggestion, 'skip_inline': True}
+```
+
+**Logging:** The system logs adjustment statistics:
+```
+Published 12 inline comments (5 adjusted to hunk boundary, 3 skipped - not in diff)
+```
+
+### Comment Format (Future Unification)
+
+Currently, static analyzer findings and AI suggestions use different comment formats:
+
+| Component | Static Analyzer (`format_inline_comment`) | AI Suggestion (`format_suggestion_comment`) |
+|-----------|-------------------------------------------|---------------------------------------------|
+| Title | `**[RULE_ID] Title**` | `**Summary**` |
+| Classification | `**High Severity**` | `*Label* (e.g., "Enhancement")` |
+| Code Diff | None | Collapsible code comparison |
+| Structure | Title → Severity → Description | Title → Label → Description → Code Diff |
+
+**Planned:** Unify both formats to use identical structure and severity classification:
+- Map AI labels to severity levels (e.g., "performance" → Medium, "security" → High)
+- Single unified formatter function
+- Consistent filtering and tooling based on severity
+
 ---
 
 ## Next Steps

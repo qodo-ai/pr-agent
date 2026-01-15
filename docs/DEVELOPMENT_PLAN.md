@@ -1,7 +1,7 @@
 # Workiz PR Agent - Development Plan & Tracking
 
-> **Status**: ✅ Phase 4B Complete - Bugbot-Style Inline Comments (AI review always published + inline comments)  
-> **Last Updated**: January 14, 2026  
+> **Status**: ✅ Phase 4B.10 Complete - Smart Line Adjustment for Inline Comments  
+> **Last Updated**: January 15, 2026  
 > **Total Phases**: 8  
 > **Estimated Duration**: 8-10 weeks
 
@@ -751,6 +751,50 @@ async def run(self):
    - Inline comments are ADDITIONAL to AI review, not a replacement
    - `/improve` still suppresses batched suggestions (uses inline comments instead)
    - Files: `workiz_pr_reviewer.py`, `configuration.toml`
+
+### Phase 4B.10: Smart Line Adjustment for Inline Comments ✅ COMPLETED
+
+**Problem:** AI suggestions often target "context lines" (unchanged lines shown around changes in the diff), but GitHub's API only allows inline comments on actual diff lines (lines with `+` or `-` prefixes).
+
+**Solution:** Implemented smart line adjustment that:
+1. Parses the PR diff to extract valid line ranges for each file
+2. For each suggestion/finding, validates if the line is in the diff
+3. If inside a diff hunk → post directly
+4. If within 10 lines of a hunk boundary → adjust to nearest hunk line
+5. If far from any hunk → skip with logging (or could fall back to PR comment)
+
+**Implementation:**
+- Added `_get_diff_hunk_ranges()` - Parses diff to get valid line ranges per file
+- Added `_adjust_suggestion_to_diff()` - Smart adjustment for AI suggestions
+- Added `_adjust_finding_to_diff()` - Smart adjustment for static analyzer findings
+- Added `side` parameter support (`RIGHT` for new lines, `LEFT` for removed lines)
+- Updated `_publish_inline_suggestion_comments()` and `_publish_inline_review_comments()`
+- Files: `workiz_pr_code_suggestions.py`, `workiz_pr_reviewer.py`
+
+### Phase 4B.11: Comment Format Unification 🔲 TODO
+
+**Problem:** Static analyzer comments (`format_inline_comment()`) and AI suggestion comments (`format_suggestion_comment()`) have different formats:
+
+| Feature | Static Analyzer | AI Suggestion |
+|---------|-----------------|---------------|
+| Title | `**[RULE_ID] Title**` | `**Summary**` |
+| Severity | `**High Severity**` | `*Label* (e.g., "Enhancement")` |
+| Code Diff | None | Collapsible code diff |
+| Structure | Title → Severity → Description | Title → Label → Description → Diff |
+
+**Goal:** Unify both formats so they:
+1. Look identical in structure and styling
+2. Use the same severity/issue classification (High/Medium/Low)
+3. Enable consistent filtering and tooling based on severity
+4. Map AI suggestion labels to severity levels
+
+**Tasks:**
+- [ ] Define unified severity mapping (AI labels → severity levels)
+- [ ] Create single `format_unified_inline_comment()` function
+- [ ] Update static analyzer findings to use unified format
+- [ ] Update AI suggestions to use unified format  
+- [ ] Add optional code diff collapsible section to both
+- [ ] Update documentation
 
 ---
 

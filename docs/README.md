@@ -158,6 +158,13 @@ See [`cursor-extension/README.md`](../cursor-extension/README.md) for installati
 3. Leave `cursor_redirect_url = ""` in config
 4. The system automatically appends `/api/v1/cursor-redirect`
 
+**Smart Line Adjustment:**
+
+AI suggestions may target "context lines" (unchanged lines in the diff), which GitHub's API doesn't allow. Smart line adjustment automatically:
+- Validates if the suggested line is actually in the PR diff
+- Adjusts comments within 10 lines of a hunk to the nearest valid line
+- Logs when comments are skipped (too far from any changed code)
+
 See [ARCHITECTURE_AND_FEATURES.md - Inline Comments](./ARCHITECTURE_AND_FEATURES.md) for implementation details.
 
 ### 🤖 Knowledge Assistant (NEW!)
