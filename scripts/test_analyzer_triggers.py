@@ -1,6 +1,8 @@
 """
 Test file to trigger static analyzer findings and AI suggestions.
 This file intentionally contains code issues for testing PR Agent inline comments.
+
+Trigger commit: Testing inline comments and Fix in Cursor button.
 """
 
 import os
