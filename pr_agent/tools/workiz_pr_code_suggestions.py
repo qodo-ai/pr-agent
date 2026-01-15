@@ -336,55 +336,15 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         """
         Parse PR diff to get valid line ranges for each file.
         
-        Returns a dict mapping file paths to lists of hunk ranges:
-        {
-            "path/to/file.py": [
-                {"start": 10, "end": 25, "side": "RIGHT", "old_start": 8, "old_end": 20},
-            ]
-        }
-        
-        - RIGHT side ranges are for the NEW file (lines after changes)
-        - LEFT side ranges are for the OLD file (lines before changes)
+        Delegates to a shared utility on the git_provider to avoid code duplication.
         """
         try:
-            diff_files = self.git_provider.get_diff_files()
+            return self.git_provider.get_hunk_ranges()
         except Exception as e:
-            get_logger().warning(f"Failed to get diff files for hunk parsing: {e}", {
+            get_logger().warning(f"Failed to get diff hunk ranges: {e}", {
                 "pr_url": self.pr_url,
             })
             return {}
-        
-        hunk_ranges = {}
-        RE_HUNK_HEADER = re.compile(
-            r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@"
-        )
-        
-        for file in diff_files:
-            ranges = []
-            patch_str = file.patch if hasattr(file, 'patch') and file.patch else ""
-            patch_lines = patch_str.splitlines()
-            
-            for line in patch_lines:
-                if line.startswith('@@'):
-                    match = RE_HUNK_HEADER.match(line)
-                    if match:
-                        old_start = int(match.group(1))
-                        old_count = int(match.group(2) or 1)
-                        new_start = int(match.group(3))
-                        new_count = int(match.group(4) or 1)
-                        
-                        ranges.append({
-                            'start': new_start,
-                            'end': new_start + new_count - 1,
-                            'side': 'RIGHT',
-                            'old_start': old_start,
-                            'old_end': old_start + old_count - 1,
-                        })
-            
-            if ranges:
-                hunk_ranges[file.filename] = ranges
-        
-        return hunk_ranges
 
     def _adjust_suggestion_to_diff(
         self, 

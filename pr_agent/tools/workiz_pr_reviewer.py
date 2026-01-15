@@ -512,51 +512,16 @@ class WorkizPRReviewer(PRReviewer):
         """
         Get the valid line ranges for each file in the PR diff.
         
-        GitHub only allows inline comments on lines that are actually in the diff.
-        This parses the patch to extract the hunk ranges (start/end lines).
-        
-        Returns:
-            Dict mapping file paths to list of {start, end, side} line ranges
+        Delegates to a shared utility on the git_provider to avoid code duplication.
         """
-        import re
-        RE_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
-        
-        hunk_ranges = {}
         try:
-            diff_files = self.git_provider.get_diff_files()
-            for file in diff_files:
-                file_path = file.filename
-                patch_str = file.patch if hasattr(file, 'patch') and file.patch else ""
-                
-                if not patch_str:
-                    continue
-                    
-                ranges = []
-                for line in patch_str.splitlines():
-                    if line.startswith('@@'):
-                        match = RE_HUNK_HEADER.match(line)
-                        if match:
-                            old_start = int(match.group(1))
-                            old_size = int(match.group(2)) if match.group(2) else 1
-                            new_start = int(match.group(3))
-                            new_size = int(match.group(4)) if match.group(4) else 1
-                            ranges.append({
-                                'start': new_start, 
-                                'end': new_start + new_size - 1,
-                                'side': 'RIGHT',
-                                'old_start': old_start,
-                                'old_end': old_start + old_size - 1,
-                            })
-                
-                if ranges:
-                    hunk_ranges[file_path] = ranges
+            return self.git_provider.get_hunk_ranges()
         except Exception as e:
-            get_logger().warning("Failed to extract diff hunk ranges", {
+            get_logger().warning("Failed to get diff hunk ranges", {
                 "error": str(e),
                 "pr_url": self.pr_url,
             })
-        
-        return hunk_ranges
+            return {}
 
     def _is_line_in_diff(self, file_path: str, line: int, hunk_ranges: dict[str, list[dict]]) -> bool:
         """Check if a specific line is within any diff hunk for the file."""
