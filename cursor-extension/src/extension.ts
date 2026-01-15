@@ -125,62 +125,78 @@ async function openFileAtLine(filePath: string, line: number): Promise<void> {
 /**
  * Open the AI chat (Composer) with a pre-filled prompt
  * 
- * In Cursor, this uses the 'composer.openComposer' or 'aichat.open' command
- * to open the AI chat and set the input text.
+ * Cursor's AI chat can be opened with various commands.
+ * We try multiple methods to ensure compatibility across versions.
  */
 async function openAiChatWithPrompt(prompt: string): Promise<void> {
     try {
-        // Method 1: Try Cursor's Composer (newer versions)
-        // The 'composer.open' command with initialPrompt parameter
+        // First, copy the prompt to clipboard as a reliable fallback
+        await vscode.env.clipboard.writeText(prompt);
+        console.log('Prompt copied to clipboard');
+
+        // Method 1: Try aichat.newchataction with text parameter (Cursor's main command)
         try {
-            await vscode.commands.executeCommand('composer.open', { initialPrompt: prompt });
-            console.log('Opened Composer with prompt');
+            await vscode.commands.executeCommand('aichat.newchataction', prompt);
+            console.log('Opened AI chat with aichat.newchataction');
             return;
-        } catch {
-            console.log('composer.open not available, trying alternatives');
+        } catch (e) {
+            console.log('aichat.newchataction failed:', e);
         }
 
-        // Method 2: Try opening the AI chat panel and setting clipboard
-        // This is a fallback for versions without direct prompt injection
+        // Method 2: Try composerMode.agent.startFromSelection with prompt
         try {
-            // Copy prompt to clipboard first
-            await vscode.env.clipboard.writeText(prompt);
+            await vscode.commands.executeCommand('composerMode.agent.startFromSelection', { prompt });
+            console.log('Opened agent mode with prompt');
+            return;
+        } catch (e) {
+            console.log('composerMode.agent.startFromSelection failed:', e);
+        }
+
+        // Method 3: Try composer.startComposerPrompt
+        try {
+            await vscode.commands.executeCommand('composer.startComposerPrompt', prompt);
+            console.log('Opened composer with startComposerPrompt');
+            return;
+        } catch (e) {
+            console.log('composer.startComposerPrompt failed:', e);
+        }
+
+        // Method 4: Try opening chat and simulate paste
+        try {
+            // Open a new agent chat
+            await vscode.commands.executeCommand('aichat.newagentchat');
+            console.log('Opened new agent chat');
             
-            // Try various AI chat commands that might exist in Cursor
-            const commands = [
-                'aichat.open',
-                'cursorai.openChat',
-                'cursor.newChat',
-                'workbench.action.chat.open'
-            ];
-
-            for (const cmd of commands) {
-                try {
-                    await vscode.commands.executeCommand(cmd);
-                    vscode.window.showInformationMessage('Prompt copied to clipboard. Press Ctrl+V to paste.');
-                    console.log(`Opened AI chat with command: ${cmd}`);
-                    return;
-                } catch {
-                    continue;
-                }
-            }
-        } catch (error) {
-            console.log('Failed to open AI chat:', error);
+            // Small delay then simulate paste
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+            console.log('Pasted from clipboard');
+            return;
+        } catch (e) {
+            console.log('aichat.newagentchat + paste failed:', e);
         }
 
-        // Method 3: Fallback - just show the prompt
-        const action = await vscode.window.showInformationMessage(
-            'Could not open AI chat automatically. Copy the prompt?',
-            'Copy Prompt'
+        // Method 5: Try workbench.action.chat.newChat
+        try {
+            await vscode.commands.executeCommand('workbench.action.chat.newChat');
+            console.log('Opened chat with workbench.action.chat.newChat');
+            
+            // Delay and paste
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+            return;
+        } catch (e) {
+            console.log('workbench.action.chat.newChat failed:', e);
+        }
+
+        // Fallback: Show message that prompt is in clipboard
+        vscode.window.showInformationMessage(
+            '📋 Prompt copied to clipboard! Press Cmd+V (Mac) or Ctrl+V (Win) in the chat to paste.',
+            'OK'
         );
-
-        if (action === 'Copy Prompt') {
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage('Prompt copied to clipboard!');
-        }
     } catch (error) {
         console.error('Error opening AI chat:', error);
-        vscode.window.showErrorMessage('Failed to open AI chat. Please open it manually.');
+        vscode.window.showErrorMessage('Failed to open AI chat. Prompt is in clipboard - paste with Cmd+V.');
     }
 }
 
