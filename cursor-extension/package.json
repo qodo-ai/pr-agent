@@ -2,8 +2,9 @@
   "name": "workiz-pr-agent-fix",
   "displayName": "Workiz PR Agent - Fix in Cursor",
   "description": "Handle 'Fix in Cursor' links from Workiz PR Agent code reviews",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "workiz",
+  "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.74.0"
   },
