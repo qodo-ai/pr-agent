@@ -1,7 +1,7 @@
 # Workiz PR Agent - Development Plan & Tracking
 
-> **Status**: ✅ Phase 4B Complete - Bugbot-Style Inline Comments  
-> **Last Updated**: January 13, 2026  
+> **Status**: ✅ Phase 4B.10 Complete - Smart Line Adjustment for Inline Comments  
+> **Last Updated**: January 15, 2026  
 > **Total Phases**: 8  
 > **Estimated Duration**: 8-10 weeks
 
@@ -442,7 +442,11 @@ See Phase 4B below for the corrected approach using GitHub Check Runs.
 
 ## Phase 4B: Bugbot-Style Inline Review Comments (REVISED)
 
-**Goal**: Replace the default batched review comments with **individual inline review comments** on each finding, styled like Cursor Bugbot, with working "Fix in Cursor" and "Fix in Web" buttons.
+**Goal**: Add **individual inline review comments** for findings and suggestions, styled like Cursor Bugbot, with working "Fix in Cursor" and "Fix in Web" buttons. **The standard AI review is always published** - inline comments are **additional** to the AI review, not a replacement.
+
+**How it works:**
+- **`/review`**: AI review summary is **always published** + static analyzer findings as inline comments
+- **`/improve`**: AI suggestions are published as **individual inline comments** (not batched)
 
 **Key Insight**: Cursor Bugbot uses GitHub's **Pull Request Review API** to create individual review comments placed inline on specific code lines. These appear in BOTH the "Conversation" tab AND the "Files Changed" tab. The buttons are markdown/HTML styled links that go to an HTTPS redirect page.
 
@@ -450,22 +454,19 @@ See Phase 4B below for the corrected approach using GitHub Check Runs.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  CURRENT (Wrong) Approach                                                   │
+│  Current Approach                                                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  • Single batched comment with all findings in a table                      │
-│  • Appears only in "Conversation" tab                                       │
-│  • Check Runs with annotations (limited, not clickable buttons)             │
-│  • Blocking check status                                                    │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                      ↓
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  NEW (Bugbot) Approach                                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  • Individual PR review comments per finding                                │
-│  • Inline on code (Files Changed tab) + Conversation tab                    │
-│  • "Fix in Cursor" / "Fix in Web" as markdown button links                  │
-│  • NOT a blocking check - just informational comments                       │
-│  • No batched summary comment - only inline comments                        │
+│  /review:                                                                   │
+│    • AI review summary ALWAYS published (PR type, description, walkthrough) │
+│    • Static analyzer findings as individual inline comments                 │
+│                                                                             │
+│  /improve:                                                                  │
+│    • AI suggestions as individual inline comments (NOT batched table)       │
+│                                                                             │
+│  Features:                                                                  │
+│    • Inline on code (Files Changed tab) + Conversation tab                  │
+│    • "Fix in Cursor" / "Fix in Web" as markdown button links                │
+│    • NOT blocking - just informational comments                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -743,6 +744,57 @@ async def run(self):
    - FastAPI auto-decodes query params, so extra `unquote()` was breaking prompts
    - Added HTML escaping for XSS prevention
    - Files: `github_app.py`
+
+6. **AI Review Always Published** ✅
+   - Fixed issue where AI review was suppressed when inline comments enabled
+   - `/review` now ALWAYS publishes AI review summary (PR description, type, walkthrough)
+   - Inline comments are ADDITIONAL to AI review, not a replacement
+   - `/improve` still suppresses batched suggestions (uses inline comments instead)
+   - Files: `workiz_pr_reviewer.py`, `configuration.toml`
+
+### Phase 4B.10: Smart Line Adjustment for Inline Comments ✅ COMPLETED
+
+**Problem:** AI suggestions often target "context lines" (unchanged lines shown around changes in the diff), but GitHub's API only allows inline comments on actual diff lines (lines with `+` or `-` prefixes).
+
+**Solution:** Implemented smart line adjustment that:
+1. Parses the PR diff to extract valid line ranges for each file
+2. For each suggestion/finding, validates if the line is in the diff
+3. If inside a diff hunk → post directly
+4. If within 10 lines of a hunk boundary → adjust to nearest hunk line
+5. If far from any hunk → skip with logging (or could fall back to PR comment)
+
+**Implementation:**
+- Added `_get_diff_hunk_ranges()` - Parses diff to get valid line ranges per file
+- Added `_adjust_suggestion_to_diff()` - Smart adjustment for AI suggestions
+- Added `_adjust_finding_to_diff()` - Smart adjustment for static analyzer findings
+- Added `side` parameter support (`RIGHT` for new lines, `LEFT` for removed lines)
+- Updated `_publish_inline_suggestion_comments()` and `_publish_inline_review_comments()`
+- Files: `workiz_pr_code_suggestions.py`, `workiz_pr_reviewer.py`
+
+### Phase 4B.11: Comment Format Unification 🔲 TODO
+
+**Problem:** Static analyzer comments (`format_inline_comment()`) and AI suggestion comments (`format_suggestion_comment()`) have different formats:
+
+| Feature | Static Analyzer | AI Suggestion |
+|---------|-----------------|---------------|
+| Title | `**[RULE_ID] Title**` | `**Summary**` |
+| Severity | `**High Severity**` | `*Label* (e.g., "Enhancement")` |
+| Code Diff | None | Collapsible code diff |
+| Structure | Title → Severity → Description | Title → Label → Description → Diff |
+
+**Goal:** Unify both formats so they:
+1. Look identical in structure and styling
+2. Use the same severity/issue classification (High/Medium/Low)
+3. Enable consistent filtering and tooling based on severity
+4. Map AI suggestion labels to severity levels
+
+**Tasks:**
+- [ ] Define unified severity mapping (AI labels → severity levels)
+- [ ] Create single `format_unified_inline_comment()` function
+- [ ] Update static analyzer findings to use unified format
+- [ ] Update AI suggestions to use unified format  
+- [ ] Add optional code diff collapsible section to both
+- [ ] Update documentation
 
 ---
 

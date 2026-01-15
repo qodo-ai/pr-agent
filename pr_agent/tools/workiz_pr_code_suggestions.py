@@ -63,14 +63,16 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         self.severity_threshold = inline_config.get("severity_threshold", "low")
         self.show_web_fallback = inline_config.get("show_web_fallback", True)
         
-        # Build cursor redirect URL - use config value or fall back to WEBHOOK_URL env var
+        # Build cursor redirect URL - priority: CURSOR_REDIRECT_URL env > config > WEBHOOK_URL env
+        env_cursor_url = os.environ.get("CURSOR_REDIRECT_URL", "")
         config_redirect_url = inline_config.get("cursor_redirect_url", "")
-        if config_redirect_url:
+        if env_cursor_url:
+            self.cursor_redirect_url = env_cursor_url
+        elif config_redirect_url:
             self.cursor_redirect_url = config_redirect_url
         else:
             webhook_url = os.environ.get("WEBHOOK_URL", "")
             if webhook_url:
-                # Ensure we have the correct endpoint path
                 base_url = webhook_url.rstrip("/")
                 self.cursor_redirect_url = f"{base_url}/api/v1/cursor-redirect"
             else:
@@ -250,7 +252,7 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         if not findings:
             return ""
         
-        if not self.cursor_enabled:
+        if not self.use_inline_comments:
             return "\n".join(
                 f"- [{f['severity']}] {f['rule']}: {f['message']} (line {f.get('line', '?')})"
                 for f in findings
@@ -303,7 +305,8 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
             if hasattr(self, 'git_provider') and self.git_provider:
                 # Get org/repo from repository object
                 if hasattr(self.git_provider, 'repo') and self.git_provider.repo:
-                    full_name = self.git_provider.repo.full_name  # "Workiz/repo-name"
+                    repo = self.git_provider.repo
+                    full_name = repo.full_name if hasattr(repo, 'full_name') else str(repo)
                     if full_name and '/' in full_name:
                         parts = full_name.split('/')
                         self._org = parts[0]
@@ -329,6 +332,110 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         threshold = threshold_map.get(self.severity_threshold.lower(), 1)
         return score >= threshold
 
+    def _get_diff_hunk_ranges(self) -> dict:
+        """
+        Parse PR diff to get valid line ranges for each file.
+        
+        Delegates to a shared utility on the git_provider to avoid code duplication.
+        """
+        try:
+            return self.git_provider.get_hunk_ranges()
+        except Exception as e:
+            get_logger().warning(f"Failed to get diff hunk ranges: {e}", {
+                "pr_url": self.pr_url,
+            })
+            return {}
+
+    def _adjust_suggestion_to_diff(
+        self, 
+        suggestion: dict, 
+        hunk_ranges: dict,
+        max_distance: int = 10
+    ) -> dict:
+        """
+        Adjust suggestion line numbers to fit inside a valid diff hunk.
+        
+        Strategy:
+        1. If line is inside a hunk → use as-is with correct side
+        2. If line is within max_distance of a hunk → adjust to hunk boundary
+        3. If line is far from any hunk → mark for skipping (skip_inline=True)
+        
+        Args:
+            suggestion: Dict with relevant_file, relevant_lines_start, relevant_lines_end
+            hunk_ranges: Output from _get_diff_hunk_ranges()
+            max_distance: Max lines away from hunk to still adjust (default 10)
+            
+        Returns:
+            Modified suggestion dict with potentially adjusted lines and side parameter
+        """
+        file_path = suggestion.get('relevant_file', '').strip()
+        line_start = int(suggestion.get('relevant_lines_start', 1))
+        line_end = int(suggestion.get('relevant_lines_end', line_start))
+        
+        if file_path not in hunk_ranges:
+            suggestion['skip_inline'] = True
+            suggestion['skip_reason'] = 'file_not_in_diff'
+            return suggestion
+        
+        ranges = hunk_ranges[file_path]
+        
+        for hunk in ranges:
+            overlap_start = max(line_start, hunk['start'])
+            overlap_end = min(line_end, hunk['end'])
+            
+            if overlap_start <= overlap_end:
+                was_adjusted = (line_start != overlap_start or line_end != overlap_end)
+                suggestion['relevant_lines_start'] = overlap_start
+                suggestion['relevant_lines_end'] = overlap_end
+                suggestion['side'] = hunk['side']
+                suggestion['adjusted'] = was_adjusted
+                if was_adjusted:
+                    get_logger().debug(f"Adjusted suggestion range from [{line_start}-{line_end}] to [{overlap_start}-{overlap_end}]", {
+                        "file": file_path,
+                        "original_range": f"{line_start}-{line_end}",
+                        "adjusted_range": f"{overlap_start}-{overlap_end}",
+                    })
+                return suggestion
+        
+        min_distance = float('inf')
+        nearest_hunk = None
+        best_adjusted_start = None
+        best_adjusted_end = None
+        
+        for hunk in ranges:
+            dist_after_hunk = line_start - hunk['end']
+            dist_before_hunk = hunk['start'] - line_end
+            
+            if dist_after_hunk > 0 and dist_after_hunk < min_distance:
+                min_distance = dist_after_hunk
+                nearest_hunk = hunk
+                best_adjusted_start = hunk['end']
+                best_adjusted_end = hunk['end']
+            elif dist_before_hunk > 0 and dist_before_hunk < min_distance:
+                min_distance = dist_before_hunk
+                nearest_hunk = hunk
+                best_adjusted_start = hunk['start']
+                best_adjusted_end = hunk['start']
+        
+        if nearest_hunk and min_distance <= max_distance:
+            suggestion['original_line_start'] = line_start
+            suggestion['original_line_end'] = line_end
+            suggestion['relevant_lines_start'] = best_adjusted_start
+            suggestion['relevant_lines_end'] = best_adjusted_end
+            suggestion['side'] = nearest_hunk['side']
+            suggestion['adjusted'] = True
+            suggestion['adjustment_distance'] = min_distance
+            get_logger().info(f"Adjusted suggestion range from [{line_start}-{line_end}] to [{best_adjusted_start}-{best_adjusted_end}] (distance: {min_distance})", {
+                "file": file_path,
+                "original_range": f"{line_start}-{line_end}",
+                "adjusted_range": f"{best_adjusted_start}-{best_adjusted_end}",
+            })
+            return suggestion
+        
+        suggestion['skip_inline'] = True
+        suggestion['skip_reason'] = f'too_far_from_diff (distance: {min_distance})'
+        return suggestion
+
     async def _publish_inline_suggestion_comments(self) -> None:
         """
         Publish each code suggestion as an individual inline review comment.
@@ -336,6 +443,11 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         Creates Bugbot-style comments that appear:
         - Inline on the specific code lines in "Files Changed" tab
         - In the "Conversation" tab as part of a review thread
+        
+        Uses smart line adjustment to ensure comments land on valid diff lines:
+        - If suggestion line is inside a diff hunk → post directly
+        - If suggestion line is near a hunk (within 10 lines) → adjust to hunk boundary
+        - If suggestion line is far from any hunk → skip (log warning)
         
         Uses event="COMMENT" to ensure comments are non-blocking.
         """
@@ -358,9 +470,19 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         except Exception:
             self._branch = "main"
         
+        hunk_ranges = self._get_diff_hunk_ranges()
+        if not hunk_ranges:
+            get_logger().warning("No diff hunks found - cannot post inline comments", {
+                "pr_url": self.pr_url,
+            })
+            return
+        
         sorted_suggestions = sorted(suggestions, key=lambda x: int(x.get('score', 0)), reverse=True)
         
         comments = []
+        skipped_count = 0
+        adjusted_count = 0
+        
         for suggestion in sorted_suggestions:
             score = int(suggestion.get('score', 0))
             if not self._should_include_suggestion(score):
@@ -373,14 +495,28 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
                 })
                 break
             
-            file_path = suggestion.get('relevant_file', 'unknown').strip()
-            line_start = int(suggestion.get('relevant_lines_start', 1))
-            line_end = int(suggestion.get('relevant_lines_end', line_start))
-            summary = suggestion.get('one_sentence_summary', 'Suggestion').strip()
-            content = suggestion.get('suggestion_content', '').strip()
-            label = suggestion.get('label', 'improvement').strip()
-            existing_code = suggestion.get('existing_code', '').strip()
-            improved_code = suggestion.get('improved_code', '').strip()
+            adjusted_suggestion = self._adjust_suggestion_to_diff(suggestion, hunk_ranges)
+            
+            if adjusted_suggestion.get('skip_inline', False):
+                skipped_count += 1
+                get_logger().debug(f"Skipping suggestion - {adjusted_suggestion.get('skip_reason', 'unknown')}", {
+                    "file": adjusted_suggestion.get('relevant_file'),
+                    "line": adjusted_suggestion.get('relevant_lines_end'),
+                })
+                continue
+            
+            if adjusted_suggestion.get('adjusted', False):
+                adjusted_count += 1
+            
+            file_path = adjusted_suggestion.get('relevant_file', 'unknown').strip()
+            line_start = int(adjusted_suggestion.get('relevant_lines_start', 1))
+            line_end = int(adjusted_suggestion.get('relevant_lines_end', line_start))
+            summary = adjusted_suggestion.get('one_sentence_summary', 'Suggestion').strip()
+            content = adjusted_suggestion.get('suggestion_content', '').strip()
+            label = adjusted_suggestion.get('label', 'improvement').strip()
+            existing_code = adjusted_suggestion.get('existing_code', '').strip()
+            improved_code = adjusted_suggestion.get('improved_code', '').strip()
+            side = adjusted_suggestion.get('side', 'RIGHT')
             
             body = format_suggestion_comment(
                 summary=summary,
@@ -400,16 +536,26 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
             comments.append({
                 "path": file_path,
                 "line": line_end,
+                "side": side,
                 "body": body,
             })
         
         if not comments:
-            get_logger().info("No suggestions passed impact threshold", {
+            get_logger().info("No suggestions could be posted as inline comments", {
                 "pr_url": self.pr_url,
                 "threshold": self.severity_threshold,
                 "total_suggestions": len(suggestions),
+                "skipped_not_in_diff": skipped_count,
             })
             return
+        
+        get_logger().info("Prepared inline suggestion comments", {
+            "pr_url": self.pr_url,
+            "total_suggestions": len(suggestions),
+            "comments_to_post": len(comments),
+            "adjusted_to_hunk": adjusted_count,
+            "skipped_not_in_diff": skipped_count,
+        })
         
         try:
             self.git_provider.create_review_with_inline_comments(
@@ -560,7 +706,7 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
         """
         self._suggestions_data = data
         
-        if not self.cursor_enabled:
+        if not self.use_inline_comments:
             return super().generate_summarized_suggestions(data)
         
         try:

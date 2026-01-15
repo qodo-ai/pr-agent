@@ -5,10 +5,17 @@ import json
 import os
 import re
 import uuid
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import quote
 
+from dotenv import load_dotenv
 import uvicorn
+
+# Load .env file from project root (for local development)
+env_path = Path(__file__).parent.parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from starlette.background import BackgroundTasks

@@ -272,6 +272,7 @@ push_trigger_pending_tasks_ttl = 300
 push_commands = [
     "/describe",
     "/review",
+    "/improve",
 ]
 
 [gitlab]
@@ -427,11 +428,14 @@ track_internal_packages = true
 internal_package_scope = "@workiz"
 
 # Bugbot-Style Inline Review Comments
-# Replaces batched review comments with individual inline comments on specific code lines
-# Each comment appears in both "Files Changed" tab AND "Conversation" tab
+# Bugbot-style inline comments configuration
+# When enabled:
+#   - /review: AI review summary is ALWAYS published + static analyzer findings as inline comments
+#   - /improve: AI suggestions are published as individual inline comments (NOT batched)
+# Each inline comment appears in both "Files Changed" tab AND "Conversation" tab
 # Comments include "Fix in Cursor" and "Fix in Web" action buttons
 [workiz.inline_comments]
-enabled = true
+enabled = true  # Enable inline comments (in addition to standard AI review)
 # Maximum number of inline comments per PR (prevents spam)
 max_comments = 20
 # Minimum severity to publish: "high", "medium", or "low"
