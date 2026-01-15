@@ -2,7 +2,7 @@
   "name": "workiz-pr-agent-fix",
   "displayName": "Workiz PR Agent - Fix in Cursor",
   "description": "Handle 'Fix in Cursor' links from Workiz PR Agent code reviews",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publisher": "workiz",
   "icon": "images/icon.png",
   "engines": {
@@ -12,7 +12,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onUri"
+    "onUri",
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -20,6 +21,10 @@
       {
         "command": "workiz-pr-agent-fix.openFix",
         "title": "Workiz: Open Fix in AI Chat"
+      },
+      {
+        "command": "workiz-pr-agent-fix.checkForUpdates",
+        "title": "Workiz: Check for Extension Updates"
       }
     ]
   },

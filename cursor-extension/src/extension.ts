@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as https from 'https';
+
+const GITHUB_REPO = 'Workiz/workiz-pr-agent';
+const CURRENT_VERSION = '1.0.5';
 
 /**
  * Workiz PR Agent - Fix in Cursor Extension
@@ -15,6 +19,9 @@ import * as path from 'path';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Workiz PR Agent Fix extension activated');
+
+    // Check for updates on activation
+    checkForUpdates(context);
 
     // Register the URI handler
     const uriHandler = vscode.window.registerUriHandler({
@@ -41,7 +48,12 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(uriHandler, command);
+    // Register the check for updates command
+    const updateCommand = vscode.commands.registerCommand('workiz-pr-agent-fix.checkForUpdates', async () => {
+        await checkForUpdates(context, true);
+    });
+
+    context.subscriptions.push(uriHandler, command, updateCommand);
 }
 
 /**
@@ -198,6 +210,169 @@ async function openAiChatWithPrompt(prompt: string): Promise<void> {
         console.error('Error opening AI chat:', error);
         vscode.window.showErrorMessage('Failed to open AI chat. Prompt is in clipboard - paste with Cmd+V.');
     }
+}
+
+/**
+ * Check for updates from GitHub releases
+ */
+async function checkForUpdates(context: vscode.ExtensionContext, manual: boolean = false): Promise<void> {
+    const lastCheck = context.globalState.get<number>('lastUpdateCheck', 0);
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+
+    // Skip if checked within the last day (unless manual check)
+    if (!manual && (now - lastCheck) < oneDay) {
+        console.log('Skipping update check - checked recently');
+        return;
+    }
+
+    try {
+        const latestRelease = await fetchLatestRelease();
+        
+        if (!latestRelease) {
+            if (manual) {
+                vscode.window.showInformationMessage('Could not check for updates. Please try again later.');
+            }
+            return;
+        }
+
+        // Save check time
+        await context.globalState.update('lastUpdateCheck', now);
+
+        const latestVersion = latestRelease.tag_name.replace(/^v/, '');
+        console.log(`Current version: ${CURRENT_VERSION}, Latest version: ${latestVersion}`);
+
+        if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
+            const action = await vscode.window.showInformationMessage(
+                `🚀 Workiz PR Agent extension update available: v${latestVersion} (current: v${CURRENT_VERSION})`,
+                'Update Now',
+                'View Release',
+                'Later'
+            );
+
+            if (action === 'Update Now') {
+                await installUpdate(latestRelease);
+            } else if (action === 'View Release') {
+                vscode.env.openExternal(vscode.Uri.parse(latestRelease.html_url));
+            }
+        } else if (manual) {
+            vscode.window.showInformationMessage(`✅ You're running the latest version (v${CURRENT_VERSION})`);
+        }
+    } catch (error) {
+        console.error('Error checking for updates:', error);
+        if (manual) {
+            vscode.window.showErrorMessage('Failed to check for updates. Please try again later.');
+        }
+    }
+}
+
+/**
+ * Fetch the latest release from GitHub
+ */
+function fetchLatestRelease(): Promise<GitHubRelease | null> {
+    return new Promise((resolve) => {
+        const options = {
+            hostname: 'api.github.com',
+            path: `/repos/${GITHUB_REPO}/releases/latest`,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Workiz-PR-Agent-Extension',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+
+            res.on('end', () => {
+                try {
+                    if (res.statusCode === 200) {
+                        resolve(JSON.parse(data));
+                    } else {
+                        console.log(`GitHub API returned status ${res.statusCode}`);
+                        resolve(null);
+                    }
+                } catch {
+                    resolve(null);
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            console.error('Error fetching release:', error);
+            resolve(null);
+        });
+
+        req.setTimeout(10000, () => {
+            req.destroy();
+            resolve(null);
+        });
+
+        req.end();
+    });
+}
+
+/**
+ * Compare version strings (semver-like)
+ */
+function isNewerVersion(latest: string, current: string): boolean {
+    const latestParts = latest.split('.').map(Number);
+    const currentParts = current.split('.').map(Number);
+
+    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
+        const l = latestParts[i] || 0;
+        const c = currentParts[i] || 0;
+        
+        if (l > c) return true;
+        if (l < c) return false;
+    }
+    
+    return false;
+}
+
+/**
+ * Install the update by downloading and installing the .vsix
+ */
+async function installUpdate(release: GitHubRelease): Promise<void> {
+    const vsixAsset = release.assets.find(asset => asset.name.endsWith('.vsix'));
+    
+    if (!vsixAsset) {
+        vscode.window.showErrorMessage('No .vsix file found in the release. Please update manually.');
+        vscode.env.openExternal(vscode.Uri.parse(release.html_url));
+        return;
+    }
+
+    // Copy the install command to clipboard for easy installation
+    const installCommand = `gh release download --repo ${GITHUB_REPO} --pattern "${vsixAsset.name}" --clobber && cursor --install-extension ${vsixAsset.name} && rm ${vsixAsset.name}`;
+    
+    await vscode.env.clipboard.writeText(installCommand);
+    
+    const action = await vscode.window.showInformationMessage(
+        '📋 Install command copied to clipboard! Paste it in your terminal to update.',
+        'Open Terminal',
+        'Download Manually'
+    );
+
+    if (action === 'Open Terminal') {
+        const terminal = vscode.window.createTerminal('Update Extension');
+        terminal.show();
+        terminal.sendText(installCommand);
+    } else if (action === 'Download Manually') {
+        vscode.env.openExternal(vscode.Uri.parse(vsixAsset.browser_download_url));
+    }
+}
+
+interface GitHubRelease {
+    tag_name: string;
+    html_url: string;
+    assets: Array<{
+        name: string;
+        browser_download_url: string;
+    }>;
 }
 
 export function deactivate() {
