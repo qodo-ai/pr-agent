@@ -3873,9 +3873,10 @@ Prompts are stored persistently in PostgreSQL (with in-memory fallback) to:
 │          └─► Page triggers cursor:// deep link                                │
 │               └─► Extension activates with id + baseUrl params                │
 │                                                                               │
-│  3. Extension Fetches Prompt                                                  │
+│  3. Extension Fetches Prompt (with API Key Auth)                              │
 │     └─► GET {baseUrl}/api/v1/prompt/{id}                                      │
-│          └─► get_prompt() returns full prompt + updates access_count          │
+│          └─► Headers: Authorization: Bearer {API_KEY}                          │
+│               └─► get_prompt() validates key, returns prompt, updates access   │
 │               └─► Opens file + Opens AI chat with pre-filled prompt           │
 │                                                                               │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -3957,10 +3958,16 @@ async def cursor_redirect(
 
 ```python
 @router.get("/api/v1/prompt/{prompt_id}")
-async def get_prompt_endpoint(prompt_id: str, accessed_by: Optional[str] = Query(None)):
+async def get_prompt_endpoint(
+    prompt_id: str,
+    accessed_by: Optional[str] = Query(None),
+    api_key_valid: None = Depends(validate_extension_api_key)
+):
     """
     Retrieve stored prompt by ID. Updates access tracking in DB.
     Falls back to in-memory storage if not found in DB.
+    
+    Requires API key authentication via Authorization header (Bearer token).
     """
     from pr_agent.db.cursor_prompts import get_prompt as db_get_prompt
     
@@ -3974,6 +3981,42 @@ async def get_prompt_endpoint(prompt_id: str, accessed_by: Optional[str] = Query
     
     return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
 ```
+
+**API Key Authentication:**
+
+The endpoint is protected with API key authentication:
+
+```python
+EXTENSION_API_KEY = os.environ.get("EXTENSION_API_KEY", "")
+
+async def validate_extension_api_key(
+    authorization: Optional[str] = Header(None),
+    x_extension_id: Optional[str] = Header(None, alias="X-Extension-ID")
+):
+    """
+    Validate API key for extension endpoints.
+    
+    If EXTENSION_API_KEY is not configured, allows all requests (dev mode).
+    Otherwise, requires Bearer token in Authorization header.
+    """
+    if not EXTENSION_API_KEY:
+        return  # Dev mode - no auth required
+    
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid API key")
+    
+    token = authorization.replace("Bearer ", "")
+    if token != EXTENSION_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+```
+
+**Security Model:**
+
+| Endpoint | Auth Method | Purpose |
+|----------|-------------|---------|
+| `/api/v1/prompt/{id}` | API Key (Bearer token) | Extension fetches prompts (protected) |
+| `/api/v1/cursor-redirect` | None (public) | Creates prompts, redirects to Cursor (public) |
+| `/api/v1/github_webhooks` | GitHub HMAC signature | Webhook events (already protected) |
 
 ### Comment Formatter
 

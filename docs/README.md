@@ -164,6 +164,16 @@ See [`cursor-extension/README.md`](../cursor-extension/README.md) for installati
 - **Access analytics**: Click-through rates, access counts, who accessed
 - **No URL limits**: Prompts stored by UUID reference, avoiding URL length restrictions
 
+**🔒 Security:**
+
+The extension endpoint is protected with API key authentication:
+- **Extension authentication**: Bearer token in Authorization header
+- **Webhook authentication**: Already secured with GitHub HMAC-SHA256 signature verification
+- **Public redirect**: `/api/v1/cursor-redirect` remains public for clickable links
+- **Dev mode**: Empty API key = no validation (for local development)
+
+See [DEPLOYMENT_AND_IMPLEMENTATION.md - Secrets Management](./DEPLOYMENT_AND_IMPLEMENTATION.md#secrets-management-google-cloud-secret-manager) for configuration.
+
 **For local development with ngrok:**
 1. Start ngrok: `ngrok http 8000`
 2. Set `WEBHOOK_URL` environment variable to the ngrok URL

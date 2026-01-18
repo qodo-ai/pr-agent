@@ -326,6 +326,10 @@ JIRA_EMAIL=pr-agent@workiz.com
 
 # Figma (optional, for design verification)
 FIGMA_ACCESS_TOKEN=xxx
+
+# Cursor Extension API Key (for securing prompt retrieval)
+# Generate with: openssl rand -hex 32
+EXTENSION_API_KEY=xxx
 ```
 
 ### Config Loader (Python equivalent of @workiz/config-loader)

@@ -837,6 +837,34 @@ CREATE TABLE cursor_fix_prompts (
 );
 ```
 
+### Phase 4B.13: API Key Authentication for Extension ✅ COMPLETED
+
+**Problem:** The `/api/v1/prompt/{id}` endpoint was publicly accessible, allowing anyone to retrieve stored prompts without authentication.
+
+**Solution:** Implemented API key authentication for the extension endpoint while keeping webhooks and redirect public:
+
+**Implementation:**
+- Updated `pr_agent/servers/github_app.py` - Added `validate_extension_api_key()` dependency
+- Updated `cursor-extension/src/extension.ts` - Send `Authorization: Bearer` header with API key
+- Updated `.github/workflows/build-cursor-extension.yml` - Inject API key at build time
+- Updated `env.example` and deployment docs - Added `EXTENSION_API_KEY` configuration
+- Updated all documentation - Added security information
+
+**Features:**
+- [x] API key validation for `/api/v1/prompt/{id}` endpoint ✅
+- [x] Bearer token authentication in extension ✅
+- [x] Build-time API key injection (not in source code) ✅
+- [x] Dev mode support (empty key = no validation) ✅
+- [x] Structured logging of auth attempts ✅
+
+**Security Model:**
+| Endpoint | Auth Method | Status |
+|----------|-------------|--------|
+| `/api/v1/prompt/{id}` | API Key (Bearer token) | ✅ Protected |
+| `/api/v1/cursor-redirect` | None (public) | ✅ Remains public |
+| `/api/v1/github_webhooks` | GitHub HMAC signature | ✅ Already protected |
+| `/api/v1/marketplace_webhooks` | GitHub HMAC signature | ✅ Already protected |
+
 ---
 
 ## Phase 5: RepoSwarm & Cross-Repo Context

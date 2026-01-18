@@ -16,7 +16,7 @@ import uvicorn
 env_path = Path(__file__).parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from starlette.background import BackgroundTasks
 from starlette.middleware import Middleware
@@ -47,15 +47,56 @@ router = APIRouter()
 
 prompt_store = DefaultDictWithTimeout(default_factory=lambda: None, ttl=3600)
 
+EXTENSION_API_KEY = os.environ.get("EXTENSION_API_KEY", "")
+
+
+async def validate_extension_api_key(
+    authorization: Optional[str] = Header(None),
+    x_extension_id: Optional[str] = Header(None, alias="X-Extension-ID")
+):
+    """
+    Validate API key for extension endpoints.
+    
+    If EXTENSION_API_KEY is not configured, allows all requests (dev mode).
+    Otherwise, requires Bearer token in Authorization header.
+    """
+    if not EXTENSION_API_KEY:
+        get_logger().debug("Extension API key not configured - allowing request (dev mode)")
+        return
+    
+    if not authorization or not authorization.startswith("Bearer "):
+        get_logger().warning("Extension API request missing or invalid Authorization header", artifact={
+            "has_auth": bool(authorization),
+            "extension_id": x_extension_id
+        })
+        raise HTTPException(status_code=401, detail="Missing or invalid API key")
+    
+    token = authorization.replace("Bearer ", "")
+    if token != EXTENSION_API_KEY:
+        get_logger().warning("Extension API request with invalid key", artifact={
+            "extension_id": x_extension_id
+        })
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    get_logger().debug("Extension API key validated successfully", artifact={
+        "extension_id": x_extension_id
+    })
+
 
 @router.get("/api/v1/prompt/{prompt_id}")
-async def get_prompt_endpoint(prompt_id: str, accessed_by: Optional[str] = Query(None, description="GitHub username")):
+async def get_prompt_endpoint(
+    prompt_id: str,
+    accessed_by: Optional[str] = Query(None, description="GitHub username"),
+    api_key_valid: None = Depends(validate_extension_api_key)
+):
     """
     Retrieve a stored prompt by ID.
     
     Prompts are stored in the database (with in-memory fallback) when generating Cursor redirect URLs.
     This allows passing long prompts without hitting URL length limits.
     Access is tracked for analytics when using DB storage.
+    
+    Requires API key authentication via Authorization header (Bearer token).
     """
     from pr_agent.db.cursor_prompts import get_prompt as db_get_prompt
     

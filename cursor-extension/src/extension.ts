@@ -4,6 +4,7 @@ import * as https from 'https';
 
 const GITHUB_REPO = 'Workiz/workiz-pr-agent';
 const CURRENT_VERSION = '1.0.17';
+const EXTENSION_API_KEY = '__EXTENSION_API_KEY__';  // Replaced at build time
 
 let outputChannel: vscode.OutputChannel;
 
@@ -116,10 +117,25 @@ async function fetchPromptFromServer(baseUrl: string, promptId: string): Promise
   
   const https = await import('https');
   const http = await import('http');
+  const urlModule = await import('url');
   
   return new Promise((resolve) => {
+    const parsedUrl = urlModule.parse(url);
     const protocol = url.startsWith('https') ? https : http;
-    const request = protocol.get(url, (response) => {
+    
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: parsedUrl.path,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${EXTENSION_API_KEY}`,
+        'X-Extension-ID': 'workiz.workiz-pr-agent-fix',
+        'X-Extension-Version': CURRENT_VERSION
+      }
+    };
+    
+    const request = protocol.request(options, (response) => {
       let data = '';
       response.on('data', (chunk) => { data += chunk; });
       response.on('end', () => {
@@ -149,6 +165,8 @@ async function fetchPromptFromServer(baseUrl: string, promptId: string): Promise
       request.destroy();
       resolve(null);
     });
+    
+    request.end();
   });
 }
 

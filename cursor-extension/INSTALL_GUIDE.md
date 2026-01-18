@@ -56,6 +56,18 @@ When Workiz PR Agent posts inline comments on your PRs, each comment includes a 
 
 ---
 
+## 🔒 Security Note
+
+**This extension is for internal use only:**
+- Contains embedded API credentials for authenticating with the PR Agent server
+- Distributed privately through GitHub releases (not public VS Code marketplace)
+- Access restricted to Workiz organization members only
+- Never share the `.vsix` file outside the organization
+
+The extension automatically authenticates with the server when fetching prompts - no additional configuration needed!
+
+---
+
 ## Verify Installation
 
 In Cursor, press `Cmd+Shift+X` to open Extensions. Search for "Workiz" - you should see:
