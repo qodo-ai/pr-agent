@@ -31,25 +31,13 @@ jobs:
       
       - name: Run Database Migrations
         run: |
-          # Install Cloud SQL Proxy
-          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
-          chmod +x cloud-sql-proxy
-          
-          # Start Cloud SQL Proxy in background
-          ./cloud-sql-proxy ${{ env.CLOUD_SQL_INSTANCE }} --port 5432 &
-          PROXY_PID=$!
-          sleep 5
-          
           # Install Python dependencies
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-          # Run migrations
-          export DATABASE_URL="postgresql://pr_agent:${{ secrets.PR_AGENT_DB_PASSWORD }}@localhost:5432/pr_agent"
+          # Run migrations using public IP (no proxy)
+          export DATABASE_URL="postgresql://pr_agent:${{ secrets.PR_AGENT_DB_PASSWORD }}@34.46.89.142:5432/pr_agent"
           python scripts/run_migrations.py
-          
-          # Kill proxy
-          kill $PROXY_PID
         
       - name: Build and Deploy to Cloud Run
         run: |
