@@ -28,6 +28,9 @@ def format_inline_comment(
     repo: str = "",
     branch: str = "main",
     rule_id: str = "",
+    pr_number: Optional[int] = None,
+    pr_url: Optional[str] = None,
+    finding_id: Optional[str] = None,
 ) -> str:
     """
     Format a single inline review comment in Bugbot style.
@@ -44,6 +47,9 @@ def format_inline_comment(
         repo: Repository name
         branch: Branch name (default: "main")
         rule_id: Rule identifier (e.g., "TS001", "NEST002")
+        pr_number: PR number (for tracking)
+        pr_url: Full PR URL (for tracking)
+        finding_id: Unique finding ID (for tracking)
     
     Returns:
         Formatted markdown string for the comment body
@@ -74,6 +80,11 @@ def format_inline_comment(
         repo=repo,
         branch=branch,
         rule_id=rule_id,
+        comment_type="static_analyzer",
+        severity=severity_normalized,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        finding_id=finding_id,
     )
     if buttons:
         body_parts.append(f"\n{buttons}")
@@ -109,6 +120,11 @@ def _build_action_buttons(
     repo: str,
     branch: str,
     rule_id: str,
+    comment_type: str = "static_analyzer",
+    severity: str = "Medium",
+    pr_number: Optional[int] = None,
+    pr_url: Optional[str] = None,
+    finding_id: Optional[str] = None,
 ) -> str:
     """Build the action buttons markdown."""
     buttons = []
@@ -124,6 +140,18 @@ def _build_action_buttons(
         )
         encoded_prompt = quote(prompt, safe="")
         cursor_url = f"{cursor_redirect_url}?prompt={encoded_prompt}&file={quote(file_path, safe='')}&line={line}"
+        
+        if org and repo:
+            cursor_url += f"&repository={quote(f'{org}/{repo}', safe='')}"
+        if pr_number:
+            cursor_url += f"&pr_number={pr_number}"
+        if pr_url:
+            cursor_url += f"&pr_url={quote(pr_url, safe='')}"
+        cursor_url += f"&comment_type={quote(comment_type, safe='')}"
+        cursor_url += f"&severity={quote(severity, safe='')}"
+        if finding_id:
+            cursor_url += f"&finding_id={quote(finding_id, safe='')}"
+        
         buttons.append(f"[🔧 Fix in Cursor]({cursor_url})")
     
     if org and repo:
@@ -186,6 +214,9 @@ def format_suggestion_comment(
     org: str = "",
     repo: str = "",
     branch: str = "main",
+    pr_number: Optional[int] = None,
+    pr_url: Optional[str] = None,
+    suggestion_id: Optional[str] = None,
 ) -> str:
     """
     Format a code suggestion as an inline comment.
@@ -203,6 +234,9 @@ def format_suggestion_comment(
         org: GitHub organization name
         repo: Repository name
         branch: Branch name
+        pr_number: PR number (for tracking)
+        pr_url: Full PR URL (for tracking)
+        suggestion_id: Unique suggestion ID (for tracking)
     
     Returns:
         Formatted markdown string for the suggestion comment
@@ -247,6 +281,19 @@ def format_suggestion_comment(
         )
         encoded_prompt = quote(prompt, safe="")
         cursor_url = f"{cursor_redirect_url}?prompt={encoded_prompt}&file={quote(file_path, safe='')}&line={line_start}"
+        
+        if org and repo:
+            cursor_url += f"&repository={quote(f'{org}/{repo}', safe='')}"
+        if pr_number:
+            cursor_url += f"&pr_number={pr_number}"
+        if pr_url:
+            cursor_url += f"&pr_url={quote(pr_url, safe='')}"
+        cursor_url += "&comment_type=ai_suggestion"
+        severity = _label_to_severity(label)
+        cursor_url += f"&severity={quote(severity, safe='')}"
+        if suggestion_id:
+            cursor_url += f"&finding_id={quote(suggestion_id, safe='')}"
+        
         buttons.append(f"[🔧 Fix in Cursor]({cursor_url})")
     
     if org and repo:
@@ -257,6 +304,16 @@ def format_suggestion_comment(
         body_parts.append(f"\n{' | '.join(buttons)}")
     
     return "\n".join(body_parts)
+
+
+def _label_to_severity(label: str) -> str:
+    """Map suggestion label to severity level."""
+    label_lower = label.lower() if label else ""
+    if "security" in label_lower or "bug" in label_lower or "error" in label_lower:
+        return "High"
+    if "performance" in label_lower or "best_practice" in label_lower:
+        return "Medium"
+    return "Low"
 
 
 def _build_suggestion_prompt(

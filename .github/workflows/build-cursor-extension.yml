@@ -34,6 +34,11 @@ jobs:
         working-directory: cursor-extension
         run: npm run compile
       
+      - name: Inject API key
+        working-directory: cursor-extension
+        run: |
+          sed -i "s/__EXTENSION_API_KEY__/${{ secrets.EXTENSION_API_KEY }}/g" out/extension.js
+      
       - name: Install vsce
         run: npm install -g @vscode/vsce
       

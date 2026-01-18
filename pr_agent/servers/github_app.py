@@ -16,7 +16,7 @@ import uvicorn
 env_path = Path(__file__).parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path)
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from starlette.background import BackgroundTasks
 from starlette.middleware import Middleware
@@ -44,6 +44,71 @@ if os.path.exists(build_number_path):
 else:
     build_number = "unknown"
 router = APIRouter()
+
+prompt_store = DefaultDictWithTimeout(default_factory=lambda: None, ttl=3600)
+
+EXTENSION_API_KEY = os.environ.get("EXTENSION_API_KEY", "")
+
+
+async def validate_extension_api_key(
+    authorization: Optional[str] = Header(None),
+    x_extension_id: Optional[str] = Header(None, alias="X-Extension-ID")
+):
+    """
+    Validate API key for extension endpoints.
+    
+    If EXTENSION_API_KEY is not configured, allows all requests (dev mode).
+    Otherwise, requires Bearer token in Authorization header.
+    """
+    if not EXTENSION_API_KEY:
+        get_logger().debug("Extension API key not configured - allowing request (dev mode)")
+        return
+    
+    if not authorization or not authorization.startswith("Bearer "):
+        get_logger().warning("Extension API request missing or invalid Authorization header", artifact={
+            "has_auth": bool(authorization),
+            "extension_id": x_extension_id
+        })
+        raise HTTPException(status_code=401, detail="Missing or invalid API key")
+    
+    token = authorization.replace("Bearer ", "")
+    if token != EXTENSION_API_KEY:
+        get_logger().warning("Extension API request with invalid key", artifact={
+            "extension_id": x_extension_id
+        })
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    get_logger().debug("Extension API key validated successfully", artifact={
+        "extension_id": x_extension_id
+    })
+
+
+@router.get("/api/v1/prompt/{prompt_id}")
+async def get_prompt_endpoint(
+    prompt_id: str,
+    accessed_by: Optional[str] = Query(None, description="GitHub username"),
+    api_key_valid: None = Depends(validate_extension_api_key)
+):
+    """
+    Retrieve a stored prompt by ID.
+    
+    Prompts are stored in the database (with in-memory fallback) when generating Cursor redirect URLs.
+    This allows passing long prompts without hitting URL length limits.
+    Access is tracked for analytics when using DB storage.
+    
+    Requires API key authentication via Authorization header (Bearer token).
+    """
+    from pr_agent.db.cursor_prompts import get_prompt as db_get_prompt
+    
+    prompt_data = db_get_prompt(prompt_id, accessed_by=accessed_by)
+    
+    if not prompt_data:
+        prompt_data = prompt_store.get(prompt_id)
+        if not prompt_data:
+            raise HTTPException(status_code=404, detail="Prompt not found or expired")
+        return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
+    
+    return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
 
 
 @router.post("/api/v1/github_webhooks")
@@ -515,15 +580,22 @@ def get_action_context(identifier: str) -> Optional[dict]:
 
 @router.get("/api/v1/cursor-redirect", response_class=HTMLResponse)
 async def cursor_redirect(
+    request: Request,
     prompt: str = Query(..., description="URL-encoded prompt for Cursor AI"),
     file: Optional[str] = Query(None, description="File path"),
     line: Optional[int] = Query(None, description="Line number"),
+    repository: Optional[str] = Query(None, description="Repository name (org/repo)"),
+    pr_number: Optional[int] = Query(None, description="PR number"),
+    pr_url: Optional[str] = Query(None, description="Full PR URL"),
+    comment_type: Optional[str] = Query(None, description="Comment type (static_analyzer, ai_suggestion)"),
+    severity: Optional[str] = Query(None, description="Severity level"),
+    finding_id: Optional[str] = Query(None, description="Original finding/suggestion ID"),
 ):
     """
     Redirect endpoint for opening Cursor IDE with our extension.
     
     This endpoint serves an HTML page that:
-    1. First tries our extension: cursor://workiz.workiz-pr-agent-fix/fix?prompt=...&file=...&line=...
+    1. First tries our extension: cursor://workiz.workiz-pr-agent-fix/fix?id=...&file=...&line=...
     2. Falls back to cursor://file/{path}:{line} if extension not installed
     3. Shows the prompt for copy/paste as final fallback
     
@@ -532,12 +604,32 @@ async def cursor_redirect(
     
     GitHub blocks custom URL schemes in comments, so we use this
     HTTPS endpoint as an intermediary.
-    """
-    # Encode prompt for URL
-    encoded_prompt = quote(prompt, safe="")
     
-    # Primary: Use our extension URI (with prompt support!)
-    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?prompt={encoded_prompt}"
+    Note: Prompts are stored server-side (DB with in-memory fallback) and referenced by ID 
+    to avoid URL length limits. Full tracking is available when DB is configured.
+    """
+    from pr_agent.db.cursor_prompts import save_prompt as db_save_prompt
+    
+    prompt_id = db_save_prompt(
+        prompt=prompt,
+        file_path=file,
+        line_number=line,
+        repository=repository,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        comment_type=comment_type,
+        severity=severity,
+        finding_id=finding_id,
+    )
+    
+    if not prompt_id:
+        prompt_id = str(uuid.uuid4())
+        prompt_store[prompt_id] = {"prompt": prompt, "file": file, "line": line}
+        get_logger().debug("Using in-memory prompt storage (DB unavailable)", extra={"context": {"prompt_id": prompt_id}})
+    
+    base_url = str(request.base_url).rstrip('/')
+    
+    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?id={prompt_id}&baseUrl={quote(base_url, safe='')}"
     if file:
         extension_url += f"&file={quote(file, safe='')}"
     if line:

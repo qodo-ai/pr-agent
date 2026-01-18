@@ -1,55 +1,104 @@
 """
-Test file to trigger static analyzers and AI suggestions.
-This file intentionally contains code patterns that analyzers should flag.
+Test file to trigger static analyzer findings and AI suggestions.
+This file intentionally contains code issues for testing PR Agent inline comments.
+
+Trigger commit: Testing inline comments and Fix in Cursor button.
 """
 
 import os
+import pickle
 
 
-def process_data(data, items=[]):
-    """Process data with mutable default argument (Python analyzer should catch this)."""
-    for item in data:
-        items.append(item)
-    return items
+def process_user_data(users=[]):
+    """Function with mutable default argument - should trigger B006."""
+    for user in users:
+        print(f"Processing: {user}")
+    return users
 
 
-def fetch_user_data(user_id):
-    """Fetch user data with bare except (Python analyzer should catch this)."""
+def unsafe_deserialize(data):
+    """Using pickle for deserialization - security risk S301."""
+    return pickle.loads(data)
+
+
+def connect_to_database():
+    """Hardcoded credentials - should trigger security analyzer."""
+    db_password = "super_secret_password_123"
+    api_key = "sk-1234567890abcdef"
+    
+    connection_string = f"postgresql://admin:{db_password}@localhost:5432/prod"
+    return connection_string
+
+
+def calculate_discount(price, discount_type):
+    """Complex nested conditionals - AI should suggest simplification."""
+    if discount_type == "premium":
+        if price > 100:
+            if price > 500:
+                return price * 0.7
+            else:
+                return price * 0.8
+        else:
+            return price * 0.9
+    elif discount_type == "standard":
+        if price > 100:
+            return price * 0.85
+        else:
+            return price * 0.95
+    else:
+        return price
+
+
+def fetch_data(url):
+    """Bare except clause - should trigger E722."""
     try:
-        result = {"id": user_id, "name": "Test User"}
-        print(f"Fetched user: {result}")
-        return result
+        response = os.system(f"curl {url}")
+        return response
     except:
+        print("Something went wrong")
         return None
 
 
-def calculate_total(prices):
-    """Calculate total using mutation instead of reduce."""
-    total = 0
-    for price in prices:
-        total = total + price
-    print(f"Total calculated: {total}")
-    return total
+def process_items(items):
+    """Inefficient loop pattern - AI should suggest list comprehension."""
+    result = []
+    for item in items:
+        if item > 0:
+            result.append(item * 2)
+    return result
 
 
-def get_config():
-    """Get config with hardcoded secret (Security analyzer should catch this)."""
-    api_key = "sk-1234567890abcdef"
-    return {
-        "api_key": api_key,
-        "base_url": "https://api.example.com"
-    }
+class UserService:
+    """Service class with some issues."""
+    
+    def __init__(self):
+        self.secret_token = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    
+    def validate_input(self, data):
+        """No input validation - security concern."""
+        return eval(data)
+    
+    def log_action(self, action, user_id):
+        """Using print instead of proper logging."""
+        print(f"User {user_id} performed {action}")
+
+
+def main():
+    """Main function to test the code."""
+    service = UserService()
+    
+    users = process_user_data()
+    users.append({"name": "test"})
+    
+    discount = calculate_discount(150, "premium")
+    print(f"Final price: {discount}")
+    
+    data = fetch_data("http://example.com/api")
+    
+    numbers = [1, -2, 3, -4, 5]
+    processed = process_items(numbers)
+    print(f"Processed: {processed}")
 
 
 if __name__ == "__main__":
-    data = [1, 2, 3]
-    result = process_data(data)
-    print(result)
-    
-    user = fetch_user_data(123)
-    print(user)
-    
-    prices = [10.0, 20.0, 30.0]
-    total = calculate_total(prices)
-    print(f"Final total: {total}")
-# Test smart line adjustment - Wed Jan 14 20:24:00 IST 2026
+    main()

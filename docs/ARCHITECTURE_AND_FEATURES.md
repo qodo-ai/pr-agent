@@ -322,6 +322,36 @@ CREATE TABLE assistant_conversations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Cursor Fix Prompts: persistent storage for "Fix in Cursor" feature
+-- Enables full tracking and analytics for prompt access
+CREATE TABLE cursor_fix_prompts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    prompt TEXT NOT NULL,
+    file_path TEXT,
+    line_number INT,
+    
+    -- PR Context
+    repository VARCHAR(255),
+    pr_number INT,
+    pr_url TEXT,
+    
+    -- Comment Context
+    comment_type VARCHAR(50),   -- 'static_analyzer', 'ai_suggestion'
+    severity VARCHAR(20),       -- 'High', 'Medium', 'Low'
+    finding_id VARCHAR(255),    -- Original finding/suggestion ID
+    
+    -- Tracking
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    accessed_at TIMESTAMP,
+    access_count INT DEFAULT 0,
+    accessed_by VARCHAR(255)    -- GitHub username if available
+);
+
+CREATE INDEX idx_cursor_fix_prompts_repository ON cursor_fix_prompts(repository);
+CREATE INDEX idx_cursor_fix_prompts_pr_number ON cursor_fix_prompts(pr_number);
+CREATE INDEX idx_cursor_fix_prompts_comment_type ON cursor_fix_prompts(comment_type);
+CREATE INDEX idx_cursor_fix_prompts_created_at ON cursor_fix_prompts(created_at);
+
 -- Indexes
 CREATE INDEX idx_code_chunks_embedding ON code_chunks USING ivfflat (embedding vector_cosine_ops);
 CREATE INDEX idx_jira_tickets_embedding ON jira_tickets USING ivfflat (embedding vector_cosine_ops);
@@ -3810,44 +3840,183 @@ Since GitHub blocks `cursor://` URLs, we host an HTTPS redirect page that:
 **What doesn't work:**
 - `cursor://agent/prompt?prompt=...` - Only works for Bugbot ❌
 
-**Redirect endpoint:** `GET /api/v1/cursor-redirect?prompt={encoded}&file={path}&line={num}`
+### Cursor Extension (Recommended)
+
+Install the **Workiz PR Agent Cursor Extension** for the best experience:
+
+- **With extension**: Clicking "Fix in Cursor" opens the file AND pre-fills the AI chat with the fix prompt!
+- **Without extension**: Opens the file only; prompt shown on redirect page for copy/paste
+
+See [`cursor-extension/README.md`](../cursor-extension/README.md) for installation instructions.
+
+### Persistent Prompt Storage
+
+Prompts are stored persistently in PostgreSQL (with in-memory fallback) to:
+- Avoid URL length limits when passing prompts
+- Enable analytics on "Fix in Cursor" usage
+- Track click-through rates and access patterns
+
+**Architecture:**
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                          Fix in Cursor Flow                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  1. PR Comment Created                                                        │
+│     └─► cursor_redirect endpoint called                                       │
+│          └─► save_prompt() stores in DB → returns UUID                        │
+│               └─► Redirect URL: cursor://...?id={uuid}&baseUrl={server}       │
+│                                                                               │
+│  2. User Clicks "Fix in Cursor"                                               │
+│     └─► Opens redirect page in browser                                        │
+│          └─► Page triggers cursor:// deep link                                │
+│               └─► Extension activates with id + baseUrl params                │
+│                                                                               │
+│  3. Extension Fetches Prompt (with API Key Auth)                              │
+│     └─► GET {baseUrl}/api/v1/prompt/{id}                                      │
+│          └─► Headers: Authorization: Bearer {API_KEY}                          │
+│               └─► get_prompt() validates key, returns prompt, updates access   │
+│               └─► Opens file + Opens AI chat with pre-filled prompt           │
+│                                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Database Module (`pr_agent/db/cursor_prompts.py`):**
+
+```python
+def save_prompt(
+    prompt: str,
+    file_path: str | None = None,
+    line_number: int | None = None,
+    repository: str | None = None,
+    pr_number: int | None = None,
+    pr_url: str | None = None,
+    comment_type: str | None = None,  # 'static_analyzer', 'ai_suggestion'
+    severity: str | None = None,
+    finding_id: str | None = None,
+) -> str | None:
+    """Save prompt and return UUID. Returns None if DB unavailable (falls back to in-memory)."""
+
+def get_prompt(prompt_id: str, accessed_by: str | None = None) -> dict | None:
+    """Retrieve prompt by ID and update access tracking."""
+
+def get_prompt_analytics(repository: str = None, start_date: datetime = None, end_date: datetime = None) -> dict:
+    """Get analytics: total_prompts, accessed_prompts, click_through_rate, by_type, etc."""
+```
+
+**Redirect endpoint:** `GET /api/v1/cursor-redirect`
 
 ```python
 # pr_agent/servers/github_app.py
 
-@router.get("/api/v1/cursor-redirect")
-async def cursor_redirect(prompt: str, file: str = "", line: int = 0):
+@router.get("/api/v1/cursor-redirect", response_class=HTMLResponse)
+async def cursor_redirect(
+    request: Request,
+    prompt: str = Query(...),
+    file: Optional[str] = Query(None),
+    line: Optional[int] = Query(None),
+    repository: Optional[str] = Query(None),
+    pr_number: Optional[int] = Query(None),
+    pr_url: Optional[str] = Query(None),
+    comment_type: Optional[str] = Query(None),
+    severity: Optional[str] = Query(None),
+    finding_id: Optional[str] = Query(None),
+):
     """
-    Opens file in Cursor and shows prompt for copy/paste.
+    Stores prompt in DB (with context for analytics) and redirects to Cursor.
+    Falls back to in-memory storage if DB unavailable.
     """
-    # Build cursor://file URL to open file at correct location
-    if file:
-        cursor_url = f"cursor://file/{file}"
-        if line:
-            cursor_url = f"{cursor_url}:{line}:1"
-    else:
-        cursor_url = "cursor://"
+    from pr_agent.db.cursor_prompts import save_prompt as db_save_prompt
     
-    # HTML page that:
-    # 1. Tries to open the file via cursor://file/...
-    # 2. Shows the prompt prominently for copy/paste
-  
-  <h3>Prompt:</h3>
-  <div class="prompt-box" id="prompt">{decoded_prompt}</div>
-  
-  <script>
-    // Try to open Cursor automatically
-    window.location = "{cursor_url}";
+    # Store in DB with full context
+    prompt_id = db_save_prompt(
+        prompt=prompt,
+        file_path=file,
+        line_number=line,
+        repository=repository,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        comment_type=comment_type,
+        severity=severity,
+        finding_id=finding_id,
+    )
     
-    function copyPrompt() {{
-      navigator.clipboard.writeText(document.getElementById('prompt').textContent);
-      alert('Copied to clipboard!');
-    }}
-  </script>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
+    # Fallback to in-memory if DB unavailable
+    if not prompt_id:
+        prompt_id = str(uuid.uuid4())
+        prompt_store[prompt_id] = {"prompt": prompt, "file": file, "line": line}
+    
+    base_url = str(request.base_url).rstrip('/')
+    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?id={prompt_id}&baseUrl={quote(base_url, safe='')}"
+    
+    # Returns HTML page that triggers cursor:// deep link
+    return HTMLResponse(content=html_template)
 ```
+
+**Prompt Retrieval Endpoint:** `GET /api/v1/prompt/{prompt_id}`
+
+```python
+@router.get("/api/v1/prompt/{prompt_id}")
+async def get_prompt_endpoint(
+    prompt_id: str,
+    accessed_by: Optional[str] = Query(None),
+    api_key_valid: None = Depends(validate_extension_api_key)
+):
+    """
+    Retrieve stored prompt by ID. Updates access tracking in DB.
+    Falls back to in-memory storage if not found in DB.
+    
+    Requires API key authentication via Authorization header (Bearer token).
+    """
+    from pr_agent.db.cursor_prompts import get_prompt as db_get_prompt
+    
+    prompt_data = db_get_prompt(prompt_id, accessed_by=accessed_by)
+    
+    if not prompt_data:
+        # Fallback to in-memory
+        prompt_data = prompt_store.get(prompt_id)
+        if not prompt_data:
+            raise HTTPException(status_code=404, detail="Prompt not found or expired")
+    
+    return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
+```
+
+**API Key Authentication:**
+
+The endpoint is protected with API key authentication:
+
+```python
+EXTENSION_API_KEY = os.environ.get("EXTENSION_API_KEY", "")
+
+async def validate_extension_api_key(
+    authorization: Optional[str] = Header(None),
+    x_extension_id: Optional[str] = Header(None, alias="X-Extension-ID")
+):
+    """
+    Validate API key for extension endpoints.
+    
+    If EXTENSION_API_KEY is not configured, allows all requests (dev mode).
+    Otherwise, requires Bearer token in Authorization header.
+    """
+    if not EXTENSION_API_KEY:
+        return  # Dev mode - no auth required
+    
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid API key")
+    
+    token = authorization.replace("Bearer ", "")
+    if token != EXTENSION_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+```
+
+**Security Model:**
+
+| Endpoint | Auth Method | Purpose |
+|----------|-------------|---------|
+| `/api/v1/prompt/{id}` | API Key (Bearer token) | Extension fetches prompts (protected) |
+| `/api/v1/cursor-redirect` | None (public) | Creates prompts, redirects to Cursor (public) |
+| `/api/v1/github_webhooks` | GitHub HMAC signature | Webhook events (already protected) |
 
 ### Comment Formatter
 
