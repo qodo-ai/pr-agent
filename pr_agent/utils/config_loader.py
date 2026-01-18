@@ -17,6 +17,12 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "pr-agent"
+GCP_PROJECT_ID = "workiz-development"
+
+
+def _get_env_name() -> str:
+    """Get environment name, checking ENV first, then NODE_ENV as fallback."""
+    return os.environ.get('ENV') or os.environ.get('NODE_ENV', 'development')
 
 
 def _parse_env_content(content: str) -> dict[str, str]:
@@ -40,7 +46,7 @@ def _parse_env_content(content: str) -> dict[str, str]:
 
 def _get_env_file_path(service_root: Path) -> Path:
     """Get the path to the environment-specific .env file."""
-    env_name = os.environ.get('NODE_ENV', 'development')
+    env_name = _get_env_name()
     return service_root / f'.env.{env_name}'
 
 
@@ -96,8 +102,8 @@ def _get_secret_manager_config(
             f"Failed to create Secret Manager client. Check GCP credentials: {e}"
         ) from e
 
-    node_env = os.environ.get('NODE_ENV', 'development')
-    env_name = env_name_override if env_name_override else ('prod' if node_env == 'production' else node_env)
+    current_env = _get_env_name()
+    env_name = env_name_override if env_name_override else ('prod' if current_env == 'production' else current_env)
 
     secrets_name = f'{env_name}-{service_name}'
 
@@ -189,8 +195,9 @@ def load_config_sync(
         logger.info("Loading config from file", extra={"context": {"path": str(env_file_path)}})
         config = _get_dotenv_config(env_file_path)
     else:
-        secret_name = f'{os.environ.get("NODE_ENV", "development")}-{service_name}'
-        logger.info("Loading config from Secret Manager", extra={"context": {"secret": secret_name}})
+        env_name = _get_env_name()
+        secret_name = f'{env_name}-{service_name}'
+        logger.info("Loading config from Secret Manager", extra={"context": {"secret": secret_name, "env": env_name}})
         config = _get_secret_manager_config(project_id, service_name, env_name_override)
 
     if update_environ:

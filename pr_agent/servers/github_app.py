@@ -9,13 +9,17 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import quote
 
-from dotenv import load_dotenv
 import uvicorn
 
-# Load .env file from project root (for local development)
-env_path = Path(__file__).parent.parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
+# Load configuration from .env (development) or GCP Secret Manager (staging/production)
+from pr_agent.utils.config_loader import load_config_sync, GCP_PROJECT_ID, load_local_env
+
+_env = os.environ.get('ENV') or os.environ.get('NODE_ENV', 'development')
+if _env in ('development', ''):
+    load_local_env()
+else:
+    load_config_sync(GCP_PROJECT_ID)
+
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from starlette.background import BackgroundTasks
