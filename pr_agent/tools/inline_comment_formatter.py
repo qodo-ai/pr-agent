@@ -110,7 +110,7 @@ def format_inline_comment(
         finding_id=finding_id,
     )
     if buttons:
-        body_parts.append(f"\n{' | '.join(buttons.split(' | '))}")
+        body_parts.append(f"\n{buttons}")
     
     return "\n".join(body_parts)
 
