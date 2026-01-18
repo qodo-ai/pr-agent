@@ -1,7 +1,7 @@
 # Workiz PR Agent - Development Plan & Tracking
 
-> **Status**: ✅ Phase 4B.10 Complete - Smart Line Adjustment for Inline Comments  
-> **Last Updated**: January 15, 2026  
+> **Status**: ✅ Phase 4B.12 Complete - Persistent Prompt Storage for Fix in Cursor  
+> **Last Updated**: January 18, 2026  
 > **Total Phases**: 8  
 > **Estimated Duration**: 8-10 weeks
 
@@ -796,6 +796,47 @@ async def run(self):
 - [ ] Add optional code diff collapsible section to both
 - [ ] Update documentation
 
+### Phase 4B.12: Persistent Prompt Storage for Fix in Cursor ✅ COMPLETED
+
+**Problem:** Prompts for "Fix in Cursor" were stored in-memory with a 1-hour TTL. This limited analytics capabilities and prompts were lost on server restart.
+
+**Solution:** Implemented persistent PostgreSQL storage with full tracking:
+
+**Implementation:**
+- Created `migrations/002_cursor_fix_prompts.sql` - new table with full context and tracking
+- Created `pr_agent/db/cursor_prompts.py` - `save_prompt()`, `get_prompt()`, `get_prompt_analytics()`
+- Updated `pr_agent/servers/github_app.py` - DB storage with in-memory fallback
+- Updated `pr_agent/tools/inline_comment_formatter.py` - pass tracking context to URLs
+- Updated `pr_agent/tools/workiz_pr_reviewer.py` and `workiz_pr_code_suggestions.py` - pass PR context
+
+**Features:**
+- [x] Persistent storage in PostgreSQL with UUID primary keys ✅
+- [x] Full PR context tracking (repository, pr_number, pr_url) ✅
+- [x] Comment context (comment_type, severity, finding_id) ✅
+- [x] Access tracking (accessed_at, access_count, accessed_by) ✅
+- [x] Analytics endpoint for click-through rates ✅
+- [x] Graceful fallback to in-memory when DB unavailable ✅
+
+**Database Schema:**
+```sql
+CREATE TABLE cursor_fix_prompts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    prompt TEXT NOT NULL,
+    file_path TEXT,
+    line_number INT,
+    repository VARCHAR(255),
+    pr_number INT,
+    pr_url TEXT,
+    comment_type VARCHAR(50),  -- 'static_analyzer', 'ai_suggestion'
+    severity VARCHAR(20),
+    finding_id VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    accessed_at TIMESTAMP,
+    access_count INT DEFAULT 0,
+    accessed_by VARCHAR(255)
+);
+```
+
 ---
 
 ## Phase 5: RepoSwarm & Cross-Repo Context
@@ -1250,6 +1291,6 @@ async def run(self):
 
 ---
 
-**Last Updated**: January 11, 2026  
-**Version**: 1.1
+**Last Updated**: January 18, 2026  
+**Version**: 1.2
 

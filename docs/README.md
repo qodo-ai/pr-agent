@@ -66,29 +66,33 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **🔧 Inline Comments** | Bugbot-style inline comments with Fix in Cursor buttons | ✅ Implemented |
 | **Custom Rules Engine** | Workiz-specific code style rules | ✅ Implemented |
 | **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Implemented |
-| **Database Analyzers** | MySQL, MongoDB, Elasticsearch, PostgreSQL | ✅ Planned |
-| **Security Analyzer** | Traefik-aware security checks | ✅ Implemented |
-| **PubSub Analyzer** | Event topology and pattern validation | ✅ Planned |
+| **SQL Analyzer** | TypeORM patterns, N+1, injection, transactions | ✅ Implemented |
+| **Security Analyzer** | Secrets, XSS, eval(), weak crypto detection | ✅ Implemented |
+| **MongoDB Analyzer** | Missing indexes, $regex patterns, aggregations | 🔲 Planned |
+| **Elasticsearch Analyzer** | Wildcard queries, deep pagination, mappings | 🔲 Planned |
+| **PubSub Analyzer** | Event topology and pattern validation | 🔲 Planned |
 
 ### Integrations
 
 | Integration | Purpose | Status |
 |-------------|---------|--------|
-| **GitHub** | Webhooks, PR reviews, comments | ✅ Base exists |
-| **Jira** | Ticket context, history, compliance | ✅ Planned |
-| **RepoSwarm** | Cross-repo architecture context (adapted from [royosherove/repo-swarm](https://github.com/royosherove/repo-swarm)) | ✅ Planned |
-| **Figma** | Design verification for frontend | ✅ Planned |
-| **GitHub Packages** | Internal @workiz package version tracking | ✅ Planned |
+| **GitHub** | Webhooks, PR reviews, inline comments | ✅ Implemented |
+| **Cursor Extension** | "Fix in Cursor" with pre-filled AI prompts | ✅ Implemented |
+| **Jira** | Ticket context, history, compliance | 🔲 Planned |
+| **RepoSwarm** | Cross-repo architecture context (adapted from [royosherove/repo-swarm](https://github.com/royosherove/repo-swarm)) | 🔲 Planned |
+| **Figma** | Design verification for frontend | 🔲 Planned |
+| **GitHub Packages** | Internal @workiz package version tracking | 🔲 Planned |
 
 ### Advanced Features
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Auto-Fix Agent** | AI-powered automatic code fixes | ✅ Planned |
-| **Auto-Discovery** | Automatic repo/project detection | ✅ Planned |
-| **Admin UI** | Web dashboard for management | ✅ Planned |
-| **🤖 Knowledge Assistant** | Ask questions about your codebase | ✅ Planned |
-| **Cost Tracking** | API usage and cost monitoring | ✅ Planned |
+| **Cost Tracking** | API usage and cost monitoring | ✅ Implemented |
+| **Prompt Analytics** | Track "Fix in Cursor" usage and click-through | ✅ Implemented |
+| **Auto-Fix Agent** | AI-powered automatic code fixes | 🔲 Planned |
+| **Auto-Discovery** | Automatic repo/project detection | 🔲 Planned |
+| **Admin UI** | Web dashboard for management | 🔲 Planned |
+| **🤖 Knowledge Assistant** | Ask questions about your codebase | 🔲 Planned |
 
 ### 🔧 Bugbot-Style Inline Comments (NEW!)
 
@@ -149,8 +153,16 @@ show_web_fallback = true    # Include vscode.dev link
 Install the **Workiz PR Agent Cursor Extension** for the best experience:
 - **With extension**: Clicking "Fix in Cursor" opens the file AND pre-fills the AI chat with the fix prompt!
 - **Without extension**: Opens the file only; prompt shown on redirect page for copy/paste
+- **Auto-update**: Extension checks for updates daily and prompts to install new versions
 
 See [`cursor-extension/README.md`](../cursor-extension/README.md) for installation.
+
+**📊 Prompt Storage & Analytics:**
+
+"Fix in Cursor" prompts are stored persistently in PostgreSQL (with in-memory fallback) enabling:
+- **Full tracking**: repository, PR number, comment type, severity, finding ID
+- **Access analytics**: Click-through rates, access counts, who accessed
+- **No URL limits**: Prompts stored by UUID reference, avoiding URL length restrictions
 
 **For local development with ngrok:**
 1. Start ngrok: `ngrok http 8000`
@@ -182,19 +194,19 @@ Ask questions about your entire codebase in natural language:
 
 Uses RAG to search across code, architecture (RepoSwarm), Jira tickets, commits, PRs, and contributor history. Available in the Admin UI.
 
-### Automation Summary (100% Webhook-Driven)
+### Automation Summary
 
-| Process | Trigger | Latency |
-|---------|---------|---------|
-| **PR Review** | GitHub webhook (`pull_request`) | ⚡ Real-time |
-| **Code Indexing** | GitHub webhook (`push` to main) | ⚡ Real-time |
-| **RepoSwarm Analysis** | GitHub webhook (`push` to main) | ⚡ Real-time |
-| **Repo Discovery** | GitHub org webhook (`repository.created`) | ⚡ Real-time |
-| **Jira Sync** | Jira webhook (`issue_created/updated`) | ⚡ Real-time |
-| **NPM Packages Sync** | GitHub webhook (`registry_package.published`) | ⚡ Real-time |
-| **Reconciliation** | Weekly CronJob (safety net) | Weekly |
+| Process | Trigger | Status |
+|---------|---------|--------|
+| **PR Review** | GitHub webhook (`pull_request`) | ✅ Implemented |
+| **Inline Comments** | GitHub webhook (`issue_comment: /review`, `/improve`) | ✅ Implemented |
+| **Code Indexing** | GitHub webhook (`push` to main) | 🔲 Planned |
+| **RepoSwarm Analysis** | GitHub webhook (`push` to main) | 🔲 Planned |
+| **Repo Discovery** | GitHub org webhook (`repository.created`) | 🔲 Planned |
+| **Jira Sync** | Jira webhook (`issue_created/updated`) | 🔲 Planned |
+| **NPM Packages Sync** | GitHub webhook (`registry_package.published`) | 🔲 Planned |
 
-**No frequent CronJobs needed!** All updates happen instantly via webhooks.
+Webhooks enable real-time updates once fully implemented. Weekly reconciliation CronJob serves as safety net.
 
 ---
 
@@ -213,12 +225,11 @@ Uses RAG to search across code, architecture (RepoSwarm), Jira tickets, commits,
 
 ### Databases
 
-| Database | Analyzer | Key Checks |
-|----------|----------|------------|
-| **MySQL** | `MySQLAnalyzer` | SELECT *, N+1, SQL injection |
-| **PostgreSQL** | `PostgreSQLAnalyzer` | Same + asyncpg patterns |
-| **MongoDB** | `MongoDBAnalyzer` | Missing indexes, $regex without anchor |
-| **Elasticsearch** | `ElasticsearchAnalyzer` | Wildcard queries, deep pagination |
+| Database | Analyzer | Key Checks | Status |
+|----------|----------|------------|--------|
+| **MySQL/PostgreSQL** | `SQLAnalyzer` | N+1, SQL injection, transactions, TypeORM | ✅ Implemented |
+| **MongoDB** | `MongoDBAnalyzer` | Missing indexes, $regex without anchor | 🔲 Planned |
+| **Elasticsearch** | `ElasticsearchAnalyzer` | Wildcard queries, deep pagination | 🔲 Planned |
 
 ### Workiz Internal Packages
 
@@ -437,4 +448,4 @@ For questions or issues:
 
 ---
 
-*Last updated: January 2026*
+*Last updated: January 18, 2026*
