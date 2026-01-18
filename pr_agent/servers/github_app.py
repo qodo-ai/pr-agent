@@ -45,6 +45,22 @@ else:
     build_number = "unknown"
 router = APIRouter()
 
+prompt_store = DefaultDictWithTimeout(default_factory=lambda: None, ttl=3600)
+
+
+@router.get("/api/v1/prompt/{prompt_id}")
+async def get_prompt(prompt_id: str):
+    """
+    Retrieve a stored prompt by ID.
+    
+    Prompts are stored temporarily (1 hour TTL) when generating Cursor redirect URLs.
+    This allows passing long prompts without hitting URL length limits.
+    """
+    prompt_data = prompt_store.get(prompt_id)
+    if not prompt_data:
+        raise HTTPException(status_code=404, detail="Prompt not found or expired")
+    return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
+
 
 @router.post("/api/v1/github_webhooks")
 async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Request, response: Response):
@@ -515,6 +531,7 @@ def get_action_context(identifier: str) -> Optional[dict]:
 
 @router.get("/api/v1/cursor-redirect", response_class=HTMLResponse)
 async def cursor_redirect(
+    request: Request,
     prompt: str = Query(..., description="URL-encoded prompt for Cursor AI"),
     file: Optional[str] = Query(None, description="File path"),
     line: Optional[int] = Query(None, description="Line number"),
@@ -523,7 +540,7 @@ async def cursor_redirect(
     Redirect endpoint for opening Cursor IDE with our extension.
     
     This endpoint serves an HTML page that:
-    1. First tries our extension: cursor://workiz.workiz-pr-agent-fix/fix?prompt=...&file=...&line=...
+    1. First tries our extension: cursor://workiz.workiz-pr-agent-fix/fix?id=...&file=...&line=...
     2. Falls back to cursor://file/{path}:{line} if extension not installed
     3. Shows the prompt for copy/paste as final fallback
     
@@ -532,12 +549,15 @@ async def cursor_redirect(
     
     GitHub blocks custom URL schemes in comments, so we use this
     HTTPS endpoint as an intermediary.
-    """
-    # Encode prompt for URL
-    encoded_prompt = quote(prompt, safe="")
     
-    # Primary: Use our extension URI (with prompt support!)
-    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?prompt={encoded_prompt}"
+    Note: Prompts are stored server-side and referenced by ID to avoid URL length limits.
+    """
+    prompt_id = str(uuid.uuid4())
+    prompt_store[prompt_id] = {"prompt": prompt, "file": file, "line": line}
+    
+    base_url = str(request.base_url).rstrip('/')
+    
+    extension_url = f"cursor://workiz.workiz-pr-agent-fix/fix?id={prompt_id}&baseUrl={quote(base_url, safe='')}"
     if file:
         extension_url += f"&file={quote(file, safe='')}"
     if line:

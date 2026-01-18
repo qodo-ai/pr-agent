@@ -3,7 +3,18 @@ import * as path from 'path';
 import * as https from 'https';
 
 const GITHUB_REPO = 'Workiz/workiz-pr-agent';
-const CURRENT_VERSION = '1.0.6';
+const CURRENT_VERSION = '1.0.17';
+
+let outputChannel: vscode.OutputChannel;
+
+function log(message: string, data?: unknown): void {
+  const timestamp = new Date().toISOString();
+  const logLine = data 
+    ? `[${timestamp}] ${message}: ${JSON.stringify(data, null, 2)}`
+    : `[${timestamp}] ${message}`;
+  console.log(logLine);
+  outputChannel?.appendLine(logLine);
+}
 
 /**
  * Workiz PR Agent - Fix in Cursor Extension
@@ -18,17 +29,21 @@ const CURRENT_VERSION = '1.0.6';
  */
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('Workiz PR Agent Fix extension activated');
+  outputChannel = vscode.window.createOutputChannel('Workiz PR Agent');
+  outputChannel.show(true);
+  
+  log('Extension activated', { version: CURRENT_VERSION });
 
   checkForUpdates(context);
 
   const uriHandler = vscode.window.registerUriHandler({
     handleUri(uri: vscode.Uri): vscode.ProviderResult<void> {
-      console.log('Received URI:', uri.toString());
+      log('Received URI', uri.toString());
       
       if (uri.path === '/fix') {
         handleFixUri(uri);
       } else {
+        log('Unknown path', uri.path);
         vscode.window.showWarningMessage(`Unknown path: ${uri.path}`);
       }
     }
@@ -53,32 +68,97 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function handleFixUri(uri: vscode.Uri): Promise<void> {
+  log('handleFixUri called', uri.query);
   const params = new URLSearchParams(uri.query);
   
-  const prompt = params.get('prompt') || '';
+  let prompt = params.get('prompt') || '';
+  const promptId = params.get('id') || '';
+  const baseUrl = params.get('baseUrl') || '';
   const filePath = params.get('file') || '';
   const lineStr = params.get('line') || '1';
   const line = parseInt(lineStr, 10) || 1;
 
-  console.log('Fix request:', { filePath, line, promptLength: prompt.length });
+  if (promptId && baseUrl && !prompt) {
+    log('Fetching prompt from server', { promptId, baseUrl });
+    const fetchedData = await fetchPromptFromServer(baseUrl, promptId);
+    if (fetchedData) {
+      prompt = fetchedData.prompt;
+      log('Prompt fetched successfully', { promptLength: prompt.length });
+    } else {
+      log('Failed to fetch prompt from server');
+      vscode.window.showErrorMessage('Failed to fetch prompt from server. It may have expired.');
+      return;
+    }
+  }
+
+  log('Parsed fix request', { filePath, line, promptLength: prompt.length, promptPreview: prompt.substring(0, 100) });
 
   if (filePath) {
+    log('Opening file', { filePath, line });
     await openFileAtLine(filePath, line);
+    log('File opened');
   }
 
   if (prompt) {
+    log('Waiting before opening AI chat...');
     await new Promise(resolve => setTimeout(resolve, 500));
+    log('Opening AI chat with prompt');
     await openAiChatWithPrompt(prompt);
+    log('AI chat function completed');
   }
 
-  vscode.window.showInformationMessage('Fix loaded! Review the AI suggestion.');
+  vscode.window.showInformationMessage('Fix loaded! Check Output panel for logs.');
+}
+
+async function fetchPromptFromServer(baseUrl: string, promptId: string): Promise<{prompt: string, file?: string, line?: number} | null> {
+  const url = `${baseUrl}/api/v1/prompt/${promptId}`;
+  log('Fetching from URL', url);
+  
+  const https = await import('https');
+  const http = await import('http');
+  
+  return new Promise((resolve) => {
+    const protocol = url.startsWith('https') ? https : http;
+    const request = protocol.get(url, (response) => {
+      let data = '';
+      response.on('data', (chunk) => { data += chunk; });
+      response.on('end', () => {
+        try {
+          if (response.statusCode === 200) {
+            const parsed = JSON.parse(data);
+            log('Server response', { promptLength: parsed.prompt?.length });
+            resolve(parsed);
+          } else {
+            log('Server returned error', { status: response.statusCode, data });
+            resolve(null);
+          }
+        } catch (e) {
+          log('Failed to parse server response', String(e));
+          resolve(null);
+        }
+      });
+    });
+    
+    request.on('error', (e) => {
+      log('Request failed', String(e));
+      resolve(null);
+    });
+    
+    request.setTimeout(10000, () => {
+      log('Request timed out');
+      request.destroy();
+      resolve(null);
+    });
+  });
 }
 
 async function openFileAtLine(filePath: string, line: number): Promise<void> {
   try {
     const workspaceFolders = vscode.workspace.workspaceFolders;
+    log('Workspace folders', workspaceFolders?.map(f => f.uri.fsPath));
     
     if (!workspaceFolders || workspaceFolders.length === 0) {
+      log('No workspace folders found');
       vscode.window.showWarningMessage('No workspace folder open. Please open the project first.');
       return;
     }
@@ -86,9 +166,11 @@ async function openFileAtLine(filePath: string, line: number): Promise<void> {
     for (const folder of workspaceFolders) {
       const fullPath = path.join(folder.uri.fsPath, filePath);
       const fileUri = vscode.Uri.file(fullPath);
+      log('Trying path', fullPath);
 
       try {
         await vscode.workspace.fs.stat(fileUri);
+        log('File exists', fullPath);
 
         const document = await vscode.workspace.openTextDocument(fileUri);
         const editor = await vscode.window.showTextDocument(document);
@@ -100,71 +182,54 @@ async function openFileAtLine(filePath: string, line: number): Promise<void> {
         editor.selection = new vscode.Selection(position, position);
         editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
 
-        console.log(`Opened file: ${fullPath} at line ${line}`);
+        log('File opened successfully', { fullPath, line });
         return;
-      } catch {
+      } catch (e) {
+        log('File not found in folder', { folder: folder.uri.fsPath, error: String(e) });
         continue;
       }
     }
 
+    log('File not found in any workspace folder', filePath);
     vscode.window.showWarningMessage(`File not found: ${filePath}`);
   } catch (error) {
-    console.error('Error opening file:', error);
+    log('Error opening file', { filePath, error: String(error) });
     vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);
   }
 }
 
 async function openAiChatWithPrompt(prompt: string): Promise<void> {
-  try {
-    await vscode.env.clipboard.writeText(prompt);
-    console.log('Prompt copied to clipboard');
+  log('openAiChatWithPrompt called', { promptLength: prompt.length });
+  
+  await vscode.env.clipboard.writeText(prompt);
+  log('Prompt copied to clipboard');
 
-    const allCommands = await vscode.commands.getCommands(true);
-    console.log('Available AI commands:', allCommands.filter(cmd => 
-      cmd.includes('chat') || cmd.includes('composer') || cmd.includes('ai') || cmd.includes('Composer')
-    ));
-
-    const chatCommands = [
-      { name: 'aichat.newchataction', args: [prompt] },
-      { name: 'composer.startComposerPrompt', args: [prompt] },
-      { name: 'cursorComposer.startComposer', args: [{ prompt }] },
-      { name: 'composerMode.agent.startFromSelection', args: [{ prompt }] },
-      { name: 'aichat.newagentchat', args: [] },
-      { name: 'workbench.action.chat.newChat', args: [] },
-    ];
-
-    for (const cmd of chatCommands) {
-      if (allCommands.includes(cmd.name)) {
-        try {
-          console.log(`Trying command: ${cmd.name}`);
-          await vscode.commands.executeCommand(cmd.name, ...cmd.args);
-          console.log(`Command ${cmd.name} executed successfully`);
-          
-          if (cmd.args.length === 0) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            try {
-              await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
-              console.log('Pasted prompt from clipboard');
-            } catch (pasteError) {
-              console.log('Paste failed, prompt is in clipboard');
-            }
-          }
-          
-          return;
-        } catch (e) {
-          console.log(`Command ${cmd.name} failed:`, e);
-        }
-      }
-    }
-
-    vscode.window.showInformationMessage(
-      '📋 Prompt copied to clipboard! Open AI chat (Cmd+L) and paste with Cmd+V.',
-      'OK'
-    );
-  } catch (error) {
-    console.error('Error opening AI chat:', error);
-    vscode.window.showErrorMessage('Failed to open AI chat. Prompt is in clipboard - paste with Cmd+V.');
-  }
+  log('Opening new agent chat');
+  await vscode.commands.executeCommand('composer.newAgentChat');
+  
+  log('Waiting 1.5 seconds for chat to fully initialize');
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  
+  log('Focusing composer input');
+  await vscode.commands.executeCommand('composer.focusComposer');
+  
+  log('Waiting 500ms for focus');
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  const clipboardCheck = await vscode.env.clipboard.readText();
+  log('Clipboard verification', { 
+    length: clipboardCheck.length, 
+    promptLength: prompt.length,
+    match: clipboardCheck.length === prompt.length
+  });
+  
+  log('Executing paste');
+  await vscode.commands.executeCommand('editor.action.clipboardPasteAction');
+  
+  log('Waiting 500ms after paste');
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  log('Paste complete - prompt is in clipboard if not fully pasted, press Cmd+V');
 }
 
 async function checkForUpdates(context: vscode.ExtensionContext, manual: boolean = false): Promise<void> {
@@ -173,7 +238,7 @@ async function checkForUpdates(context: vscode.ExtensionContext, manual: boolean
   const oneDay = 24 * 60 * 60 * 1000;
 
   if (!manual && (now - lastCheck) < oneDay) {
-    console.log('Skipping update check - checked recently');
+    log('Skipping update check - checked recently');
     return;
   }
 
@@ -190,7 +255,7 @@ async function checkForUpdates(context: vscode.ExtensionContext, manual: boolean
     await context.globalState.update('lastUpdateCheck', now);
 
     const latestVersion = latestRelease.tag_name.replace(/^v/, '');
-    console.log(`Current version: ${CURRENT_VERSION}, Latest version: ${latestVersion}`);
+    log('Version check', { current: CURRENT_VERSION, latest: latestVersion });
 
     if (isNewerVersion(latestVersion, CURRENT_VERSION)) {
       const action = await vscode.window.showInformationMessage(
@@ -209,7 +274,7 @@ async function checkForUpdates(context: vscode.ExtensionContext, manual: boolean
       vscode.window.showInformationMessage(`✅ You're running the latest version (v${CURRENT_VERSION})`);
     }
   } catch (error) {
-    console.error('Error checking for updates:', error);
+    log('Error checking for updates', String(error));
     if (manual) {
       vscode.window.showErrorMessage('Failed to check for updates. Please try again later.');
     }
@@ -240,7 +305,7 @@ function fetchLatestRelease(): Promise<GitHubRelease | null> {
           if (res.statusCode === 200) {
             resolve(JSON.parse(data));
           } else {
-            console.log(`GitHub API returned status ${res.statusCode}`);
+            log('GitHub API returned status', res.statusCode);
             resolve(null);
           }
         } catch {
@@ -250,7 +315,7 @@ function fetchLatestRelease(): Promise<GitHubRelease | null> {
     });
 
     req.on('error', (error) => {
-      console.error('Error fetching release:', error);
+      log('Error fetching release', String(error));
       resolve(null);
     });
 
@@ -316,5 +381,5 @@ interface GitHubRelease {
 }
 
 export function deactivate() {
-  console.log('Workiz PR Agent Fix extension deactivated');
+  log('Extension deactivated');
 }
