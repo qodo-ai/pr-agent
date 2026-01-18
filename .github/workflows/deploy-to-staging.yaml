@@ -14,6 +14,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     name: deploy cloud run service to staging
+    permissions:
+      contents: "read"
+      id-token: "write"
     steps:
       - uses: actions/checkout@v5
       
