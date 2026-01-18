@@ -68,9 +68,9 @@ See [Deployment & Implementation](./DEPLOYMENT_AND_IMPLEMENTATION.md) for detail
 | **Language Analyzers** | PHP, JS/TS, NestJS, React, Python | ✅ Implemented |
 | **SQL Analyzer** | TypeORM patterns, N+1, injection, transactions | ✅ Implemented |
 | **Security Analyzer** | Secrets, XSS, eval(), weak crypto detection | ✅ Implemented |
-| **MongoDB Analyzer** | Missing indexes, $regex patterns, aggregations | 🔲 Planned |
-| **Elasticsearch Analyzer** | Wildcard queries, deep pagination, mappings | 🔲 Planned |
-| **PubSub Analyzer** | Event topology and pattern validation | 🔲 Planned |
+| **MongoDB Analyzer** | Missing indexes, $regex patterns, aggregations | ✅ Implemented |
+| **Elasticsearch Analyzer** | Wildcard queries, deep pagination, mappings | ✅ Implemented |
+| **PubSub Analyzer** | Event topology and pattern validation | ✅ Implemented |
 
 ### Integrations
 

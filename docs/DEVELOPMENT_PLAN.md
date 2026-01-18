@@ -1,6 +1,6 @@
 # Workiz PR Agent - Development Plan & Tracking
 
-> **Status**: ✅ Phase 4B.12 Complete - Persistent Prompt Storage for Fix in Cursor  
+> **Status**: ✅ Phase 4B.11 Complete - Comment Format Unification + Missing Analyzers  
 > **Last Updated**: January 18, 2026  
 > **Total Phases**: 8  
 > **Estimated Duration**: 8-10 weeks
@@ -771,30 +771,35 @@ async def run(self):
 - Updated `_publish_inline_suggestion_comments()` and `_publish_inline_review_comments()`
 - Files: `workiz_pr_code_suggestions.py`, `workiz_pr_reviewer.py`
 
-### Phase 4B.11: Comment Format Unification 🔲 TODO
+### Phase 4B.11: Comment Format Unification + Missing Analyzers ✅ COMPLETED
 
-**Problem:** Static analyzer comments (`format_inline_comment()`) and AI suggestion comments (`format_suggestion_comment()`) have different formats:
+**Problem:** Static analyzer comments (`format_inline_comment()`) and AI suggestion comments (`format_suggestion_comment()`) had different formats, and three analyzers (MongoDB, Elasticsearch, PubSub) were still planned.
 
-| Feature | Static Analyzer | AI Suggestion |
-|---------|-----------------|---------------|
-| Title | `**[RULE_ID] Title**` | `**Summary**` |
-| Severity | `**High Severity**` | `*Label* (e.g., "Enhancement")` |
-| Code Diff | None | Collapsible code diff |
-| Structure | Title → Severity → Description | Title → Label → Description → Diff |
+**Solution:** Unified comment format to match AI suggestion style, and implemented all three missing analyzers.
 
-**Goal:** Unify both formats so they:
-1. Look identical in structure and styling
-2. Use the same severity/issue classification (High/Medium/Low)
-3. Enable consistent filtering and tooling based on severity
-4. Map AI suggestion labels to severity levels
+**Changes:**
+1. Refactored `format_inline_comment()` in `inline_comment_formatter.py` to match `format_suggestion_comment()` structure
+2. Static analyzer comments now have: Bold title → *Severity* → Description → Collapsible code diff → Action buttons
+3. Added `code_snippet` parameter to static analyzer findings for code context display
+4. Implemented `MongoDBAnalyzer` with 7 rules (MONGO001-MONGO007)
+5. Implemented `ElasticsearchAnalyzer` with 7 rules (ES001-ES007)
+6. Implemented `PubSubAnalyzer` with 7 rules (PUBSUB001-PUBSUB007)
+7. Integrated all analyzers into `workiz_pr_reviewer.py`
 
-**Tasks:**
-- [ ] Define unified severity mapping (AI labels → severity levels)
-- [ ] Create single `format_unified_inline_comment()` function
-- [ ] Update static analyzer findings to use unified format
-- [ ] Update AI suggestions to use unified format  
-- [ ] Add optional code diff collapsible section to both
-- [ ] Update documentation
+**New Analyzer Rules:**
+
+| Analyzer | Rule IDs | Key Patterns |
+|----------|----------|--------------|
+| MongoDB | MONGO001-007 | Missing index hints, $regex without anchor, unbounded find, $where usage |
+| Elasticsearch | ES001-007 | Leading wildcards, deep pagination, match_all without size, script injection |
+| PubSub | PUBSUB001-007 | Missing @PubSubAsyncAcknowledge, sync handlers, missing error handling |
+
+**Files Changed:**
+- `pr_agent/tools/inline_comment_formatter.py` - Unified format
+- `pr_agent/tools/workiz_pr_reviewer.py` - Code snippet support, new analyzer integration
+- `pr_agent/tools/mongodb_analyzer.py` - New file
+- `pr_agent/tools/elasticsearch_analyzer.py` - New file
+- `pr_agent/tools/pubsub_analyzer.py` - New file
 
 ### Phase 4B.12: Persistent Prompt Storage for Fix in Cursor ✅ COMPLETED
 

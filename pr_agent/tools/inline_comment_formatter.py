@@ -23,6 +23,7 @@ def format_inline_comment(
     file_path: str,
     line: int,
     suggestion: str = "",
+    code_snippet: str = "",
     cursor_redirect_url: str = "",
     org: str = "",
     repo: str = "",
@@ -33,7 +34,10 @@ def format_inline_comment(
     finding_id: Optional[str] = None,
 ) -> str:
     """
-    Format a single inline review comment in Bugbot style.
+    Format a single inline review comment matching the AI suggestion style.
+    
+    This produces the same visual format as format_suggestion_comment() for
+    consistency across all inline comments (static analyzer and AI suggestions).
     
     Args:
         title: Issue title (e.g., "Use const instead of let")
@@ -41,7 +45,8 @@ def format_inline_comment(
         description: Detailed explanation of the issue
         file_path: Path to the file relative to repo root
         line: Line number where the issue was found
-        suggestion: Suggested fix (optional)
+        suggestion: Suggested fix text (optional)
+        code_snippet: Problematic code snippet (optional)
         cursor_redirect_url: Base URL for cursor redirect service
         org: GitHub organization name
         repo: Repository name
@@ -56,18 +61,36 @@ def format_inline_comment(
     """
     body_parts = []
     
-    title_with_rule = f"**{title}**"
-    if rule_id:
-        title_with_rule = f"**[{rule_id}] {title}**"
-    body_parts.append(title_with_rule)
+    title_text = f"[{rule_id}] {title}" if rule_id else title
+    body_parts.append(f"**{title_text}**")
     
     severity_normalized = _normalize_severity(severity)
-    body_parts.append(f"\n**{severity_normalized} Severity**")
+    body_parts.append(f"\n*{severity_normalized} Severity*")
     
     body_parts.append(f"\n{description}")
     
-    if suggestion:
-        body_parts.append(f"\n**Suggested fix:** {suggestion}")
+    if code_snippet or suggestion:
+        ext = file_path.split(".")[-1] if "." in file_path else ""
+        lang = _get_language_for_extension(ext)
+        
+        body_parts.append("\n<details>")
+        body_parts.append("<summary>Show suggested change</summary>")
+        body_parts.append("")
+        
+        if code_snippet:
+            body_parts.append("**Current:**")
+            body_parts.append(f"```{lang}")
+            body_parts.append(code_snippet.strip())
+            body_parts.append("```")
+            body_parts.append("")
+        
+        if suggestion:
+            body_parts.append("**Suggested:**")
+            body_parts.append(f"```{lang}")
+            body_parts.append(suggestion.strip())
+            body_parts.append("```")
+        
+        body_parts.append("</details>")
     
     buttons = _build_action_buttons(
         title=title,
@@ -87,7 +110,7 @@ def format_inline_comment(
         finding_id=finding_id,
     )
     if buttons:
-        body_parts.append(f"\n{buttons}")
+        body_parts.append(f"\n{' | '.join(buttons.split(' | '))}")
     
     return "\n".join(body_parts)
 
