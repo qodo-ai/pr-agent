@@ -37,7 +37,25 @@ jobs:
       - name: Inject API key
         working-directory: cursor-extension
         run: |
+          if [ -z "${{ secrets.EXTENSION_API_KEY }}" ]; then
+            echo "❌ ERROR: EXTENSION_API_KEY secret is not set!"
+            exit 1
+          fi
+          
+          if [ ! -f "out/extension.js" ]; then
+            echo "❌ ERROR: out/extension.js not found!"
+            exit 1
+          fi
+          
+          echo "🔧 Injecting API key into extension..."
           sed -i "s/__EXTENSION_API_KEY__/${{ secrets.EXTENSION_API_KEY }}/g" out/extension.js
+          
+          if grep -q "__EXTENSION_API_KEY__" out/extension.js; then
+            echo "❌ ERROR: Placeholder still present after sed replacement!"
+            exit 1
+          fi
+          
+          echo "✅ API key successfully injected"
       
       - name: Install vsce
         run: npm install -g @vscode/vsce
@@ -64,7 +82,7 @@ jobs:
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       
       - name: Create Release
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: cursor-ext-v${{ steps.version.outputs.version }}

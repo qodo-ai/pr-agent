@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as https from 'https';
 
 const GITHUB_REPO = 'Workiz/workiz-pr-agent';
-const CURRENT_VERSION = '1.0.17';
+const CURRENT_VERSION = '1.0.19';
 const EXTENSION_API_KEY = '__EXTENSION_API_KEY__';  // Replaced at build time
 
 let outputChannel: vscode.OutputChannel;
