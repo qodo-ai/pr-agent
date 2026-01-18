@@ -1,0 +1,68 @@
+name: deploy cloud run service to staging
+on:
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: "workiz-development"
+  PROJECT_NUMBER: "791610978826"
+  REGION: "us-central1"
+  SERVICE_NAME: "pr-agent-staging"
+  VPC_CONNECTOR: "staging-connector"
+  CLOUD_SQL_INSTANCE: "workiz-development:us-central1:copilot-poc"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: deploy cloud run service to staging
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/gh-pool/providers/gh-provider
+          service_account: github-actions-service-account@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
+          
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+      
+      - name: Run Database Migrations
+        run: |
+          # Install Cloud SQL Proxy
+          curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          
+          # Start Cloud SQL Proxy in background
+          ./cloud-sql-proxy ${{ env.CLOUD_SQL_INSTANCE }} --port 5432 &
+          PROXY_PID=$!
+          sleep 5
+          
+          # Install Python dependencies
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+          # Run migrations
+          export DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5432/pr_agent"
+          python scripts/run_migrations.py
+          
+          # Kill proxy
+          kill $PROXY_PID
+        
+      - name: Build and Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --source . \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --vpc-connector projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/${{ env.VPC_CONNECTOR }} \
+            --vpc-egress private-ranges-only \
+            --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
+            --set-env-vars "ENV=staging,PORT=8080,LOG_LEVEL=INFO,LLM_PROVIDER=google,LLM_MODEL=gemini-3-pro,GITHUB_APP_ID=2636208,WORKIZ_ORG=Workiz,WORKIZ_MAIN_BRANCHES=workiz.com,main,master,DATABASE_URL=postgresql://pr_agent:${{ secrets.PR_AGENT_DB_PASSWORD }}@/pr_agent?host=/cloudsql/${{ env.CLOUD_SQL_INSTANCE }}" \
+            --set-secrets "GOOGLE_API_KEY=PR_AGENT_GOOGLE_API_KEY:latest,GITHUB_APP_PRIVATE_KEY_BASE64=PR_AGENT_GITHUB_APP_PRIVATE_KEY_BASE64:latest,GITHUB_WEBHOOK_SECRET=PR_AGENT_GITHUB_WEBHOOK_SECRET:latest,EXTENSION_API_KEY=PR_AGENT_EXTENSION_API_KEY:latest" \
+            --memory 1Gi \
+            --cpu 1 \
+            --timeout 300 \
+            --min-instances 0 \
+            --max-instances 10
