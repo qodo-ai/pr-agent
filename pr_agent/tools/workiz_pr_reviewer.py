@@ -26,6 +26,9 @@ from pr_agent.tools.language_analyzers import get_analyzer_for_file
 from pr_agent.tools.custom_rules_engine import get_rules_engine
 from pr_agent.tools.sql_analyzer import get_sql_analyzer
 from pr_agent.tools.security_analyzer import get_security_analyzer
+from pr_agent.tools.mongodb_analyzer import get_mongodb_analyzer
+from pr_agent.tools.elasticsearch_analyzer import get_elasticsearch_analyzer
+from pr_agent.tools.pubsub_analyzer import get_pubsub_analyzer
 from pr_agent.tools.comment_formatter import CommentFormatter, add_cursor_links_to_review_text
 from pr_agent.tools.inline_comment_formatter import format_inline_comment
 
@@ -267,6 +270,9 @@ class WorkizPRReviewer(PRReviewer):
         
         sql_analyzer = get_sql_analyzer()
         security_analyzer = get_security_analyzer()
+        mongodb_analyzer = get_mongodb_analyzer()
+        elasticsearch_analyzer = get_elasticsearch_analyzer()
+        pubsub_analyzer = get_pubsub_analyzer()
         
         skipped_files = 0
         for file in files:
@@ -299,6 +305,7 @@ class WorkizPRReviewer(PRReviewer):
                                 "file": file_path,
                                 "line": finding.line_start,
                                 "suggestion": finding.suggestion,
+                                "code_snippet": finding.code_snippet,
                             })
                     except Exception as e:
                         get_logger().warning(
@@ -317,6 +324,7 @@ class WorkizPRReviewer(PRReviewer):
                             "file": file_path,
                             "line": finding.line_start,
                             "suggestion": finding.suggestion,
+                            "code_snippet": finding.code_snippet,
                         })
                 except Exception as e:
                     get_logger().warning(
@@ -335,11 +343,69 @@ class WorkizPRReviewer(PRReviewer):
                             "file": file_path,
                             "line": finding.line_start,
                             "suggestion": finding.suggestion,
+                            "code_snippet": finding.code_snippet,
                             "cwe_id": finding.cwe_id,
                         })
                 except Exception as e:
                     get_logger().warning(
                         "Security analyzer failed",
+                        extra={"context": {"file": file_path, "error": str(e)}}
+                    )
+                
+                try:
+                    mongodb_findings = await mongodb_analyzer.analyze(content, file_path)
+                    for finding in mongodb_findings:
+                        findings.append({
+                            "analyzer": "MongoDBAnalyzer",
+                            "rule_id": finding.rule_id,
+                            "message": finding.message,
+                            "severity": finding.severity.value,
+                            "file": file_path,
+                            "line": finding.line_start,
+                            "suggestion": finding.suggestion,
+                            "code_snippet": finding.code_snippet,
+                        })
+                except Exception as e:
+                    get_logger().warning(
+                        "MongoDB analyzer failed",
+                        extra={"context": {"file": file_path, "error": str(e)}}
+                    )
+                
+                try:
+                    es_findings = await elasticsearch_analyzer.analyze(content, file_path)
+                    for finding in es_findings:
+                        findings.append({
+                            "analyzer": "ElasticsearchAnalyzer",
+                            "rule_id": finding.rule_id,
+                            "message": finding.message,
+                            "severity": finding.severity.value,
+                            "file": file_path,
+                            "line": finding.line_start,
+                            "suggestion": finding.suggestion,
+                            "code_snippet": finding.code_snippet,
+                        })
+                except Exception as e:
+                    get_logger().warning(
+                        "Elasticsearch analyzer failed",
+                        extra={"context": {"file": file_path, "error": str(e)}}
+                    )
+                
+                try:
+                    pubsub_findings = await pubsub_analyzer.analyze(content, file_path)
+                    for finding in pubsub_findings:
+                        findings.append({
+                            "analyzer": "PubSubAnalyzer",
+                            "rule_id": finding.rule_id,
+                            "message": finding.message,
+                            "severity": finding.severity.value,
+                            "file": file_path,
+                            "line": finding.line_start,
+                            "suggestion": finding.suggestion,
+                            "code_snippet": finding.code_snippet,
+                        })
+                except Exception as e:
+                    get_logger().warning(
+                        "PubSub analyzer failed",
                         extra={"context": {"file": file_path, "error": str(e)}}
                     )
                     
@@ -459,6 +525,7 @@ class WorkizPRReviewer(PRReviewer):
             - file: File path
             - line: Line number
             - suggestion: Suggested fix (optional)
+            - code_snippet: Problematic code snippet (optional)
             - rule_id: Rule/analyzer identifier
             - source: "analyzer" or "rule"
         """
@@ -472,6 +539,7 @@ class WorkizPRReviewer(PRReviewer):
                 "file": f.get("file", "unknown"),
                 "line": f.get("line", 1),
                 "suggestion": f.get("suggestion", ""),
+                "code_snippet": f.get("code_snippet", ""),
                 "rule_id": f.get("rule_id", ""),
                 "source": "analyzer",
             })
@@ -484,6 +552,7 @@ class WorkizPRReviewer(PRReviewer):
                 "file": f.get("file", "unknown"),
                 "line": f.get("line", 1),
                 "suggestion": f.get("suggestion", ""),
+                "code_snippet": f.get("code_snippet", ""),
                 "rule_id": f.get("rule", ""),
                 "source": "rule",
             })
@@ -685,6 +754,7 @@ class WorkizPRReviewer(PRReviewer):
                 file_path=adjusted_finding["file"],
                 line=adjusted_finding["line"],
                 suggestion=adjusted_finding.get("suggestion", ""),
+                code_snippet=adjusted_finding.get("code_snippet", ""),
                 cursor_redirect_url=self.cursor_redirect_url if self.cursor_redirect_url else "",
                 org=self._org,
                 repo=self._repo,
