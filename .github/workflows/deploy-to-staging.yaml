@@ -50,7 +50,7 @@ jobs:
             --vpc-connector projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/${{ env.VPC_CONNECTOR }} \
             --vpc-egress private-ranges-only \
             --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
-            --set-env-vars "ENV=staging,PORT=8080,LOG_LEVEL=INFO,LLM_PROVIDER=google,LLM_MODEL=gemini-3-pro,GITHUB_APP_ID=2636208,WORKIZ_ORG=Workiz,WORKIZ_MAIN_BRANCHES=^:^workiz.com:main:master,DATABASE_URL=postgresql://pr_agent:${{ secrets.PR_AGENT_DB_PASSWORD }}@/pr_agent?host=/cloudsql/${{ env.CLOUD_SQL_INSTANCE }}" \
+            --set-env-vars "ENV=staging,LOG_LEVEL=INFO,LLM_PROVIDER=google,LLM_MODEL=gemini-3-pro,GITHUB_APP_ID=2636208,WORKIZ_ORG=Workiz,WORKIZ_MAIN_BRANCHES=^:^workiz.com:main:master,DATABASE_URL=postgresql://pr_agent:${{ secrets.PR_AGENT_DB_PASSWORD }}@/pr_agent?host=/cloudsql/${{ env.CLOUD_SQL_INSTANCE }}" \
             --set-secrets "GOOGLE_API_KEY=PR_AGENT_GOOGLE_API_KEY:latest,GITHUB_APP_PRIVATE_KEY_BASE64=PR_AGENT_GITHUB_APP_PRIVATE_KEY_BASE64:latest,GITHUB_WEBHOOK_SECRET=PR_AGENT_GITHUB_WEBHOOK_SECRET:latest,EXTENSION_API_KEY=PR_AGENT_EXTENSION_API_KEY:latest" \
             --memory 1Gi \
             --cpu 1 \
