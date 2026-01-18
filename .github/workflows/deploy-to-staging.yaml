@@ -41,18 +41,15 @@ jobs:
         
       - name: Build and Deploy to Cloud Run
         run: |
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
+          gcloud run deploy porygon-cr \
             --source . \
-            --region ${{ env.REGION }} \
+            --region us-central1 \
             --project ${{ env.PROJECT_ID }} \
             --platform managed \
             --allow-unauthenticated \
-            --vpc-connector projects/${{ env.PROJECT_ID }}/locations/${{ env.REGION }}/connectors/${{ env.VPC_CONNECTOR }} \
-            --vpc-egress private-ranges-only \
             --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
-            --memory 1Gi \
-            --set-env-vars "NODE_ENV=staging" \
+            --memory 2Gi \
             --cpu 1 \
             --timeout 300 \
             --min-instances 0 \
-            --max-instances 10
+            --max-instances 5

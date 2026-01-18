@@ -30,7 +30,7 @@ uvicorn==0.22.0
 tenacity==8.2.3
 
 # Database (PostgreSQL + pgvector)
-psycopg[binary]==3.2.1
+psycopg[binary]==3.2.13
 psycopg-pool==3.2.1
 pgvector==0.2.5
 
