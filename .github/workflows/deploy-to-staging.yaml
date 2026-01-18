@@ -45,7 +45,7 @@ jobs:
           pip install -r requirements.txt
           
           # Run migrations
-          export DATABASE_URL="postgresql://postgres:${{ secrets.DB_PASSWORD }}@localhost:5432/pr_agent"
+          export DATABASE_URL="postgresql://pr_agent:${{ secrets.PR_AGENT_DB_PASSWORD }}@localhost:5432/pr_agent"
           python scripts/run_migrations.py
           
           # Kill proxy
