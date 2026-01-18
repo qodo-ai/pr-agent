@@ -49,16 +49,24 @@ prompt_store = DefaultDictWithTimeout(default_factory=lambda: None, ttl=3600)
 
 
 @router.get("/api/v1/prompt/{prompt_id}")
-async def get_prompt(prompt_id: str):
+async def get_prompt_endpoint(prompt_id: str, accessed_by: Optional[str] = Query(None, description="GitHub username")):
     """
     Retrieve a stored prompt by ID.
     
-    Prompts are stored temporarily (1 hour TTL) when generating Cursor redirect URLs.
+    Prompts are stored in the database (with in-memory fallback) when generating Cursor redirect URLs.
     This allows passing long prompts without hitting URL length limits.
+    Access is tracked for analytics when using DB storage.
     """
-    prompt_data = prompt_store.get(prompt_id)
+    from pr_agent.db.cursor_prompts import get_prompt as db_get_prompt
+    
+    prompt_data = db_get_prompt(prompt_id, accessed_by=accessed_by)
+    
     if not prompt_data:
-        raise HTTPException(status_code=404, detail="Prompt not found or expired")
+        prompt_data = prompt_store.get(prompt_id)
+        if not prompt_data:
+            raise HTTPException(status_code=404, detail="Prompt not found or expired")
+        return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
+    
     return {"prompt": prompt_data["prompt"], "file": prompt_data.get("file"), "line": prompt_data.get("line")}
 
 
@@ -535,6 +543,12 @@ async def cursor_redirect(
     prompt: str = Query(..., description="URL-encoded prompt for Cursor AI"),
     file: Optional[str] = Query(None, description="File path"),
     line: Optional[int] = Query(None, description="Line number"),
+    repository: Optional[str] = Query(None, description="Repository name (org/repo)"),
+    pr_number: Optional[int] = Query(None, description="PR number"),
+    pr_url: Optional[str] = Query(None, description="Full PR URL"),
+    comment_type: Optional[str] = Query(None, description="Comment type (static_analyzer, ai_suggestion)"),
+    severity: Optional[str] = Query(None, description="Severity level"),
+    finding_id: Optional[str] = Query(None, description="Original finding/suggestion ID"),
 ):
     """
     Redirect endpoint for opening Cursor IDE with our extension.
@@ -550,10 +564,27 @@ async def cursor_redirect(
     GitHub blocks custom URL schemes in comments, so we use this
     HTTPS endpoint as an intermediary.
     
-    Note: Prompts are stored server-side and referenced by ID to avoid URL length limits.
+    Note: Prompts are stored server-side (DB with in-memory fallback) and referenced by ID 
+    to avoid URL length limits. Full tracking is available when DB is configured.
     """
-    prompt_id = str(uuid.uuid4())
-    prompt_store[prompt_id] = {"prompt": prompt, "file": file, "line": line}
+    from pr_agent.db.cursor_prompts import save_prompt as db_save_prompt
+    
+    prompt_id = db_save_prompt(
+        prompt=prompt,
+        file_path=file,
+        line_number=line,
+        repository=repository,
+        pr_number=pr_number,
+        pr_url=pr_url,
+        comment_type=comment_type,
+        severity=severity,
+        finding_id=finding_id,
+    )
+    
+    if not prompt_id:
+        prompt_id = str(uuid.uuid4())
+        prompt_store[prompt_id] = {"prompt": prompt, "file": file, "line": line}
+        get_logger().debug("Using in-memory prompt storage (DB unavailable)", extra={"context": {"prompt_id": prompt_id}})
     
     base_url = str(request.base_url).rstrip('/')
     

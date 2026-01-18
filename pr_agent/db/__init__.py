@@ -19,6 +19,7 @@ from .api_usage import (
     list_available_models_with_pricing,
 )
 from .review_history import save_review, get_review_history, get_review_stats
+from .cursor_prompts import save_prompt, get_prompt, get_prompt_analytics
 
 __all__ = [
     "get_db_connection",
@@ -33,5 +34,8 @@ __all__ = [
     "save_review",
     "get_review_history",
     "get_review_stats",
+    "save_prompt",
+    "get_prompt",
+    "get_prompt_analytics",
 ]
 

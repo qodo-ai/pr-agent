@@ -518,6 +518,8 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
             improved_code = adjusted_suggestion.get('improved_code', '').strip()
             side = adjusted_suggestion.get('side', 'RIGHT')
             
+            suggestion_id = f"{label}_{file_path}_{line_start}"
+            
             body = format_suggestion_comment(
                 summary=summary,
                 description=re.sub(r'<br\s*/?>', '\n', content),
@@ -531,6 +533,9 @@ class WorkizPRCodeSuggestions(PRCodeSuggestions):
                 org=self._org,
                 repo=self._repo,
                 branch=self._branch,
+                pr_number=self.git_provider.pr_num if hasattr(self.git_provider, 'pr_num') else None,
+                pr_url=self.pr_url,
+                suggestion_id=suggestion_id,
             )
             
             comments.append({

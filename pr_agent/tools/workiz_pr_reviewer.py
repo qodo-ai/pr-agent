@@ -676,6 +676,8 @@ class WorkizPRReviewer(PRReviewer):
             
             side = adjusted_finding.get('side', 'RIGHT')
             
+            finding_id = f"{adjusted_finding.get('rule_id', 'unknown')}_{adjusted_finding['file']}_{adjusted_finding['line']}"
+            
             body = format_inline_comment(
                 title=adjusted_finding["title"],
                 severity=adjusted_finding["severity"],
@@ -688,6 +690,9 @@ class WorkizPRReviewer(PRReviewer):
                 repo=self._repo,
                 branch=self._branch,
                 rule_id=adjusted_finding.get("rule_id", ""),
+                pr_number=self.git_provider.pr_num if hasattr(self.git_provider, 'pr_num') else None,
+                pr_url=self.pr_url,
+                finding_id=finding_id,
             )
             
             comments.append({
