@@ -50,6 +50,7 @@ jobs:
             --set-cloudsql-instances ${{ env.CLOUD_SQL_INSTANCE }} \
             --memory 2Gi \
             --cpu 1 \
+            --set-env-vars "ENV=staging" \
             --timeout 300 \
             --min-instances 0 \
             --max-instances 5
