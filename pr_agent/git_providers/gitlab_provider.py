@@ -57,7 +57,8 @@ class GitLabProvider(GitProvider):
             else:  # private_token
                 self.gl = gitlab.Gitlab(
                     url=gitlab_url,
-                    private_token=gitlab_access_token
+                    private_token=gitlab_access_token,
+                    ssl_verify=ssl_verify
                 )
         except Exception as e:
             get_logger().error(f"Failed to create GitLab instance: {e}")
