@@ -66,6 +66,8 @@ class LiteLLMAIHandler(BaseAiHandler):
             self.api_base = get_settings().openai.api_base
         if get_settings().get("ANTHROPIC.KEY", None):
             litellm.anthropic_key = get_settings().anthropic.key
+        if get_settings().get("ANTHROPIC.API_BASE", None):
+            os.environ["ANTHROPIC_API_BASE"] = get_settings().anthropic.api_base
         if get_settings().get("COHERE.KEY", None):
             litellm.cohere_key = get_settings().cohere.key
         if get_settings().get("GROQ.KEY", None):

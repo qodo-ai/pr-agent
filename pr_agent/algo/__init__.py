@@ -200,6 +200,10 @@ MAX_TOKENS = {
     "mistral/codestral-mamba-latest": 256000,
     "codestral/codestral-latest": 8191,
     "codestral/codestral-2405": 8191,
+    # Minimax Anthropic-compatible models
+    'anthropic/MiniMax-M2.1': 200000,
+    'anthropic/MiniMax-M2.1-lightning': 200000,
+    'anthropic/MiniMax-M2': 200000,
 }
 
 USER_MESSAGE_ONLY_MODELS = [

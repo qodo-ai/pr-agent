@@ -1,8 +1,8 @@
-name: 'Codium PR Agent'
-description: 'Summarize, review and suggest improvements for pull requests'
+name: 'Custom PR Agent (Minimax)'
+description: 'PR reviews using Minimax/Anthropic-compatible LLM'
 branding:
   icon: 'award'
   color: 'green'
 runs:
   using: 'docker'
-  image: 'Dockerfile.github_action_dockerhub'
+  image: 'docker://ghcr.io/owen26/pr-agent:latest'

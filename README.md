@@ -61,6 +61,51 @@ pr-agent --pr_url https://github.com/owner/repo/pull/123 review
 - [BitBucket app installation](https://qodo-merge-docs.qodo.ai/installation/bitbucket/)
 - [Azure DevOps setup](https://qodo-merge-docs.qodo.ai/installation/azure/)
 
+## Forked Extras
+
+This fork adds **custom Anthropic API endpoint support** for providers like [Minimax](https://platform.minimax.io/).
+
+**What's different:**
+- Added `ANTHROPIC.API_BASE` config for custom endpoints
+- Pre-built GHCR image for private repo usage
+- Minimax models in token registry
+
+**Quick setup** (`.github/workflows/pr-agent.yaml`):
+
+```yaml
+name: PR Agent
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+
+jobs:
+  pr_agent:
+    if: ${{ github.event.sender.type != 'Bot' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: owen26/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          ANTHROPIC.API_BASE: ${{ secrets.ANTHROPIC_API_BASE }}  # Optional, for custom endpoints
+          config.model: ${{ vars.PR_AGENT_MODEL || 'anthropic/MiniMax-M2.1' }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+```
+
+**Secrets/Variables to set:**
+| Name | Type | Example |
+|------|------|---------|
+| `ANTHROPIC_KEY` | Secret | Your API key |
+| `ANTHROPIC_API_BASE` | Secret | `https://api.minimax.io/anthropic` (optional) |
+| `PR_AGENT_MODEL` | Variable | `anthropic/MiniMax-M2.1` (optional, has default)
+
 [//]: # (## News and Updates)
 
 [//]: # ()
