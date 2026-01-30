@@ -1,0 +1,167 @@
+name: Package Standalone Manylinux Archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: "Python standalone build tag (e.g. 20250317)"
+        required: false
+        default: "20250317"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build manylinux_2_34 standalone archive
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux_2_34_x86_64
+    env:
+      PYTHON_STANDALONE_TAG: ${{ github.event.inputs.python_version || '20250317' }}
+
+    steps:
+      - name: Install system utilities
+        run: |
+          dnf install -y zstd tar gzip
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download portable CPython (python-build-standalone)
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="${PYTHON_STANDALONE_TAG}"
+          ASSET="cpython-3.12.9+${RELEASE_TAG}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+          URL="https://github.com/astral-sh/python-build-standalone/releases/download/${RELEASE_TAG}/${ASSET}"
+          echo "Downloading ${URL}"
+          curl -fSL --retry 4 --retry-delay 5 -o /tmp/cpython.tar.gz "${URL}"
+          mkdir -p /tmp/standalone
+          tar -xzf /tmp/cpython.tar.gz -C /tmp/standalone
+          /tmp/standalone/python/bin/python3 --version
+
+      - name: Create virtual environment and install dependencies
+        run: |
+          set -euo pipefail
+          PYTHON=/tmp/standalone/python/bin/python3
+
+          # Create a venv inside the standalone tree so paths stay relative
+          ${PYTHON} -m venv /tmp/standalone/venv
+          VENV_PIP=/tmp/standalone/venv/bin/pip
+          VENV_PYTHON=/tmp/standalone/venv/bin/python
+
+          # Upgrade pip/setuptools/wheel inside the venv
+          ${VENV_PIP} install --upgrade pip setuptools wheel
+
+          # Install the project and all its dependencies
+          ${VENV_PIP} install --no-cache-dir .
+
+          # Smoke-test: the entry-point must be importable
+          ${VENV_PYTHON} -c "from pr_agent.cli import run; print('import ok')"
+
+      - name: Relocate tree and write launcher scripts
+        run: |
+          set -euo pipefail
+          PKG=/tmp/pr-agent-standalone
+
+          mkdir -p "${PKG}"
+
+          # Copy portable python interpreter
+          cp -a /tmp/standalone/python "${PKG}/python"
+
+          # Copy the virtual environment
+          cp -a /tmp/standalone/venv "${PKG}/venv"
+
+          # Copy the project source for reference / settings
+          cp -a pr_agent "${PKG}/pr_agent"
+          cp -a pyproject.toml requirements.txt "${PKG}/"
+          [ -d docs ] && cp -a docs "${PKG}/docs" || true
+
+          # ── launcher: bin/pr-agent ──
+          mkdir -p "${PKG}/bin"
+          cat > "${PKG}/bin/pr-agent" << 'LAUNCHER'
+          #!/usr/bin/env bash
+          # Standalone pr-agent launcher – works offline / air-gapped.
+          set -euo pipefail
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+          export VIRTUAL_ENV="${ROOT}/venv"
+          export PATH="${ROOT}/venv/bin:${ROOT}/python/bin:${PATH}"
+          export PYTHONDONTWRITEBYTECODE=1
+
+          exec python -m pr_agent.cli "$@"
+          LAUNCHER
+          chmod +x "${PKG}/bin/pr-agent"
+
+          # ── launcher: bin/pr-agent-server (gunicorn/uvicorn GitHub app) ──
+          cat > "${PKG}/bin/pr-agent-server" << 'LAUNCHER'
+          #!/usr/bin/env bash
+          # Start the PR-Agent GitHub-app server offline.
+          set -euo pipefail
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+          export VIRTUAL_ENV="${ROOT}/venv"
+          export PATH="${ROOT}/venv/bin:${ROOT}/python/bin:${PATH}"
+          export PYTHONDONTWRITEBYTECODE=1
+
+          exec python -m gunicorn \
+            -k uvicorn.workers.UvicornWorker \
+            -c pr_agent.servers.gunicorn_config \
+            --forwarded-allow-ips '*' \
+            pr_agent.servers.github_app:app "$@"
+          LAUNCHER
+          chmod +x "${PKG}/bin/pr-agent-server"
+
+          # ── README ──
+          cat > "${PKG}/README" << 'DOC'
+          PR-Agent Standalone Package (manylinux_2_34 x86_64)
+          ====================================================
+
+          This archive contains a fully self-contained PR-Agent installation
+          that can run on any Linux system with glibc >= 2.34 (e.g. RHEL 9,
+          Ubuntu 22.04+, Debian 12+, Fedora 36+) without internet access.
+
+          Quick start
+          -----------
+            tar xzf pr-agent-standalone-*.tar.gz
+            cd pr-agent-standalone
+
+            # Run the CLI
+            ./bin/pr-agent --help
+
+            # Start the GitHub App server
+            ./bin/pr-agent-server
+
+          Directory layout
+          ----------------
+            bin/            Launcher scripts
+            python/         Portable CPython 3.12 interpreter
+            venv/           Pre-installed virtual environment with all dependencies
+            pr_agent/       Application source code & settings
+            pyproject.toml  Project metadata
+            requirements.txt
+
+          Configuration
+          -------------
+          Set environment variables or place a .pr_agent.toml configuration file
+          in your working directory. See the upstream docs for details:
+            https://qodo-merge-docs.qodo.ai/
+          DOC
+
+      - name: Create .tar.gz archive
+        run: |
+          set -euo pipefail
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          ARCHIVE_NAME="pr-agent-standalone-${VERSION}-manylinux_2_34-x86_64.tar.gz"
+          tar -czf "/tmp/${ARCHIVE_NAME}" -C /tmp pr-agent-standalone
+          ls -lh "/tmp/${ARCHIVE_NAME}"
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "${GITHUB_ENV}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: /tmp/${{ env.ARCHIVE_NAME }}
+          retention-days: 30
