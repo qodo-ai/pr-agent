@@ -1,6 +1,6 @@
 To run PR-Agent locally, you first need to acquire two keys:
 
-1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/), if you prefer).
+1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](../usage-guide/changing_a_model.md), if you prefer).
 2. A personal access token from your Git platform (GitHub, GitLab, BitBucket,Gitea) with repo scope. GitHub token, for example, can be issued from [here](https://github.com/settings/tokens){:target="_blank"}
 
 ## Using Docker image
@@ -87,8 +87,8 @@ Note that litellm, which is used by pr-agent, sometimes returns non-informative 
 Carefully check the api keys and tokens you provided and make sure they are correct.
 Adjustments may be needed depending on your llm provider.
 
-For example, for Azure OpenAI, additional keys are [needed](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/#azure).
-Same goes for other providers, make sure to check the [documentation](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/#changing-a-model)
+For example, for Azure OpenAI, additional keys are [needed](../usage-guide/changing_a_model.md#azure).
+Same goes for other providers, make sure to check the [documentation](../usage-guide/changing_a_model.md#changing-a-model)
 
 ## Using pip package
 

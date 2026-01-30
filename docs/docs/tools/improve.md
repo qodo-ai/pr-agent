@@ -17,7 +17,7 @@ The tool can be triggered automatically every time a new PR is [opened](../usage
 
 ___
 
-!!! note "The following features are available only for Qodo Merge 💎 users:"
+!!! note "The following features are available:"
     - The `Apply / Chat` checkbox, which interactively converts a suggestion into a committable code comment
     - The `More` checkbox to generate additional suggestions
     - On Bitbucket (Cloud & Data Center) and GitLab Server (v16 and earlier), you can invoke [More Suggestions manually](#manual-more-suggestions)
@@ -52,7 +52,7 @@ To generate more suggestions (distinct from the ones already generated), for git
 
 ### Automatic triggering
 
-To run the `improve` automatically when a PR is opened, define in a [configuration file](https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/#wiki-configuration-file):
+To run the `improve` automatically when a PR is opened, define in a [configuration file](../usage-guide/configuration_options.md#wiki-configuration-file):
 
 ```toml
 [github_app]
@@ -71,7 +71,7 @@ num_code_suggestions_per_chunk = ...
 
 ### Table vs Committable code comments
 
-Qodo Merge supports two modes for presenting code suggestions: 
+PR-Agent supports two modes for presenting code suggestions: 
 
 1) [Table](https://codium.ai/images/pr_agent/code_suggestions_as_comment_closed.png) mode 
 
@@ -84,9 +84,9 @@ The table format offers several key advantages:
 - **High-level suggestions**: High-level suggestions that aren't tied to specific code chunks are presented only in the table mode
 - **Interactive features**: Provides 'more' and 'update' functionality via clickable buttons
 - **Centralized tracking**: Shows suggestion implementation status in one place
-- **IDE integration**: Allows applying suggestions directly in your IDE via [Qodo Command](https://github.com/qodo-ai/agents)
+- **IDE integration**: Allows applying suggestions directly in your IDE via the CLI tool
 
-Table mode is the default of Qodo Merge, and is recommended approach for most users due to these benefits. 
+Table mode is the default of PR-Agent, and is recommended approach for most users due to these benefits. 
 
 ![code_suggestions_as_comment_closed.png](https://codium.ai/images/pr_agent/code_suggestions_as_comment_closed.png){width=512}
 
@@ -97,16 +97,14 @@ Teams with specific preferences can enable committable code comments mode in the
 
 ### Assessing Impact
 
->`💎 feature`
-
-Qodo Merge tracks two types of implementations for tracking implemented suggestions:
+PR-Agent tracks two types of implementations for tracking implemented suggestions:
 
 - Direct implementation - when the user directly applies the suggestion by clicking the `Apply` checkbox.
-- Indirect implementation - when the user implements the suggestion in their IDE environment. In this case, Qodo Merge will utilize, after each commit, a dedicated logic to identify if a suggestion was implemented, and will mark it as implemented.
+- Indirect implementation - when the user implements the suggestion in their IDE environment. In this case, PR-Agent will utilize, after each commit, a dedicated logic to identify if a suggestion was implemented, and will mark it as implemented.
 
 ![code_suggestions_assess_impact](https://codium.ai/images/pr_agent/code_suggestions_asses_impact.png){width=512}
 
-In post-process, Qodo Merge counts the number of suggestions that were implemented, and provides general statistics and insights about the suggestions' impact on the PR process.
+In post-process, PR-Agent counts the number of suggestions that were implemented, and provides general statistics and insights about the suggestions' impact on the PR process.
 
 ![code_suggestions_assess_impact_stats_1](https://codium.ai/images/pr_agent/code_suggestions_asses_impact_stats_1.png){width=512}
 
@@ -114,14 +112,14 @@ In post-process, Qodo Merge counts the number of suggestions that were implement
 
 ## Suggestion tracking
 
->`💎 feature. Platforms supported: GitHub, GitLab`
+`Platforms supported: GitHub, GitLab`
 
-Qodo Merge employs a novel detection system to automatically [identify](https://qodo-merge-docs.qodo.ai/core-abilities/impact_evaluation/) AI code suggestions that PR authors have accepted and implemented.
+PR-Agent employs a novel detection system to automatically identify AI code suggestions that PR authors have accepted and implemented.
 
 Accepted suggestions are also automatically documented in a dedicated wiki page called `.pr_agent_accepted_suggestions`, allowing users to track historical changes, assess the tool's effectiveness, and learn from previously implemented recommendations in the repository.
 An example [result](https://github.com/Codium-ai/pr-agent/wiki/.pr_agent_accepted_suggestions):
 
-[![pr_agent_accepted_suggestions1.png](https://qodo.ai/images/pr_agent/pr_agent_accepted_suggestions1.png){width=768}](https://github.com/Codium-ai/pr-agent/wiki/.pr_agent_accepted_suggestions)
+[![pr_agent_accepted_suggestions1.png](https://codium.ai/images/pr_agent/pr_agent_accepted_suggestions1.png){width=768}](https://github.com/Codium-ai/pr-agent/wiki/.pr_agent_accepted_suggestions)
 
 This dedicated wiki page will also serve as a foundation for future AI model improvements, allowing it to learn from historically implemented suggestions and generate more targeted, contextually relevant recommendations.
 
@@ -132,7 +130,7 @@ This feature is controlled by a boolean configuration parameter: `pr_code_sugges
 
     To initialize the wiki: navigate to `Wiki`, select `Create the first page`, then click `Save page`.
 
-    ![pr_agent_accepted_suggestions_create_first_page.png](https://qodo.ai/images/pr_agent/pr_agent_accepted_suggestions_create_first_page.png){width=768}
+    ![pr_agent_accepted_suggestions_create_first_page.png](https://codium.ai/images/pr_agent/pr_agent_accepted_suggestions_create_first_page.png){width=768}
 
     Once a wiki repo is created, the tool will automatically use this wiki for tracking suggestions.
 
@@ -166,9 +164,9 @@ Use triple quotes to write multi-line instructions. Use bullet points or numbers
 
 ### Best practices
 
-> `💎 feature. Platforms supported: GitHub, GitLab, Bitbucket`
+`Platforms supported: GitHub, GitLab, Bitbucket`
 
-Qodo Merge supports both simple and hierarchical best practices configurations to provide guidance to the AI model for generating relevant code suggestions.
+PR-Agent supports both simple and hierarchical best practices configurations to provide guidance to the AI model for generating relevant code suggestions.
 
 ???- tip "Writing effective best practices files"
     
@@ -235,7 +233,7 @@ The AI model will use this `best_practices.md` file as a reference, and in case 
 #### Global hierarchical best practices
 
 
-For organizations managing multiple repositories with different requirements, Qodo Merge supports a hierarchical best practices system using a dedicated global configuration repository.
+For organizations managing multiple repositories with different requirements, PR-Agent supports a hierarchical best practices system using a dedicated global configuration repository.
 
 **Supported scenarios:**
 
@@ -323,7 +321,7 @@ For organizations managing multiple repositories with different requirements, Qo
 
 ???- info "Best practices priority and fallback behavior"
 
-    When global best practices are enabled, Qodo Merge follows this priority order:
+    When global best practices are enabled, PR-Agent follows this priority order:
     
     1\. **Primary**: Global hierarchical best practices from `pr-agent-settings` repository:
     
@@ -344,35 +342,8 @@ For organizations managing multiple repositories with different requirements, Qo
 ???- info "Edge cases and behavior"
 
     - **Missing paths**: If specified paths in `metadata.yaml` don't exist in the file system, those paths are skipped
-    - **Monorepo subproject matching**: For monorepos, Qodo Merge automatically matches PR file paths against subproject paths to apply relevant best practices
+    - **Monorepo subproject matching**: For monorepos, PR-Agent automatically matches PR file paths against subproject paths to apply relevant best practices
     - **Multiple group inheritance**: Repositories can inherit from multiple groups, and all applicable best practices are combined
-
-[//]: # (#### Best practices for multiple languages)
-
-[//]: # ()
-[//]: # (For a git organization working with multiple programming languages, you can maintain a centralized global `best_practices.md` file containing language-specific guidelines.)
-
-[//]: # (When reviewing pull requests, Qodo Merge automatically identifies the programming language and applies the relevant best practices from this file.)
-
-[//]: # ()
-[//]: # (To do this, structure your `best_practices.md` file using the following format:)
-
-[//]: # ()
-[//]: # (```)
-
-[//]: # (# [Python])
-
-[//]: # (...)
-
-[//]: # (# [Java])
-
-[//]: # (...)
-
-[//]: # (# [JavaScript])
-
-[//]: # (...)
-
-[//]: # (```)
 
 ???- info "Dedicated label for best practices suggestions"
 
@@ -392,9 +363,9 @@ For organizations managing multiple repositories with different requirements, Qo
 
 ### Auto best practices
 
->`💎 feature. Platforms supported: GitHub.`
+`Platforms supported: GitHub.`
 
-`Auto best practices` is a novel Qodo Merge capability that:
+`Auto best practices` is a novel PR-Agent capability that:
 
 1. Identifies recurring patterns from accepted suggestions
 2. **Automatically** generates [best practices page](https://github.com/qodo-ai/pr-agent/wiki/.pr_agent_auto_best_practices) based on what your team consistently values
@@ -406,8 +377,7 @@ The system maintains two analysis phases:
 - Open exploration for new issues
 - Targeted checking against established best practices
 
-Note that when a [custom best practices](https://qodo-merge-docs.qodo.ai/tools/improve/#best-practices) exist, Qodo Merge will still generate an 'auto best practices' wiki file, though it won't use it in the `improve` tool.
-Learn more about utilizing 'auto best practices' in our [detailed guide](https://qodo-merge-docs.qodo.ai/core-abilities/auto_best_practices/).
+Note that when a [custom best practices](./improve.md#best-practices) exist, PR-Agent will still generate an 'auto best practices' wiki file, though it won't use it in the `improve` tool.
 
 #### Relevant configurations
 
@@ -433,8 +403,6 @@ The `improve` tool will combine best practices from all available sources - glob
 
 ### Combining 'extra instructions' and 'best practices'
 
-> `💎 feature`
-
 The `extra instructions` configuration is more related to the `improve` tool prompt. It can be used, for example, to avoid specific suggestions ("Don't suggest to add try-except block", "Ignore changes in toml files", ...) or to emphasize specific aspects or formats ("Answer in Japanese", "Give only short suggestions", ...)
 
 In contrast, the `best_practices.md` file is a general guideline for the way code should be written in the repo.
@@ -457,7 +425,7 @@ In such cases, we recommend prioritizing the suggestion's detailed description, 
 
 ### Dual publishing mode
 
-Our recommended approach for presenting code suggestions is through a [table](https://qodo-merge-docs.qodo.ai/tools/improve/#overview) (`--pr_code_suggestions.commitable_code_suggestions=false`).
+Our recommended approach for presenting code suggestions is through a [table](./improve.md#overview) (`--pr_code_suggestions.commitable_code_suggestions=false`).
 This method significantly reduces the PR footprint and allows for quick and easy digestion of multiple suggestions.
 
 We also offer a complementary **dual publishing mode**. When enabled, suggestions exceeding a certain score threshold are not only displayed in the table, but also presented as committable PR comments.
@@ -474,8 +442,6 @@ Where x represents the minimum score threshold (>=) for suggestions to be presen
 
 ### Controlling suggestions depth
 
-> `💎 feature`
-
 You can control the depth and comprehensiveness of the code suggestions by using the `pr_code_suggestions.suggestions_depth` parameter.
 
 Available options:
@@ -490,7 +456,7 @@ We recommend starting with `regular` mode, then exploring `exhaustive` mode, whi
 
 ### Self-review
 
-> `💎 feature. Platforms supported: GitHub, GitLab`
+`Platforms supported: GitHub, GitLab`
 
 If you set in a configuration file:
 
@@ -509,14 +475,14 @@ code_suggestions_self_review_text = "... (your text here) ..."
 
 ![self_review_1](https://codium.ai/images/pr_agent/self_review_1.png){width=512}
 
-!!! tip "Tip - Reducing visual footprint after self-review 💎"
+!!! tip "Tip - Reducing visual footprint after self-review"
 
     The configuration parameter `pr_code_suggestions.fold_suggestions_on_self_review` (default is True)
     can be used to automatically fold the suggestions after the user clicks the self-review checkbox.
 
     This reduces the visual footprint of the suggestions, and also indicates to the PR reviewer that the suggestions have been reviewed by the PR author, and don't require further attention.
 
-!!! tip "Tip - Demanding self-review from the PR author 💎"
+!!! tip "Tip - Demanding self-review from the PR author"
 
     By setting:
     ```toml
@@ -537,26 +503,25 @@ code_suggestions_self_review_text = "... (your text here) ..."
 
 ### How many code suggestions are generated?
 
-Qodo Merge uses a dynamic strategy to generate code suggestions based on the size of the pull request (PR). Here's how it works:
+PR-Agent uses a dynamic strategy to generate code suggestions based on the size of the pull request (PR). Here's how it works:
 
 #### 1. Chunking large PRs
 
-- Qodo Merge divides large PRs into 'chunks'.
+- PR-Agent divides large PRs into 'chunks'.
 - Each chunk contains up to `config.max_model_tokens` tokens (default: 32,000).
 
 #### 2. Generating suggestions
 
-- For each chunk, Qodo Merge generates up to `pr_code_suggestions.num_code_suggestions_per_chunk` suggestions (default: 3).
+- For each chunk, PR-Agent generates up to `pr_code_suggestions.num_code_suggestions_per_chunk` suggestions (default: 3).
 
 This approach has two main benefits:
 
 - Scalability: The number of suggestions scales with the PR size, rather than being fixed.
 - Quality: By processing smaller chunks, the AI can maintain higher quality suggestions, as larger contexts tend to decrease AI performance.
 
-Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 lines of code), Qodo Merge will be able to process the entire code in a single call.
+Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 lines of code), PR-Agent will be able to process the entire code in a single call.
 
 #### Maximum coverage configuration
-> `💎 feature`
 
 For critical code reviews requiring maximum coverage, you can combine several settings to achieve a "super exhaustive" analysis. This is not a built-in mode, but a configuration recipe for advanced use cases.
 
@@ -603,7 +568,7 @@ This configuration is recommended for:
         <td>If set to true, QM bot will interact with comments made on code changes it has proposed. Default is true.</td>
       </tr>
       <tr>
-        <td><b>suggestions_depth 💎</b></td>
+        <td><b>suggestions_depth</b></td>
         <td> Controls the depth of the suggestions. Can be set to 'selective', 'regular', or 'exhaustive'. Default is 'regular'.</td>
       </tr>
       <tr>
@@ -663,7 +628,7 @@ This configuration is recommended for:
         <td>Number of code suggestions provided by the 'improve' tool, per chunk. Default is 3.</td>
       </tr>
       <tr>
-        <td><b>num_best_practice_suggestions 💎</b></td>
+        <td><b>num_best_practice_suggestions</b></td>
         <td>Number of code suggestions provided by the 'improve' tool for best practices. Default is 1.</td>
       </tr>
       <tr>
@@ -679,6 +644,5 @@ This configuration is recommended for:
     - **Self-reflection:** The suggestions aim to enable developers to _self-reflect_ and improve their pull requests. This process can help to identify blind spots, uncover missed edge cases, and enhance code readability and coherency. Even when a specific code suggestion isn't suitable, the underlying issue it highlights often reveals something important that might deserve attention.
     - **Bug detection:** The suggestions also alert on any _critical bugs_ that may have been identified during the analysis. This provides an additional safety net to catch potential issues before they make it into production. It's perfectly acceptable to implement only the suggestions you find valuable for your specific context.
 - **Hierarchy:** Presenting the suggestions in a structured hierarchical table enables the user to _quickly_ understand them, and to decide which ones are relevant and which are not.
-- **Customization:** To guide the model to suggestions that are more relevant to the specific needs of your project, we recommend using the [`extra_instructions`](https://qodo-merge-docs.qodo.ai/tools/improve/#extra-instructions-and-best-practices) and [`best practices`](https://qodo-merge-docs.qodo.ai/tools/improve/#best-practices) fields.
-- **Model Selection:** SaaS users can also [choose](https://qodo-merge-docs.qodo.ai/usage-guide/qodo_merge_models/) between different models. For specific programming languages or use cases, some models may perform better than others.
-- **Interactive usage:** The interactive [PR chat](https://qodo-merge-docs.qodo.ai/chrome-extension/) also provides an easy way to get more tailored suggestions and feedback from the AI model.
+- **Customization:** To guide the model to suggestions that are more relevant to the specific needs of your project, we recommend using the [`extra_instructions`](./improve.md#extra-instructions-and-best-practices) and [`best practices`](./improve.md#best-practices) fields.
+- **Model Selection:** For specific programming languages or use cases, some models may perform better than others.

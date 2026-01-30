@@ -1,6 +1,6 @@
 ## Run as a GitLab Pipeline
 
-You can use a pre-built Action Docker image to run PR-Agent as a GitLab pipeline. This is a simple way to get started with Qodo Merge without setting up your own server.
+You can use a pre-built Action Docker image to run PR-Agent as a GitLab pipeline. This is a simple way to get started with PR-Agent without setting up your own server.
 
 (1) Add the following file to your repository under `.gitlab-ci.yml`:
 
@@ -29,8 +29,8 @@ pr_agent_job:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 ```
 
-This script will run Qodo Merge on every new merge request. You can modify the `rules` section to run Qodo Merge on different events.
-You can also modify the `script` section to run different Qodo Merge commands, or with different parameters by exporting different environment variables.
+This script will run PR-Agent on every new merge request. You can modify the `rules` section to run PR-Agent on different events.
+You can also modify the `script` section to run different PR-Agent commands, or with different parameters by exporting different environment variables.
 
 (2) Add the following masked variables to your GitLab repository (CI/CD -> Variables):
 
@@ -47,7 +47,7 @@ Note that if your base branches are not protected, don't set the variables as `p
 
 ## Run a GitLab webhook server
 
-1. In GitLab create a new user and give it "Reporter" role ("Developer" if using Pro version of the agent) for the intended group or project.
+1. In GitLab create a new user and give it "Reporter" role for the intended group or project.
 
 2. For the user from step 1, generate a `personal_access_token` with `api` access.
 
