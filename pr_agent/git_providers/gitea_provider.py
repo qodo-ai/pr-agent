@@ -851,40 +851,71 @@ class RepoApi(giteapy.RepositoryApi):
             body=body
         )
 
-    def get_change_file_pull_request(self, owner: str, repo: str, pr_number: int):
-        """Get changed files in the pull request"""
+    def _fetch_paginated(self, base_url: str, error_context: str) -> list:
+        """Fetch all pages of a paginated API endpoint.
+        
+        Args:
+            base_url: The base API URL (without pagination params)
+            error_context: Description for error logging (e.g., "changed files")
+            
+        Returns:
+            List of all items from all pages
+        """
+        all_items = []
+        page = 1
+        limit = 50  # Gitea's default max is usually 50
+        
         try:
             token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
-            url = f'/repos/{owner}/{repo}/pulls/{pr_number}/files'
-            if token:
-                url = f'{url}?token={token}'
-
-            response = self.api_client.call_api(
-                url,
-                'GET',
-                path_params={},
-                response_type=None,
-                _return_http_data_only=False,
-                _preload_content=False
-            )
-
-            if hasattr(response, 'data'):
-                raw_data = response.data.read()
-                diff_content = raw_data.decode('utf-8')
-                return json.loads(diff_content) if isinstance(diff_content, str) else diff_content
-            elif isinstance(response, tuple):
-                raw_data = response[0].read()
-                diff_content = raw_data.decode('utf-8')
-                return json.loads(diff_content) if isinstance(diff_content, str) else diff_content
-
-            return []
-
+            
+            while True:
+                # Build URL with pagination parameters
+                if token:
+                    url = f'{base_url}?token={token}&page={page}&limit={limit}'
+                else:
+                    url = f'{base_url}?page={page}&limit={limit}'
+                
+                response = self.api_client.call_api(
+                    url,
+                    'GET',
+                    path_params={},
+                    response_type=None,
+                    _return_http_data_only=False,
+                    _preload_content=False
+                )
+                
+                page_items = []
+                if hasattr(response, 'data'):
+                    raw_data = response.data.read()
+                    page_items = json.loads(raw_data.decode('utf-8'))
+                elif isinstance(response, tuple):
+                    raw_data = response[0].read()
+                    page_items = json.loads(raw_data.decode('utf-8'))
+                
+                if not page_items:
+                    break
+                    
+                all_items.extend(page_items)
+                
+                # If we got fewer items than the limit, we've reached the last page
+                if len(page_items) < limit:
+                    break
+                    
+                page += 1
+                
+            return all_items
+            
         except ApiException as e:
-            self.logger.error(f"Error getting changed files: {e}")
-            return []
+            self.logger.error(f"Error getting {error_context}: {e}")
+            return all_items
         except Exception as e:
             self.logger.error(f"Unexpected error: {e}")
-            return []
+            return all_items
+
+    def get_change_file_pull_request(self, owner: str, repo: str, pr_number: int):
+        """Get changed files in the pull request"""
+        base_url = f'/repos/{owner}/{repo}/pulls/{pr_number}/files'
+        return self._fetch_paginated(base_url, "changed files")
 
     def get_languages(self, owner: str, repo: str):
         """Get programming languages used in the repository"""
@@ -1015,35 +1046,5 @@ class RepoApi(giteapy.RepositoryApi):
 
     def get_pr_commits(self, owner: str, repo: str, pr_number: int):
         """Get all commits in a pull request"""
-        try:
-            token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
-            url = f'/repos/{owner}/{repo}/pulls/{pr_number}/commits'
-            if token:
-                url = f'{url}?token={token}'
-
-            response = self.api_client.call_api(
-                url,
-                'GET',
-                path_params={},
-                response_type=None,
-                _return_http_data_only=False,
-                _preload_content=False
-            )
-
-            if hasattr(response, 'data'):
-                raw_data = response.data.read()
-                commits_data = json.loads(raw_data.decode('utf-8'))
-                return commits_data
-            elif isinstance(response, tuple):
-                raw_data = response[0].read()
-                commits_data = json.loads(raw_data.decode('utf-8'))
-                return commits_data
-
-            return []
-
-        except ApiException as e:
-            self.logger.error(f"Error getting PR commits: {e}")
-            return []
-        except Exception as e:
-            self.logger.error(f"Unexpected error: {e}")
-            return []
+        base_url = f'/repos/{owner}/{repo}/pulls/{pr_number}/commits'
+        return self._fetch_paginated(base_url, "PR commits")
