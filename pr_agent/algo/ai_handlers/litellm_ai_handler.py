@@ -1,18 +1,33 @@
+import json
 import os
+import time
+from typing import Optional
+
 import litellm
 import openai
 import requests
 from litellm import acompletion
+from opentelemetry.trace import Status, StatusCode
 from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
 
-from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
+from pr_agent.algo import (
+    CLAUDE_EXTENDED_THINKING_MODELS,
+    NO_SUPPORT_TEMPERATURE_MODELS,
+    STREAMING_REQUIRED_MODELS,
+    SUPPORT_REASONING_EFFORT_MODELS,
+    USER_MESSAGE_ONLY_MODELS,
+)
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
-from pr_agent.algo.ai_handlers.litellm_helpers import _handle_streaming_response, MockResponse, _get_azure_ad_token, \
-    _process_litellm_extra_body
+from pr_agent.algo.ai_handlers.litellm_helpers import (
+    MockResponse,
+    _get_azure_ad_token,
+    _handle_streaming_response,
+    _process_litellm_extra_body,
+)
 from pr_agent.algo.utils import ReasoningEffort, get_version
 from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
-import json
+from pr_agent.telemetry.tracer import tracer
 
 MODEL_RETRIES = 2
 
@@ -405,7 +420,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nUser prompt:\n{user}")
 
             # Get completion with automatic streaming detection
-            resp, finish_reason, response_obj = await self._get_completion(**kwargs)
+            with tracer.start_as_current_span("LiteLLMAIHandler._get_completion") as span:
+                resp, finish_reason, response_obj = await self._get_completion(span, **kwargs)
 
         except openai.RateLimitError as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")
@@ -428,24 +444,68 @@ class LiteLLMAIHandler(BaseAiHandler):
             get_logger().info(f"\nAI response:\n{resp}")
 
         return resp, finish_reason
-
-    async def _get_completion(self, **kwargs):
+    
+    async def _get_completion(self, span, **kwargs):
         """
         Wrapper that automatically handles streaming for required models.
+        Tracks comprehensive usage statistics via OpenTelemetry spans.
         """
+        # Set request parameters as span attributes
         model = kwargs["model"]
+        span.set_attribute(f"litellmai.request.model", model)
+        span.set_attribute(f"litellmai.{model}.system", "litellm")
+
+        # Optional: Track key parameters (avoid sensitive data in messages)
+        if "temperature" in kwargs:
+            span.set_attribute(f"litellmai.{model}.request.temperature", kwargs["temperature"])
+        if "max_tokens" in kwargs:
+            span.set_attribute(f"litellmai.{model}.request.max_tokens", kwargs["max_tokens"])
+        if "deployment_id" in kwargs and kwargs["deployment_id"]:
+            span.set_attribute(f"litellmai.{model}.request.deployment_id", kwargs["deployment_id"])
+
         if model in self.streaming_required_models:
             kwargs["stream"] = True
             get_logger().info(f"Using streaming mode for model {model}")
+
             response = await acompletion(**kwargs)
             resp, finish_reason = await _handle_streaming_response(response)
+            
+            # Track response metadata
+            span.set_attribute(f"litellmai.{model}.response.id", getattr(response, 'id', 'unknown_response_id'))
+            span.set_attribute(f"litellmai.{model}.response.finish_reason", finish_reason)
+            span.set_attribute(f"litellmai.{model}.response.streaming", True)
+            span.set_status(Status(StatusCode.OK))
+
             # Create MockResponse for streaming since we don't have the full response object
             mock_response = MockResponse(resp, finish_reason)
             return resp, finish_reason, mock_response
         else:
             response = await acompletion(**kwargs)
             if response is None or len(response["choices"]) == 0:
+                span.set_status(Status(StatusCode.ERROR, "Empty response or no choices"))
                 raise openai.APIError
+            
+            # Track response metadata
+            span.set_attribute(f"litellmai.{model}.response.id", getattr(response, 'id', 'unknown_response_id'))
+            span.set_attribute(f"litellmai.{model}.response.streaming", False)
+
+            # Extract usage statistics (key metrics for tracking)
+            if hasattr(response, 'usage') and response.usage:
+                usage = response.usage
+                span.set_attribute(f"litellmai.{model}.usage.prompt_tokens", getattr(usage, 'prompt_tokens', 0))
+                span.set_attribute(f"litellmai.{model}.usage.completion_tokens", getattr(usage, 'completion_tokens', 0))
+                span.set_attribute(f"litellmai.{model}.usage.total_tokens", getattr(usage, 'total_tokens', 0))
+
+                # Track reasoning tokens if available (for o1/o3 models)
+                if hasattr(usage, 'completion_tokens_details'):
+                    details = usage.completion_tokens_details
+                    if hasattr(details, 'reasoning_tokens'):
+                        span.set_attribute(f"litellmai.{model}.usage.reasoning_tokens", details.reasoning_tokens)
+
+            finish_reason = response["choices"][0]["finish_reason"]
+            span.set_attribute(f"litellmai.{model}.response.finish_reason", finish_reason)
+            span.set_status(Status(StatusCode.OK))
+
             return (response["choices"][0]['message']['content'],
                     response["choices"][0]["finish_reason"],
                     response)
