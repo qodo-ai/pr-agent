@@ -429,11 +429,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nUser prompt:\n{user}")
 
             # Get completion with automatic streaming detection
-            if not self.otel.is_enabled:
-                resp, finish_reason, response_obj = await self._get_completion(None, **kwargs)
-            else:
-                with tracer.start_as_current_span("LiteLLMAIHandler._get_completion") as span:
-                    resp, finish_reason, response_obj = await self._get_completion(span, **kwargs)
+            with tracer.start_as_current_span("LiteLLMAIHandler._get_completion") as span:
+                resp, finish_reason, response_obj = await self._get_completion(span, **kwargs)
 
         except openai.RateLimitError as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")
