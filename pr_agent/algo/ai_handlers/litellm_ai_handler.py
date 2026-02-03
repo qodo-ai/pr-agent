@@ -27,6 +27,7 @@ from pr_agent.algo.ai_handlers.litellm_helpers import (
 from pr_agent.algo.utils import ReasoningEffort, get_version
 from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
+from pr_agent.telemetry.config import get_otel_config
 from pr_agent.telemetry.tracer import tracer
 
 MODEL_RETRIES = 2
@@ -164,6 +165,14 @@ class LiteLLMAIHandler(BaseAiHandler):
 
         # Models that require streaming
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
+
+        # Initialize OpenTelemetry configuration
+        self.otel = get_otel_config()
+        if self.otel.is_enabled:
+            get_logger().info(
+                f"OpenTelemetry initialized - Service: '{self.otel.service_name}', "
+                f"Environment: '{self.otel.environment}', Exporter: '{self.otel.exporter_type}'"
+            )
 
     def prepare_logs(self, response, system, user, resp, finish_reason):
         response_log = response.dict().copy()
@@ -420,18 +429,9 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nUser prompt:\n{user}")
 
             # Get completion with automatic streaming detection
-            otel_enabled = get_settings().get("otel.enabled", False)
-            if not otel_enabled:
+            if not self.otel.is_enabled:
                 resp, finish_reason, response_obj = await self._get_completion(None, **kwargs)
             else:
-                # Log OpenTelemetry configuration details
-                otel_exporter = get_settings().get("otel.exporter_type", "console")
-                otel_service = get_settings().get("otel.service_name", "pr-agent")
-                otel_env = get_settings().get("otel.environment", "development")
-                get_logger().info(
-                    f"OpenTelemetry enabled - Service: '{otel_service}', "
-                    f"Environment: '{otel_env}', Exporter: '{otel_exporter}'"
-                )
                 with tracer.start_as_current_span("LiteLLMAIHandler._get_completion") as span:
                     resp, finish_reason, response_obj = await self._get_completion(span, **kwargs)
 
