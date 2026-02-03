@@ -420,8 +420,20 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nUser prompt:\n{user}")
 
             # Get completion with automatic streaming detection
-            with tracer.start_as_current_span("LiteLLMAIHandler._get_completion") as span:
-                resp, finish_reason, response_obj = await self._get_completion(span, **kwargs)
+            otel_enabled = get_settings().get("otel.enabled", False)
+            if not otel_enabled:
+                resp, finish_reason, response_obj = await self._get_completion(None, **kwargs)
+            else:
+                # Log OpenTelemetry configuration details
+                otel_exporter = get_settings().get("otel.exporter_type", "console")
+                otel_service = get_settings().get("otel.service_name", "pr-agent")
+                otel_env = get_settings().get("otel.environment", "development")
+                get_logger().info(
+                    f"OpenTelemetry enabled - Service: '{otel_service}', "
+                    f"Environment: '{otel_env}', Exporter: '{otel_exporter}'"
+                )
+                with tracer.start_as_current_span("LiteLLMAIHandler._get_completion") as span:
+                    resp, finish_reason, response_obj = await self._get_completion(span, **kwargs)
 
         except openai.RateLimitError as e:
             get_logger().error(f"Rate limit error during LLM inference: {e}")
@@ -444,24 +456,83 @@ class LiteLLMAIHandler(BaseAiHandler):
             get_logger().info(f"\nAI response:\n{resp}")
 
         return resp, finish_reason
-    
+
+    def _set_request_span_attributes(self, span, model, kwargs):
+        """
+        Set request-related span attributes for OpenTelemetry tracking.
+
+        Args:
+            span: OpenTelemetry span object
+            model: Model name being used
+            kwargs: Request parameters
+        """
+        span.set_attribute("litellm.request.model", model)
+        span.set_attribute("litellm.system", "litellm")
+
+        if "temperature" in kwargs:
+            span.set_attribute("litellm.request.temperature", kwargs["temperature"])
+        if "max_tokens" in kwargs:
+            span.set_attribute("litellm.request.max_tokens", kwargs["max_tokens"])
+        if "deployment_id" in kwargs and kwargs["deployment_id"]:
+            span.set_attribute("litellm.request.deployment_id", kwargs["deployment_id"])
+
+    def _set_streaming_response_span_attributes(self, span, response, finish_reason):
+        """
+        Set response-related span attributes for streaming completions.
+
+        Args:
+            span: OpenTelemetry span object
+            response: The streaming response object
+            finish_reason: Completion finish reason
+        """
+        span.set_attribute("litellm.response_id", getattr(response, 'id', 'unknown_response_id'))
+        span.set_attribute("litellm.response.finish_reason", finish_reason)
+        span.set_attribute("litellm.response.streaming", True)
+        span.set_status(Status(StatusCode.OK))
+
+    def _set_response_span_attributes(self, span, response):
+        """
+        Set response-related span attributes for non-streaming completions.
+        Includes usage statistics and reasoning tokens if available.
+
+        Args:
+            span: OpenTelemetry span object
+            response: The completion response object
+        """
+        span.set_attribute("litellm.response.id", getattr(response, 'id', 'unknown_response_id'))
+        span.set_attribute("litellm.response.streaming", False)
+
+        # Extract usage statistics (key metrics for tracking)
+        if hasattr(response, 'usage') and response.usage:
+            usage = response.usage
+            span.set_attribute("litellm.usage.prompt_tokens", getattr(usage, 'prompt_tokens', 0))
+            span.set_attribute("litellm.usage.completion_tokens", getattr(usage, 'completion_tokens', 0))
+            span.set_attribute("litellm.usage.total_tokens", getattr(usage, 'total_tokens', 0))
+
+            # Track reasoning tokens if available (for o1/o3 models)
+            if hasattr(usage, 'completion_tokens_details'):
+                details = usage.completion_tokens_details
+                if hasattr(details, 'reasoning_tokens'):
+                    span.set_attribute("litellm.usage.reasoning_tokens", details.reasoning_tokens)
+
+        finish_reason = response["choices"][0]["finish_reason"]
+        span.set_attribute("litellm.response.finish_reason", finish_reason)
+        span.set_status(Status(StatusCode.OK))
+
     async def _get_completion(self, span, **kwargs):
         """
         Wrapper that automatically handles streaming for required models.
         Tracks comprehensive usage statistics via OpenTelemetry spans.
-        """
-        # Set request parameters as span attributes
-        model = kwargs["model"]
-        span.set_attribute(f"litellmai.request.model", model)
-        span.set_attribute(f"litellmai.{model}.system", "litellm")
 
-        # Optional: Track key parameters (avoid sensitive data in messages)
-        if "temperature" in kwargs:
-            span.set_attribute(f"litellmai.{model}.request.temperature", kwargs["temperature"])
-        if "max_tokens" in kwargs:
-            span.set_attribute(f"litellmai.{model}.request.max_tokens", kwargs["max_tokens"])
-        if "deployment_id" in kwargs and kwargs["deployment_id"]:
-            span.set_attribute(f"litellmai.{model}.request.deployment_id", kwargs["deployment_id"])
+        Args:
+            span: OpenTelemetry span object, or None if telemetry is disabled
+            **kwargs: LiteLLM completion parameters
+        """
+        model = kwargs["model"]
+
+        # Set request parameters as span attributes (only if span is provided)
+        if span is not None:
+            self._set_request_span_attributes(span, model, kwargs)
 
         if model in self.streaming_required_models:
             kwargs["stream"] = True
@@ -469,12 +540,10 @@ class LiteLLMAIHandler(BaseAiHandler):
 
             response = await acompletion(**kwargs)
             resp, finish_reason = await _handle_streaming_response(response)
-            
-            # Track response metadata
-            span.set_attribute(f"litellmai.{model}.response.id", getattr(response, 'id', 'unknown_response_id'))
-            span.set_attribute(f"litellmai.{model}.response.finish_reason", finish_reason)
-            span.set_attribute(f"litellmai.{model}.response.streaming", True)
-            span.set_status(Status(StatusCode.OK))
+
+            # Track response metadata (only if span is provided)
+            if span is not None:
+                self._set_streaming_response_span_attributes(span, response, finish_reason)
 
             # Create MockResponse for streaming since we don't have the full response object
             mock_response = MockResponse(resp, finish_reason)
@@ -482,29 +551,13 @@ class LiteLLMAIHandler(BaseAiHandler):
         else:
             response = await acompletion(**kwargs)
             if response is None or len(response["choices"]) == 0:
-                span.set_status(Status(StatusCode.ERROR, "Empty response or no choices"))
+                if span is not None:
+                    span.set_status(Status(StatusCode.ERROR, "Empty response or no choices"))
                 raise openai.APIError
-            
-            # Track response metadata
-            span.set_attribute(f"litellmai.{model}.response.id", getattr(response, 'id', 'unknown_response_id'))
-            span.set_attribute(f"litellmai.{model}.response.streaming", False)
 
-            # Extract usage statistics (key metrics for tracking)
-            if hasattr(response, 'usage') and response.usage:
-                usage = response.usage
-                span.set_attribute(f"litellmai.{model}.usage.prompt_tokens", getattr(usage, 'prompt_tokens', 0))
-                span.set_attribute(f"litellmai.{model}.usage.completion_tokens", getattr(usage, 'completion_tokens', 0))
-                span.set_attribute(f"litellmai.{model}.usage.total_tokens", getattr(usage, 'total_tokens', 0))
-
-                # Track reasoning tokens if available (for o1/o3 models)
-                if hasattr(usage, 'completion_tokens_details'):
-                    details = usage.completion_tokens_details
-                    if hasattr(details, 'reasoning_tokens'):
-                        span.set_attribute(f"litellmai.{model}.usage.reasoning_tokens", details.reasoning_tokens)
-
-            finish_reason = response["choices"][0]["finish_reason"]
-            span.set_attribute(f"litellmai.{model}.response.finish_reason", finish_reason)
-            span.set_status(Status(StatusCode.OK))
+            # Track response metadata (only if span is provided)
+            if span is not None:
+                self._set_response_span_attributes(span, response)
 
             return (response["choices"][0]['message']['content'],
                     response["choices"][0]["finish_reason"],
