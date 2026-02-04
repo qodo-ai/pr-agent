@@ -10,6 +10,7 @@ The models supported by Qodo Merge are:
 - `anthropic/claude-sonnet-4-5-20250929`
 - `vertex_ai/gemini-2.5-pro`
 - `vertex_ai/gemini-3-pro-preview`
+- `gemini/gemini-3-pro-preview`
 - `gpt-5-2025-08-07`
 - `gpt-5.2-2025-12-11`
 
@@ -39,6 +40,13 @@ To restrict Qodo Merge to using `vertex_ai/gemini-3-pro-preview`:
 ```toml
 [config]
 model="vertex_ai/gemini-3-pro-preview"
+```
+
+To restrict Qodo Merge to using `gemini/gemini-3-pro-preview`:
+
+```toml
+[config]
+model="gemini/gemini-3-pro-preview"
 ```
 
 To restrict Qodo Merge to using `gpt-5-2025-08-07`:
