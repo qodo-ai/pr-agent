@@ -66,22 +66,16 @@ class TestGetMaxTokens:
 
         assert get_max_tokens(model) == expected
 
-    def test_gemini_3_pro_preview(self, monkeypatch):
-        """Test that both gemini-3-pro-preview variants return correct max tokens."""
-        fake_settings = type('', (), {
-            'config': type('', (), {
-                'custom_model_max_tokens': 0,
-                'max_model_tokens': 0
+    @pytest.mark.parametrize("model", [
+        "gemini/gemini-3-pro-preview",
+        "vertex_ai/gemini-3-pro-preview",
+    ])
+    def test_gemini_3_pro_preview(self, monkeypatch, model):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 0,
+                "max_model_tokens": 0,
             })()
         })()
-
         monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
-
-        # Test Google AI Studio variant
-        model_gemini = "gemini/gemini-3-pro-preview"
-        expected = 1048576
-        assert get_max_tokens(model_gemini) == expected
-
-        # Test Vertex AI variant
-        model_vertex = "vertex_ai/gemini-3-pro-preview"
-        assert get_max_tokens(model_vertex) == expected
+        assert get_max_tokens(model) == 1048576
