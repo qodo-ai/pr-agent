@@ -150,28 +150,6 @@ This option is enabled by default via the `pr_description.enable_pr_diagram` par
       </tr>
     </table>
 
-## Inline file summary
-
-This feature enables you to copy the `changes walkthrough` table to the "Files changed" tab, so you can quickly understand the changes in each file while reviewing the code changes (diff view).
-
-To copy the `changes walkthrough` table to the "Files changed" tab, you can click on the checkbox that appears PR Description status message below the main PR Description:
-
-![Add table checkbox](https://codium.ai/images/pr_agent/add_table_checkbox.png){width=512}
-
-If you prefer to have the file summaries appear in the "Files changed" tab on every PR, change the `pr_description.inline_file_summary` parameter in the configuration file, possible values are:
-
-- `'table'`: File changes walkthrough table will be displayed on the top of the "Files changed" tab, in addition to the "Conversation" tab.
-
-![Diffview table](https://codium.ai/images/pr_agent/diffview-table.png){width=512}
-
-- `true`: A collapsible file comment with changes title and a changes summary for each file in the PR.
-
-![Diffview changes](https://codium.ai/images/pr_agent/diffview_changes.png){width=512}
-
-- `false` (`default`): File changes walkthrough will be added only to the "Conversation" tab.
-
-**Note**: that this feature is currently available only for GitHub.
-
 ## Markers template
 
 To enable markers, set `pr_description.use_description_markers=true`.

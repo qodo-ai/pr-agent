@@ -48,11 +48,3 @@
 ## PR Benchmark
 
 * [PR Benchmark](pr_benchmark/index.md)
-
-## Recent Updates
-
-* [Recent Updates](recent_updates/index.md)
-
-## AI Docs Search
-
-* [AI Docs Search](ai_search/index.md)
