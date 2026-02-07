@@ -4,7 +4,6 @@ This section provides a detailed guide on how to use PR-Agent.
 It includes information on how to adjust PR-Agent configurations, define which tools will run automatically, and other advanced configurations.
 
 - [Introduction](./introduction.md)
-- [Enabling a Wiki](./enabling_a_wiki.md)
 - [Configuration File](./configuration_options.md)
 - [Usage and Automation](./automations_and_usage.md)
     - [Local Repo (CLI)](./automations_and_usage.md#local-repo-cli)

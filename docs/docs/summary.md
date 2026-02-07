@@ -12,7 +12,6 @@
 
 * [Usage Guide](usage-guide/index.md)
 * [Introduction](usage-guide/introduction.md)
-* [Enabling a Wiki](usage-guide/enabling_a_wiki.md)
 * [Configuration File](usage-guide/configuration_options.md)
 * [Usage and Automation](usage-guide/automations_and_usage.md)
 * [Managing Mail Notifications](usage-guide/mail_notifications.md)
