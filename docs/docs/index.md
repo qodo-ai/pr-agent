@@ -8,8 +8,6 @@
 
 - See the [Tools Guide](./tools/index.md) for a detailed description of the different tools.
 
-- See the video tutorials [[1](https://www.youtube.com/playlist?list=PLRTpyDOSgbwFMA_VBeKMnPLaaZKwjGBFT), [2](https://www.youtube.com/watch?v=7-yJLd7zu40)] for practical demonstrations on how to use the tools.
-
 ## Docs Smart Search
 
 To search the documentation site using natural language:
