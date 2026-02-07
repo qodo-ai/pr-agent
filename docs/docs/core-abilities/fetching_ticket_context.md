@@ -11,8 +11,6 @@ This integration enriches the review process by automatically surfacing relevant
 
 - [GitHub/Gitlab Issues](#githubgitlab-issues-integration)
 - [Jira](#jira-integration)
-- [Linear](#linear-integration)
-- [Monday](#monday-integration)
 
 **Ticket data fetched:**
 
@@ -95,27 +93,7 @@ We support both Jira Cloud and Jira Server/Data Center.
 
 ### Jira Cloud
 
-There are two ways to authenticate with Jira Cloud:
-
-**1) Jira App Authentication**
-
-The recommended way to authenticate with Jira Cloud is to install the PR-Agent app in your Jira Cloud instance. This will allow PR-Agent to access Jira data on your behalf.
-
-Installation steps:
-
-1. Go to the [PR-Agent integrations page](https://app.codium.ai/pr-agent-pro/integrations)
-
-2. Click on the Connect **Jira Cloud** button to connect the Jira Cloud app
-
-3. Click the `accept` button.<br>
-![Jira Cloud App Installation](https://www.codium.ai/images/pr_agent/jira_app_installation2.png){width=384}
-
-4. After installing the app, you will be redirected to the PR-Agent registration page. and you will see a success message.<br>
-![Jira Cloud App success message](https://www.codium.ai/images/pr_agent/jira_app_success.png){width=384}
-
-5. Now PR-Agent will be able to fetch Jira ticket context for your PRs.
-
-**2) Email/Token Authentication**
+#### Email/Token Authentication
 
 You can create an API token from your Atlassian account:
 
@@ -312,20 +290,6 @@ PR-Agent supports connecting to multiple JIRA servers using different authentica
     jira_api_email = ["user@company.com", ""]  # Empty for PAT
     ```
 
-=== "Jira Cloud App"
-
-    For Jira Cloud instances using App Authentication:
-
-    1. Install the PR-Agent app on each JIRA Cloud instance you want to connect to
-    2. Set the default server for ticket ID resolution:
-
-    ```toml
-    [jira]
-    jira_base_url = "https://primary-team.atlassian.net"
-    ```
-
-    Full URLs (e.g., `https://other-team.atlassian.net/browse/TASK-456`) will automatically use the correct connected instance.
-
 
 
 
@@ -349,90 +313,3 @@ Name your branch with the ticket ID as a prefix (e.g., `ISSUE-123-feature-descri
     jira_base_url = "https://<JIRA_ORG>.atlassian.net"
     ```
     Where `<JIRA_ORG>` is your Jira organization identifier (e.g., `mycompany` for `https://mycompany.atlassian.net`).
-
-## Linear Integration
-
-### Linear App Authentication
-
-The recommended way to authenticate with Linear is to connect the Linear app through the PR-Agent portal.
-
-Installation steps:
-
-1. Go to the [PR-Agent integrations page](https://app.codium.ai/pr-agent-pro/integrations)
-
-2. Navigate to the **Integrations** tab
-
-3. Click on the **Linear** button to connect the Linear app
-
-4. Follow the authentication flow to authorize PR-Agent to access your Linear workspace
-
-5. Once connected, PR-Agent will be able to fetch Linear ticket context for your PRs
-
-### How to link a PR to a Linear ticket
-
-PR-Agent will automatically detect Linear tickets using either of these methods:
-
-**Method 1: Description Reference:**
-
-Include a ticket reference in your PR description using either:
-- The complete Linear ticket URL: `https://linear.app/[ORG_ID]/issue/[TICKET_ID]`
-- The shortened ticket ID: `[TICKET_ID]` (e.g., `ABC-123`) - requires linear_base_url configuration (see below).
-
-**Method 2: Branch Name Detection:**
-
-Name your branch with the ticket ID as a prefix (e.g., `ABC-123-feature-description` or `feature/ABC-123/feature-description`).
-
-!!! note "Linear Base URL"
-    For shortened ticket IDs or branch detection (method 2), you must configure the Linear base URL in your configuration file under the [linear] section:
-    
-    ```toml
-    [linear]
-    linear_base_url = "https://linear.app/[ORG_ID]"
-    ```
-    
-    Replace `[ORG_ID]` with your Linear organization identifier.
-
-## Monday Integration
-
-### Monday App Authentication
-The recommended way to authenticate with Monday is to connect the Monday app through the PR-Agent portal.
-
-Installation steps:
-
-1. Go to the [PR-Agent integrations page](https://app.codium.ai/pr-agent-pro/integrations)
-2. Navigate to the **Integrations** tab
-3. Click on the **Monday** button to connect the Monday app
-4. Follow the authentication flow to authorize PR-Agent to access your Monday workspace
-5. Once connected, PR-Agent will be able to fetch Monday ticket context for your PRs
-
-### Monday Ticket Context
-
-When PR-Agent processes your PRs, it extracts the following information from Monday items:
-
-* **Item ID and Name:** The unique identifier and title of the Monday item
-* **Item URL:** Direct link to the Monday item in your workspace
-* **Ticket Description:** All long text type columns and their values from the item
-* **Status and Labels:** Current status values and color-coded labels for quick context
-* **Sub-items:** Names, IDs, and descriptions of all related sub-items with hierarchical structure
-
-### How Monday Items are Detected
-PR-Agent automatically detects Monday items from:
-
-* PR Descriptions: Full Monday URLs like https://workspace.monday.com/boards/123/pulses/456
-* Branch Names: Item IDs in branch names (6-12 digit patterns) - requires `monday_base_url` configuration
-
-### Configuration Setup (Optional)
-If you want to extract Monday item references from branch names or use standalone item IDs, you need to set the `monday_base_url` in your configuration file:
-
-To support Monday ticket referencing from branch names, item IDs (6-12 digits) should be part of the branch names and you need to configure `monday_base_url`:
-```toml
-[monday]
-monday_base_url = "https://your_monday_workspace.monday.com"
-```
-
-Examples of supported branch name patterns:
-
-* `feature/123456789` → extracts item ID 123456789
-* `bugfix/456789012-login-fix` → extracts item ID 456789012
-* `123456789` → extracts item ID 123456789
-* `456789012-login-fix` → extracts item ID 456789012
