@@ -1,8 +1,8 @@
 /* Neutral color scheme - ready for future branding */
 :root {
     --md-primary-fg-color: #0f172a;
-    --md-accent-fg-color: #0ea5e9;
-    --md-typeset-a-color: #0ea5e9;
+    --md-accent-fg-color: #1d4ed8;
+    --md-typeset-a-color: #1e40af;
 }
 
 [data-md-color-scheme="slate"] {

@@ -1,4 +1,4 @@
-site_name: Qodo Merge (and open-source PR-Agent)
+site_name: PR-Agent
 repo_url: https://github.com/qodo-ai/pr-agent
 repo_name: Qodo-ai/pr-agent
 
@@ -92,8 +92,6 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/qodo-ai/pr-agent
-    - icon: fontawesome/brands/discord
-      link: https://discord.com/invite/SgSxuQ65GF
 
 extra_css:
   - css/custom.css
@@ -124,4 +122,4 @@ markdown_extensions:
 
 
 copyright: |
-  &copy; 2025 PR-Agent Contributors
+  &copy; 2026 PR-Agent Contributors
