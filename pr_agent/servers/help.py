@@ -7,9 +7,8 @@ class HelpMessage:
                 "> - **/ask \\<QUESTION\\>**: Ask a question about the PR.   \n" \
                 "> - **/update_changelog**: Update the changelog based on the PR's contents.   \n" \
                 "> - **/help_docs \\<QUESTION\\>**: Given a path to documentation (either for this repository or for a given one), ask a question.   \n" \
-                "> - **/add_docs** 💎: Generate docstring for new components introduced in the PR.   \n" \
-                "> - **/generate_labels** 💎: Generate labels for the PR based on the PR's contents.   \n" \
-                "> - **/analyze** 💎: Automatically analyzes the PR, and presents changes walkthrough for each component.   \n\n" \
+                "> - **/add_docs**: Generate docstring for new components introduced in the PR.   \n" \
+                "> - **/generate_labels**: Generate labels for the PR based on the PR's contents.   \n\n" \
                 ">See the [tools guide](https://pr-agent-docs.codium.ai/tools/) for more details.\n" \
                 ">To list the possible configuration parameters, add a **/config** comment.   \n"
        return commands_text
@@ -108,7 +107,7 @@ Make sure to provide proper title, and a detailed and well-phrased description f
         output += "\n\n</details></td></tr>\n\n"
 
         # Inline File Walkthrough
-        output += "<tr><td><details> <summary><strong> Inline File Walkthrough 💎</strong></summary><hr>\n\n"
+        output += "<tr><td><details> <summary><strong> Inline File Walkthrough</strong></summary><hr>\n\n"
         output += """\
 For enhanced user experience, the `describe` tool can add file summaries directly to the "Files changed" tab in the PR page.
 This will enable you to quickly understand the changes in each file, while reviewing the code changes (diffs).
