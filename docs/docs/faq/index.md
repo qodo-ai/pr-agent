@@ -18,7 +18,7 @@
         - Highlight potential bugs or oversights
         - Enhance code quality and promote best practices
 
-    Read more about this issue in our [blog](https://www.codium.ai/blog/understanding-the-challenges-and-pain-points-of-the-pull-request-cycle/)
+    Read more about this issue in our [blog](https://www.qodo.ai/blog/understanding-the-challenges-and-pain-points-of-the-pull-request-cycle/)
 
 ___
 
@@ -53,14 +53,6 @@ ___
 
     For a detailed overview of our data privacy policy, please refer to [this link](../overview/data_privacy.md)
 
-___
-
-??? note "Q: Can I use my own LLM keys with PR-Agent?"
-    #### Answer:<span style="display:none;">5</span>
-
-    When you self-host the [open-source](https://github.com/qodo-ai/pr-agent) version, you use your own keys.
-
-    For enterprise customers, on-prem deployment is also available. [Contact us](https://www.codium.ai/contact/#pricing) for more information.
 ___
 
 ??? note "Q: Can PR-Agent review draft/offline PRs?"
@@ -114,7 +106,6 @@ ___
     Note that some users may prefer the opposite - more thorough and detailed feedback. PR-Agent is designed to be flexible and customizable, allowing you to tailor the feedback to your team's specific needs and preferences.
     Examples of ways to increase feedback include:
 
-    - [`Exhaustive` code suggestions](../tools/improve.md#controlling-suggestions-depth)
     - [Dual-publishing mode](../tools/improve.md#dual-publishing-mode)
     - [Interactive usage](../core-abilities/interactivity.md)
 ___
