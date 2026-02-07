@@ -91,6 +91,7 @@ class GiteaProvider(GitProvider):
                 repo=self.repo
             )
             self.last_commit = self.pr_commits[-1]
+            self.last_commit_id = self.last_commit
             self.base_sha = self.pr.base.sha if self.pr.base.sha else ""
             self.base_ref = self.pr.base.ref if self.pr.base.ref else ""
         elif "issues" in url:
@@ -798,10 +799,7 @@ class RepoApi(giteapy.RepositoryApi):
     def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
         """Get the diff content of a pull request using direct API call"""
         try:
-            token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
             url = f'/repos/{owner}/{repo}/pulls/{pr_number}.diff'
-            if token:
-                url = f'{url}?token={token}'
 
             response = self.api_client.call_api(
                 url,
@@ -809,7 +807,8 @@ class RepoApi(giteapy.RepositoryApi):
                 path_params={},
                 response_type=None,
                 _return_http_data_only=False,
-                _preload_content=False
+                _preload_content=False,
+                auth_settings=['AuthorizationHeaderToken']
             )
 
             if hasattr(response, 'data'):
@@ -854,10 +853,7 @@ class RepoApi(giteapy.RepositoryApi):
     def get_change_file_pull_request(self, owner: str, repo: str, pr_number: int):
         """Get changed files in the pull request"""
         try:
-            token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
             url = f'/repos/{owner}/{repo}/pulls/{pr_number}/files'
-            if token:
-                url = f'{url}?token={token}'
 
             response = self.api_client.call_api(
                 url,
@@ -865,7 +861,8 @@ class RepoApi(giteapy.RepositoryApi):
                 path_params={},
                 response_type=None,
                 _return_http_data_only=False,
-                _preload_content=False
+                _preload_content=False,
+                auth_settings=['AuthorizationHeaderToken']
             )
 
             if hasattr(response, 'data'):
@@ -889,10 +886,7 @@ class RepoApi(giteapy.RepositoryApi):
     def get_languages(self, owner: str, repo: str):
         """Get programming languages used in the repository"""
         try:
-            token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
             url = f'/repos/{owner}/{repo}/languages'
-            if token:
-                url = f'{url}?token={token}'
 
             response = self.api_client.call_api(
                 url,
@@ -900,7 +894,8 @@ class RepoApi(giteapy.RepositoryApi):
                 path_params={},
                 response_type=None,
                 _return_http_data_only=False,
-                _preload_content=False
+                _preload_content=False,
+                auth_settings=['AuthorizationHeaderToken']
             )
 
             if hasattr(response, 'data'):
@@ -923,18 +918,20 @@ class RepoApi(giteapy.RepositoryApi):
         """Get raw file content from a specific commit"""
 
         try:
-            token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
             url = f'/repos/{owner}/{repo}/raw/{filepath}'
-            if token:
-                url = f'{url}?token={token}&ref={commit_sha}'
+            query_params = []
+            if commit_sha:
+                query_params.append(('ref', commit_sha))
 
             response = self.api_client.call_api(
                 url,
                 'GET',
                 path_params={},
+                query_params=query_params,
                 response_type=None,
                 _return_http_data_only=False,
-                _preload_content=False
+                _preload_content=False,
+                auth_settings=['AuthorizationHeaderToken']
             )
 
             if hasattr(response, 'data'):
@@ -1016,10 +1013,7 @@ class RepoApi(giteapy.RepositoryApi):
     def get_pr_commits(self, owner: str, repo: str, pr_number: int):
         """Get all commits in a pull request"""
         try:
-            token = self.api_client.configuration.api_key.get('Authorization', '').replace('token ', '')
             url = f'/repos/{owner}/{repo}/pulls/{pr_number}/commits'
-            if token:
-                url = f'{url}?token={token}'
 
             response = self.api_client.call_api(
                 url,
@@ -1027,7 +1021,8 @@ class RepoApi(giteapy.RepositoryApi):
                 path_params={},
                 response_type=None,
                 _return_http_data_only=False,
-                _preload_content=False
+                _preload_content=False,
+                auth_settings=['AuthorizationHeaderToken']
             )
 
             if hasattr(response, 'data'):
