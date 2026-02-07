@@ -117,9 +117,9 @@ In post-process, PR-Agent counts the number of suggestions that were implemented
 PR-Agent employs a novel detection system to automatically identify AI code suggestions that PR authors have accepted and implemented.
 
 Accepted suggestions are also automatically documented in a dedicated wiki page called `.pr_agent_accepted_suggestions`, allowing users to track historical changes, assess the tool's effectiveness, and learn from previously implemented recommendations in the repository.
-An example [result](https://github.com/Codium-ai/pr-agent/wiki/.pr_agent_accepted_suggestions):
+An example [result](https://github.com/qodo-ai/pr-agent/wiki/.pr_agent_accepted_suggestions):
 
-[![pr_agent_accepted_suggestions1.png](https://codium.ai/images/pr_agent/pr_agent_accepted_suggestions1.png){width=768}](https://github.com/Codium-ai/pr-agent/wiki/.pr_agent_accepted_suggestions)
+[![pr_agent_accepted_suggestions1.png](https://codium.ai/images/pr_agent/pr_agent_accepted_suggestions1.png){width=768}](https://github.com/qodo-ai/pr-agent/wiki/.pr_agent_accepted_suggestions)
 
 This dedicated wiki page will also serve as a foundation for future AI model improvements, allowing it to learn from historically implemented suggestions and generate more targeted, contextually relevant recommendations.
 

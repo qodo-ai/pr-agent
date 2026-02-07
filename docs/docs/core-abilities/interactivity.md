@@ -14,7 +14,7 @@ The approach eliminates manual steps, provides clear visual indicators, and crea
 
 ### 1\. Interactive `/improve` Tool
 
-The [`/improve`](../../tools/improve/) command delivers a comprehensive interactive experience:
+The [`/improve`](../tools/improve.md) command delivers a comprehensive interactive experience:
 
 - _**Apply this suggestion**_: Clicking this checkbox instantly converts a suggestion into a committable code change. When committed to the PR, changes made to code that was flagged for improvement will be marked with a check mark, allowing developers to easily track and review implemented recommendations.
 
@@ -26,6 +26,6 @@ The [`/improve`](../../tools/improve/) command delivers a comprehensive interact
 
 ### 2\. Interactive `/help` Tool
 
-The [`/help`](../../tools/help/) command not only lists available tools and their descriptions but also enables immediate tool invocation through interactive checkboxes.
+The [`/help`](../tools/help.md) command not only lists available tools and their descriptions but also enables immediate tool invocation through interactive checkboxes.
 When a user checks a tool's checkbox, PR-Agent instantly triggers that tool without requiring additional commands.
 This transforms the standard help menu into an interactive launch pad for all PR-Agent capabilities, eliminating context switching by keeping developers within their PR workflow.

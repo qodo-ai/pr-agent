@@ -129,7 +129,7 @@ You can create an API token from your Atlassian account:
 
 ![Jira Cloud API Token](https://images.ctfassets.net/zsv3d0ugroxu/1RYvh9lqgeZjjNe5S3Hbfb/155e846a1cb38f30bf17512b6dfd2229/screenshot_NewAPIToken){width=384}
 
-5. In your [configuration file](../../usage-guide/configuration_options/) add the following lines:
+5. In your [configuration file](../usage-guide/configuration_options.md) add the following lines:
 
 ```toml
 [jira]

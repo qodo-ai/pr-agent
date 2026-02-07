@@ -63,7 +63,7 @@ Note that you need to export the `azure_devops__pat` and `OPENAI_KEY` variables 
 
 Make sure to give pipeline permissions to the `pr_agent` variable group.
 
-> Note that Azure Pipelines lacks support for triggering workflows from PR comments. If you find a viable solution, please contribute it to our [issue tracker](https://github.com/Codium-ai/pr-agent/issues)
+> Note that Azure Pipelines lacks support for triggering workflows from PR comments. If you find a viable solution, please contribute it to our [issue tracker](https://github.com/qodo-ai/pr-agent/issues)
 
 ### Azure Repos Git PR triggers and Build Validation
 

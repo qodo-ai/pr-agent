@@ -8,8 +8,8 @@ There are three main ways to set persistent configurations:
 In terms of precedence, wiki configurations will override local configurations, and local configurations will override global configurations.
 
 
-For a list of all possible configurations, see the [configuration options](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml/) page.
-In addition to general configuration options, each tool has its own configurations. For example, the `review` tool will use parameters from the [pr_reviewer](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L16) section in the configuration file.
+For a list of all possible configurations, see the [configuration options](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml/) page.
+In addition to general configuration options, each tool has its own configurations. For example, the `review` tool will use parameters from the [pr_reviewer](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L16) section in the configuration file.
 
 !!! tip "Tip1: Edit only what you need"
     Your configuration file should be minimal, and edit only the relevant values. Don't copy the entire configuration options, since it can lead to legacy problems when something changes.
@@ -22,7 +22,7 @@ In addition to general configuration options, each tool has its own configuratio
 
 `Platforms supported: GitHub, GitLab, Bitbucket`
 
-With PR-Agent, you can set configurations by creating a page called `.pr_agent.toml` in the [wiki](https://github.com/Codium-ai/pr-agent/wiki/pr_agent.toml) of the repo.
+With PR-Agent, you can set configurations by creating a page called `.pr_agent.toml` in the [wiki](https://github.com/qodo-ai/pr-agent/wiki/pr_agent.toml) of the repo.
 The advantage of this method is that it allows to set configurations without needing to commit new content to the repo - just edit the wiki page and **save**.
 
 ![wiki_configuration](https://codium.ai/images/pr_agent/wiki_configuration.png){width=512}
@@ -63,11 +63,11 @@ Then you can give a list of extra instructions to the `review` tool.
 If you create a repo called `pr-agent-settings` in your **organization**, its configuration file `.pr_agent.toml` will be used as a global configuration file for any other repo that belongs to the same organization.
 Parameters from a local `.pr_agent.toml` file, in a specific repo, will override the global configuration parameters.
 
-For example, in the GitHub organization `Codium-ai`:
+For example, in the GitHub organization `qodo-ai`:
 
-- The file [`https://github.com/Codium-ai/pr-agent-settings/.pr_agent.toml`](https://github.com/Codium-ai/pr-agent-settings/blob/main/.pr_agent.toml)  serves as a global configuration file for all the repos in the GitHub organization `Codium-ai`.
+- The file [`https://github.com/qodo-ai/pr-agent-settings/.pr_agent.toml`](https://github.com/qodo-ai/pr-agent-settings/blob/main/.pr_agent.toml)  serves as a global configuration file for all the repos in the GitHub organization `qodo-ai`.
 
-- The repo [`https://github.com/Codium-ai/pr-agent`](https://github.com/Codium-ai/pr-agent/blob/main/.pr_agent.toml) inherits the global configuration file from `pr-agent-settings`.
+- The repo [`https://github.com/qodo-ai/pr-agent`](https://github.com/qodo-ai/pr-agent/blob/main/.pr_agent.toml) inherits the global configuration file from `pr-agent-settings`.
 
 ## Project/Group level configuration file
 

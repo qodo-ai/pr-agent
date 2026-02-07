@@ -58,7 +58,7 @@ ___
 ??? note "Q: Can I use my own LLM keys with PR-Agent?"
     #### Answer:<span style="display:none;">5</span>
 
-    When you self-host the [open-source](https://github.com/Codium-ai/pr-agent) version, you use your own keys.
+    When you self-host the [open-source](https://github.com/qodo-ai/pr-agent) version, you use your own keys.
 
     For enterprise customers, on-prem deployment is also available. [Contact us](https://www.codium.ai/contact/#pricing) for more information.
 ___
