@@ -27,6 +27,9 @@
 * [Review](tools/review.md)
 * [Improve](tools/improve.md)
 * [Ask](tools/ask.md)
+* [Add Docs](tools/add_docs.md)
+* [Generate Labels](tools/generate_labels.md)
+* [Similar Issues](tools/similar_issues.md)
 * [Help](tools/help.md)
 * [Help Docs](tools/help_docs.md)
 * [Update Changelog](tools/update_changelog.md)
@@ -35,11 +38,11 @@
 
 * [Core Abilities](core-abilities/index.md)
 * [Chat on code suggestions](core-abilities/chat_on_code_suggestions.md)
+* [Compression strategy](core-abilities/compression_strategy.md)
 * [Dynamic context](core-abilities/dynamic_context.md)
 * [Fetching ticket context](core-abilities/fetching_ticket_context.md)
 * [Interactivity](core-abilities/interactivity.md)
 * [Local and global metadata](core-abilities/metadata.md)
-* [RAG context enrichment](core-abilities/rag_context_enrichment.md)
 * [Self-reflection](core-abilities/self_reflection.md)
 
 ## PR Benchmark

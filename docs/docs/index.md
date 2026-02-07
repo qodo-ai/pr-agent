@@ -29,6 +29,9 @@ PR-Agent offers comprehensive pull request functionalities integrated with vario
 |       | [Improve](./tools/improve.md)                                                         |   ✅   |   ✅   |    ✅     |      ✅       |  ✅   |
 |       | [Ask](./tools/ask.md)                                                                 |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | ⮑ [Ask on code lines](./tools/ask.md#ask-lines)                                       |   ✅   |   ✅   |           |              |       |
+|       | [Add Docs](./tools/add_docs.md)                                                       |   ✅   |   ✅   |    ✅     |      ✅       |       |
+|       | [Generate Labels](./tools/generate_labels.md)                                         |   ✅   |   ✅   |    ✅     |      ✅       |       |
+|       | [Similar Issues](./tools/similar_issues.md)                                           |   ✅   |        |           |              |       |
 |       | [Help](./tools/help.md)                                                               |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Help Docs](./tools/help_docs.md)                                                     |   ✅   |   ✅   |    ✅     |              |       |
 |       | [Update CHANGELOG](./tools/update_changelog.md)                                       |   ✅   |   ✅   |    ✅     |      ✅       |       |
@@ -38,15 +41,14 @@ PR-Agent offers comprehensive pull request functionalities integrated with vario
 |       | [Tagging bot](https://github.com/Codium-ai/pr-agent#try-it-now)                       |   ✅   |        |           |              |       |
 |       | [Actions](./installation/github.md#run-as-a-github-action)                            |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       |                                                                                       |        |        |           |              |       |
-| [CORE](./core-abilities/index.md) | [Adaptive and token-aware file patch fitting](./core-abilities/index.md) |   ✅   |   ✅   |    ✅     |      ✅       |       |
+| [CORE](./core-abilities/index.md) | [Adaptive and token-aware file patch fitting](./core-abilities/compression_strategy.md) |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Chat on code suggestions](./core-abilities/chat_on_code_suggestions.md)              |   ✅   |  ✅   |           |              |       |
+|       | [Compression strategy](./core-abilities/compression_strategy.md)                      |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Dynamic context](./core-abilities/dynamic_context.md)                                |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Fetching ticket context](./core-abilities/fetching_ticket_context.md)                |   ✅   |  ✅   |    ✅     |              |       |
 |       | [Interactivity](./core-abilities/interactivity.md)                                    |   ✅   |  ✅   |           |              |       |
 |       | [Local and global metadata](./core-abilities/metadata.md)                             |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Multiple models support](./usage-guide/changing_a_model.md)                          |   ✅   |   ✅   |    ✅     |      ✅       |       |
-|       | [PR compression](./core-abilities/index.md)                                           |   ✅   |   ✅   |    ✅     |      ✅       |       |
-|       | [RAG context enrichment](./core-abilities/rag_context_enrichment.md)                  |   ✅   |        |    ✅     |              |       |
 |       | [Self reflection](./core-abilities/self_reflection.md)                                |   ✅   |   ✅   |    ✅     |      ✅       |       |
 
 ## Example Results

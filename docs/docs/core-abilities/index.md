@@ -2,14 +2,13 @@
 
 PR-Agent utilizes a variety of core abilities to provide a comprehensive and efficient code review experience. These abilities include:
 
-- [Chat on code suggestions](./chat_on_code_suggestions/)
-- [Compression strategy](./compression_strategy/)
-- [Dynamic context](./dynamic_context/)
-- [Fetching ticket context](./fetching_ticket_context/)
-- [Interactivity](./interactivity/)
-- [Local and global metadata](./metadata/)
-- [RAG context enrichment](./rag_context_enrichment/)
-- [Self-reflection](./self_reflection/)
+- [Chat on code suggestions](./chat_on_code_suggestions.md)
+- [Compression strategy](./compression_strategy.md)
+- [Dynamic context](./dynamic_context.md)
+- [Fetching ticket context](./fetching_ticket_context.md)
+- [Interactivity](./interactivity.md)
+- [Local and global metadata](./metadata.md)
+- [Self-reflection](./self_reflection.md)
 
 ## Blogs
 
