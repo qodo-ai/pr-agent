@@ -1,5 +1,7 @@
 import asyncio
 import json
+import os
+import subprocess
 
 import httpx
 import openai
@@ -18,12 +20,45 @@ class ClaudeCodeAIHandler(BaseAiHandler):
     AI handler that invokes the Claude Code CLI (claude) as a subprocess.
     Users with Claude Code installed can use this handler without needing
     separate API keys.
+
+    Authentication:
+        Set the CLAUDE_CODE_TOKEN environment variable for headless/CI usage.
+        The token is obtained by running `claude setup-token` locally
+        (requires a Claude subscription).
     """
+
+    _token_setup_done = False
 
     def __init__(self):
         self.cli_path = get_settings().get("claude_code.cli_path", "claude")
         self.timeout = get_settings().get("claude_code.timeout", 120)
         self.model_override = get_settings().get("claude_code.model", "")
+        self._ensure_token_setup()
+
+    @classmethod
+    def _ensure_token_setup(cls):
+        """Run `claude setup-token` if CLAUDE_CODE_TOKEN env var is set."""
+        if cls._token_setup_done:
+            return
+        token = os.environ.get("CLAUDE_CODE_TOKEN")
+        if not token:
+            return
+        try:
+            cli_path = get_settings().get("claude_code.cli_path", "claude")
+            result = subprocess.run(
+                [cli_path, "setup-token"],
+                input=token,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                get_logger().info("Claude Code token configured successfully")
+            else:
+                get_logger().warning(f"claude setup-token failed: {result.stderr.strip()}")
+        except Exception as e:
+            get_logger().warning(f"Failed to configure Claude Code token: {e}")
+        cls._token_setup_done = True
 
     @property
     def deployment_id(self):

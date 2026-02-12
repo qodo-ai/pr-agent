@@ -1,0 +1,34 @@
+name: 'PR Agent (Claude Code)'
+description: 'Summarize, review and suggest improvements for pull requests using Claude Code CLI'
+branding:
+  icon: 'award'
+  color: 'green'
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Claude Code CLI
+      shell: bash
+      run: |
+        curl -fsSL https://cli.claude.ai/install.sh | sh
+        echo "$HOME/.claude/bin" >> $GITHUB_PATH
+
+    - name: Configure Claude Code token
+      if: env.CLAUDE_CODE_TOKEN != ''
+      shell: bash
+      run: |
+        echo "$CLAUDE_CODE_TOKEN" | claude setup-token
+
+    - name: Install PR Agent
+      shell: bash
+      run: pip install "${{ github.action_path }}/.."
+
+    - name: Run PR Agent
+      shell: bash
+      env:
+        PYTHONPATH: ${{ github.action_path }}/..
+      run: python "${{ github.action_path }}/../pr_agent/servers/github_action_runner.py"
