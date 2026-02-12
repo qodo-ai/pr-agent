@@ -17,12 +17,6 @@ runs:
         curl -fsSL https://claude.ai/install.sh | bash
         echo "$HOME/.claude/bin" >> $GITHUB_PATH
 
-    - name: Configure Claude Code token
-      if: env.CLAUDE_CODE_TOKEN != ''
-      shell: bash
-      run: |
-        echo "$CLAUDE_CODE_TOKEN" | claude setup-token
-
     - name: Install PR Agent
       shell: bash
       run: pip install "${{ github.action_path }}/.."
