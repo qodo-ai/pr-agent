@@ -14,7 +14,7 @@ runs:
     - name: Install Claude Code CLI
       shell: bash
       run: |
-        curl -fsSL https://cli.claude.ai/install.sh | sh
+        curl -fsSL https://claude.ai/install.sh | bash
         echo "$HOME/.claude/bin" >> $GITHUB_PATH
 
     - name: Configure Claude Code token
