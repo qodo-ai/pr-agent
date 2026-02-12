@@ -213,6 +213,10 @@ MAX_TOKENS = {
     "mistral/codestral-mamba-latest": 256000,
     "codestral/codestral-latest": 8191,
     "codestral/codestral-2405": 8191,
+    'claude-code/claude-opus-4-6': 200000,
+    'claude-code/claude-sonnet-4-5': 200000,
+    'claude-code/claude-sonnet-4': 200000,
+    'claude-code/claude-haiku-4-5': 200000,
 }
 
 USER_MESSAGE_ONLY_MODELS = [
@@ -238,7 +242,11 @@ NO_SUPPORT_TEMPERATURE_MODELS = [
     "gpt-5.1-codex",
     "gpt-5.1-codex-mini",
     "gpt-5.2-codex",
-    "gpt-5-mini"
+    "gpt-5-mini",
+    "claude-code/claude-opus-4-6",
+    "claude-code/claude-sonnet-4-5",
+    "claude-code/claude-sonnet-4",
+    "claude-code/claude-haiku-4-5",
 ]
 
 SUPPORT_REASONING_EFFORT_MODELS = [
