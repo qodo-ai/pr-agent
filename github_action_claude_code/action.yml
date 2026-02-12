@@ -19,7 +19,9 @@ runs:
 
     - name: Install PR Agent
       shell: bash
-      run: pip install "${{ github.action_path }}/.."
+      run: |
+        pip install -r "${{ github.action_path }}/../requirements.txt"
+        pip install "${{ github.action_path }}/.."
 
     - name: Run PR Agent
       shell: bash
