@@ -88,6 +88,7 @@ GITLAB__SHARED_SECRET=<shared_secret>
 GITLAB__URL=https://gitlab.com
 GITLAB__AUTH_TYPE=oauth_token  # Use "private_token" for older GitLab versions
 OPENAI__KEY=<your_openai_api_key>
+PORT=3000  # Optional: override the webhook server port
 ```
 
 8. Create a webhook in your GitLab project. Set the URL to `http[s]://<PR_AGENT_HOSTNAME>/webhook`, the secret token to the generated secret from step 3, and enable the triggers `push`, `comments` and `merge request events`.
