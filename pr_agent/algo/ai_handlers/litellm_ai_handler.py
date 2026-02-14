@@ -265,6 +265,13 @@ class LiteLLMAIHandler(BaseAiHandler):
         stop=stop_after_attempt(MODEL_RETRIES),
     )
     async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2, img_path: str = None):
+        # Route claude-code/ models to the Claude Code CLI handler
+        if model.startswith("claude-code/"):
+            from pr_agent.algo.ai_handlers.claude_code_ai_handler import ClaudeCodeAIHandler
+            if not hasattr(self, '_claude_code_handler'):
+                self._claude_code_handler = ClaudeCodeAIHandler()
+            return await self._claude_code_handler.chat_completion(model, system, user, temperature, img_path)
+
         try:
             resp, finish_reason = None, None
             deployment_id = self.deployment_id
