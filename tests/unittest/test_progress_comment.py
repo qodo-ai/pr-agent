@@ -20,7 +20,7 @@ def test_get_progress_gif_url_defaults_to_https_url(mock_get_settings):
 
 @patch("pr_agent.tools.progress_comment.get_settings")
 def test_get_progress_gif_url_uses_config_override(mock_get_settings):
-    custom_url = "https://example.com/custom.gif"
+    custom_url = "  https://example.com/custom.gif  "
 
     mock_settings = MagicMock()
     mock_settings.config.get.return_value = custom_url
@@ -28,7 +28,7 @@ def test_get_progress_gif_url_uses_config_override(mock_get_settings):
 
     progress_gif_url = get_progress_gif_url()
 
-    assert progress_gif_url == custom_url
+    assert progress_gif_url == "https://example.com/custom.gif"
 
 
 def test_build_progress_comment_contains_expected_elements():
@@ -38,7 +38,7 @@ def test_build_progress_comment_contains_expected_elements():
 
     assert "Generating PR code suggestions" in progress_comment
     assert "Work in progress ..." in progress_comment
-    assert '<img src="https://example.com/custom.gif" width=150>' in progress_comment
+    assert '<img src="https://example.com/custom.gif" width="150">' in progress_comment
 
 
 def test_build_progress_comment_defaults_to_width_48():
@@ -46,7 +46,7 @@ def test_build_progress_comment_defaults_to_width_48():
 
     progress_comment = build_progress_comment(gif_url)
 
-    assert f'<img src="https://example.com/custom.gif" width={DEFAULT_PROGRESS_GIF_WIDTH}>' in progress_comment
+    assert f'<img src="https://example.com/custom.gif" width="{DEFAULT_PROGRESS_GIF_WIDTH}">' in progress_comment
 
 
 def test_parse_progress_gif_url_invalid_width_uses_default():

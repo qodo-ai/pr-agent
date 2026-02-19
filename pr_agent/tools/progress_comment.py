@@ -7,7 +7,7 @@ DEFAULT_PROGRESS_GIF_URL = (
 
 
 def get_progress_gif_url() -> str:
-    configured_url = get_settings().config.get("progress_gif_url", "")
+    configured_url = get_settings().config.get("progress_gif_url", "").strip()
     return configured_url or DEFAULT_PROGRESS_GIF_URL
 
 
@@ -33,5 +33,5 @@ def build_progress_comment(progress_gif_url: str) -> str:
     return (
         "## Generating PR code suggestions\n\n"
         "\nWork in progress ...<br>\n"
-        f"<img src=\"{gif_url}\" width={gif_width}>"
+        f"<img src=\"{gif_url}\" width=\"{gif_width}\">"
     )
