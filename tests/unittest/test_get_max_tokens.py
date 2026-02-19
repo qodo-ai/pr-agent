@@ -1,6 +1,8 @@
 import pytest
-from pr_agent.algo.utils import get_max_tokens, MAX_TOKENS
+
 import pr_agent.algo.utils as utils
+from pr_agent.algo.utils import MAX_TOKENS, get_max_tokens
+
 
 class TestGetMaxTokens:
 
