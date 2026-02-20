@@ -2,12 +2,15 @@
 enable_review_labels_effort = true
 enable_auto_approval = true
 
-[github_app]
-pr_commands = [
-    "/describe --pr_description.publish_description_as_comment=true",
-    "/improve",
+[bitbucket_app]
+handle_push_trigger = true
+push_commands = [
+    "/describe  --pr_description.publish_description_as_comment=true",
+    "/review --pr_description.publish_description_as_comment=true"",
+    "/improve --pr_code_suggestions.commitable_code_suggestions=true --pr_code_suggestions.suggestions_score_threshold=7",
     "/agentic_review"
 ]
+
 
 handle_push_trigger = true
 push_commands = [

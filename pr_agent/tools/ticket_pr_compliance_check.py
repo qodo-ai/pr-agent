@@ -2,8 +2,7 @@ import re
 import traceback
 
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers import GithubProvider
-from pr_agent.git_providers import AzureDevopsProvider
+from pr_agent.git_providers import BitbucketProvider
 from pr_agent.log import get_logger
 
 # Compile the regex pattern once, outside the function
@@ -33,7 +32,7 @@ def find_jira_tickets(text):
     return list(tickets)
 
 
-def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url_html='https://github.com'):
+def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url_html='https://bitbucket.org'):
     """
     Extract all ticket links from PR description
     """
@@ -67,7 +66,7 @@ def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url
 async def extract_tickets(git_provider):
     MAX_TICKET_CHARACTERS = 10000
     try:
-        if isinstance(git_provider, GithubProvider):
+        if isinstance(git_provider, BitbucketProvider):
             user_description = git_provider.get_user_description()
             tickets = extract_ticket_links_from_pr_description(user_description, git_provider.repo, git_provider.base_url_html)
             tickets_content = []

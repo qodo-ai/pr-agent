@@ -20,15 +20,11 @@ from pr_agent.algo.utils import (ModelType, PRDescriptionHeader, clip_tokens,
                                  set_custom_labels,
                                  show_relevant_configurations)
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers import (GithubProvider, get_git_provider,
+from pr_agent.git_providers import (BitbucketProvider, get_git_provider,
                                     get_git_provider_with_context)
 from pr_agent.git_providers.git_provider import get_main_pr_language
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
-from pr_agent.tools.ticket_pr_compliance_check import (
-    extract_and_cache_pr_tickets, extract_ticket_links_from_pr_description,
-    extract_tickets)
-
 
 class PRDescription:
     def __init__(self, pr_url: str, args: list = None,
@@ -101,9 +97,6 @@ class PRDescription:
             if get_settings().config.publish_output and not get_settings().config.get('is_auto_command', False):
                 self.git_provider.publish_comment("Preparing PR description...", is_temporary=True)
 
-            # ticket extraction if exists
-            await extract_and_cache_pr_tickets(self.git_provider, self.vars)
-
             await retry_with_fallback_models(self._prepare_prediction, ModelType.WEAK)
 
             if self.prediction:
@@ -137,7 +130,7 @@ class PRDescription:
                 pr_body += HelpMessage.get_describe_usage_guide()
                 pr_body += "\n</details>\n"
             elif get_settings().pr_description.enable_help_comment and self.git_provider.is_supported("gfm_markdown"):
-                if isinstance(self.git_provider, GithubProvider):
+                if isinstance(self.git_provider, BitbucketProvider):
                     pr_body += ('\n\n___\n\n> <details> <summary>  Need help?</summary><li>Type <code>/help how to ...</code> '
                                 'in the comments thread for any questions about PR-Agent usage.</li><li>Check out the '
                                 '<a href="https://qodo-merge-docs.qodo.ai/usage-guide/">documentation</a> '

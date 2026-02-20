@@ -12,7 +12,7 @@ from pr_agent.algo.pr_processing import retry_with_fallback_models
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import ModelType, clip_tokens, load_yaml, get_max_tokens
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers import BitbucketServerProvider, GithubProvider, get_git_provider_with_context
+from pr_agent.git_providers import BitbucketProvider, GitProvider, get_git_provider_with_context
 from pr_agent.log import get_logger
 
 

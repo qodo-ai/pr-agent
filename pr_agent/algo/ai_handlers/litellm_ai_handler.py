@@ -268,6 +268,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         try:
             resp, finish_reason = None, None
             deployment_id = self.deployment_id
+            get_logger().info(f"AAA modelo='{model}' modelo utilizado")
             if self.azure:
                 model = 'azure/' + model
             if 'claude' in model and not system:

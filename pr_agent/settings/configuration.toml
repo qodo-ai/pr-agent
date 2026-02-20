@@ -6,15 +6,15 @@
 
 [config]
 # models
-model="gpt-5.2-2025-12-11"
+model="gpt-5-nano"
 fallback_models=["o4-mini"]
 #model_reasoning="o4-mini" # dedicated reasoning model for self-reflection
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
 # CLI
-git_provider="github"
+git_provider="bitbucket"
 publish_output=true
 publish_output_progress=true
-verbosity_level=0 # 0,1,2
+verbosity_level=2 # 0,1,2
 use_extra_bad_extensions=false
 # Log
 log_level="DEBUG"
