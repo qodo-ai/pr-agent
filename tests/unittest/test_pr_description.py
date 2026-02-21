@@ -1,7 +1,7 @@
 import pytest
 import yaml
 from unittest.mock import MagicMock, patch
-from pr_agent.tools.pr_description import PRDescription
+from pr_agent.tools.pr_description import PRDescription, sanitize_diagram
 
 KEYS_FIX = ["filename:", "language:", "changes_summary:", "changes_title:", "description:", "title:"]
 
@@ -67,3 +67,9 @@ class TestPRDescriptionDiagram:
         obj = _make_instance(_prediction_with_diagram('```mermaid\ngraph LR\nA["file.py"] --> B["output"]\n```'))
         obj._prepare_data()
         assert obj.data['changes_diagram'] == '\n```mermaid\ngraph LR\nA["file.py"] --> B["output"]\n```'
+
+    def test_none_input_returns_empty(self):
+        assert sanitize_diagram(None) == ''
+
+    def test_non_string_input_returns_empty(self):
+        assert sanitize_diagram(123) == ''

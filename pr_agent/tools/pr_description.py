@@ -771,6 +771,8 @@ class PRDescription:
 
 def sanitize_diagram(diagram_raw: str) -> str:
     """Sanitize a diagram string: fix missing closing fence and remove backticks."""
+    if not isinstance(diagram_raw, str):
+        return ''
     diagram = diagram_raw.strip()
     if not diagram.startswith('```'):
         return ''
