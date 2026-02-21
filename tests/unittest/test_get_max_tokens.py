@@ -66,6 +66,22 @@ class TestGetMaxTokens:
 
         assert get_max_tokens(model) == expected
 
+    @pytest.mark.parametrize("model", [
+        "gemini/gemini-3-pro-preview",
+        "vertex_ai/gemini-3-pro-preview",
+        "gemini/gemini-3.1-pro-preview",
+        "vertex_ai/gemini-3.1-pro-preview",
+    ])
+    def test_gemini_3_and_3_1_pro_preview(self, monkeypatch, model):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 0,
+                "max_model_tokens": 0,
+            })()
+        })()
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+        assert get_max_tokens(model) == 1048576
+
     @pytest.mark.parametrize(
         "model",
         [
