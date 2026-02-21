@@ -46,7 +46,6 @@ pr-agent = "pr_agent.cli:run"
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
 
 lint.select = [
   "E",    # Pyflakes
