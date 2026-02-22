@@ -318,6 +318,8 @@ service_callback = []
 # OpenTelemetry configuration
 # Keys map to settings.get("OTEL.*") via section-key dot notation.
 is_enabled = false # disabled by default; set to true to enable telemetry
+# Keys map to settings.get("OTEL.*") via section-key dot notation.
+is_enabled = false # disabled by default; set to true to enable telemetry
 exporter_type = "console" # "console", "otlp", or "none"
 service_name = "pr-agent"
 environment = "development" # "development", "staging", "production", etc.
