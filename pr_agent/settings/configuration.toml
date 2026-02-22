@@ -315,9 +315,6 @@ service_callback = []
 # model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
 [otel]
-# OpenTelemetry configuration
-# Keys map to settings.get("OTEL.*") via section-key dot notation.
-is_enabled = false # disabled by default; set to true to enable telemetry
 # Keys map to settings.get("OTEL.*") via section-key dot notation.
 is_enabled = false # disabled by default; set to true to enable telemetry
 exporter_type = "console" # "console", "otlp", or "none"
