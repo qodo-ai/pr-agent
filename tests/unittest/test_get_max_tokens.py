@@ -1,6 +1,8 @@
 import pytest
-from pr_agent.algo.utils import get_max_tokens, MAX_TOKENS
+
 import pr_agent.algo.utils as utils
+from pr_agent.algo.utils import MAX_TOKENS, get_max_tokens
+
 
 class TestGetMaxTokens:
 
@@ -65,3 +67,42 @@ class TestGetMaxTokens:
         expected = 10000
 
         assert get_max_tokens(model) == expected
+
+    @pytest.mark.parametrize("model", [
+        "gemini/gemini-3-pro-preview",
+        "vertex_ai/gemini-3-pro-preview",
+        "gemini/gemini-3.1-pro-preview",
+        "vertex_ai/gemini-3.1-pro-preview",
+    ])
+    def test_gemini_3_and_3_1_pro_preview(self, monkeypatch, model):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 0,
+                "max_model_tokens": 0,
+            })()
+        })()
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+        assert get_max_tokens(model) == 1048576
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "anthropic/claude-opus-4-6",
+            "claude-opus-4-6",
+            "vertex_ai/claude-opus-4-6",
+            "bedrock/anthropic.claude-opus-4-6-v1:0",
+            "bedrock/global.anthropic.claude-opus-4-6-v1:0",
+            "bedrock/us.anthropic.claude-opus-4-6-v1:0",
+        ],
+    )
+    def test_claude_opus_4_6_model_max_tokens(self, monkeypatch, model):
+        fake_settings = type('', (), {
+            'config': type('', (), {
+                'custom_model_max_tokens': 0,
+                'max_model_tokens': 0
+            })()
+        })()
+
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+
+        assert get_max_tokens(model) == 200000
