@@ -345,6 +345,13 @@ failure_callback = []
 service_callback = []
 # model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
+[otel]
+# OpenTelemetry configuration
+is_enabled = true # Set to true to enable telemetry via LiteLLMAIHandler
+exporter_type = "console" # "console", "otlp", or "none"
+service_name = "pr-agent"
+environment = "development" # "development", "staging", "production", etc.
+
 [pr_similar_issue]
 skip_comments = false
 force_update_dataset = false
@@ -394,10 +401,3 @@ pr_commands = [
     "/review",
     "/improve",
 ]
-
-[otel]
-# OpenTelemetry configuration
-enabled = false # Set to true to enable telemetry via LiteLLMAIHandler
-exporter_type = "console" # "console", "otlp", or "none"
-service_name = "pr-agent"
-environment = "development" # "development", "staging", "production", etc.
