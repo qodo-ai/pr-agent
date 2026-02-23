@@ -44,7 +44,7 @@ nav:
 #  - Code Fine-tuning Benchmark: 'finetuning_benchmark/index.md'
 
 theme:
-  logo: assets/logo.svg
+  logo: assets/favicon.svg
   favicon: assets/favicon.svg
   name: material
   icon:
