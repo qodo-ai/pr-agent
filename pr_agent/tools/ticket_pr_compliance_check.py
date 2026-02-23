@@ -10,6 +10,8 @@ from pr_agent.log import get_logger
 GITHUB_TICKET_PATTERN = re.compile(
      r'(https://github[^/]+/[^/]+/[^/]+/issues/\d+)|(\b(\w+)/(\w+)#(\d+)\b)|(#\d+)'
 )
+# Option A: issue number at start of branch or after /, followed by - or end (e.g. feature/1-test-issue, 123-fix)
+BRANCH_ISSUE_PATTERN = re.compile(r"(?:^|/)(\d{1,6})(?=-|$)")
 
 def find_jira_tickets(text):
     # Regular expression patterns for JIRA tickets
@@ -63,13 +65,50 @@ def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url
 
     return list(github_tickets)
 
+def extract_tickets_link_from_branch_name(branch_name, repo_path, base_url_html="https://github.com"):
+    """
+    Extract GitHub issue URLs from branch name. Numbers are matched at start of branch or after /,
+    followed by - or end (e.g. feature/1-test-issue -> #1). Respects config.extract_issue_from_branch
+    and optional config.branch_issue_regex.
+    """
+    if not branch_name or not repo_path:
+        return []
+    if not get_settings().get("config.extract_issue_from_branch", True):
+        return []
+    github_tickets = set()
+    try:
+        custom_regex = get_settings().get("config.branch_issue_regex", "") or None
+        pattern = re.compile(custom_regex) if custom_regex else BRANCH_ISSUE_PATTERN
+        for match in pattern.finditer(branch_name):
+            issue_number = match.group(1)
+            if issue_number and issue_number.isdigit():
+                github_tickets.add(
+                    f"{base_url_html.strip('/')}/{repo_path}/issues/{issue_number}"
+                )
+    except Exception as e:
+        get_logger().error(
+            f"Error extracting tickets from branch name error= {e}",
+            artifact={"traceback": traceback.format_exc()},
+        )
+    return list(github_tickets)
+
 
 async def extract_tickets(git_provider):
     MAX_TICKET_CHARACTERS = 10000
     try:
         if isinstance(git_provider, GithubProvider):
             user_description = git_provider.get_user_description()
-            tickets = extract_ticket_links_from_pr_description(user_description, git_provider.repo, git_provider.base_url_html)
+            description_tickets = extract_ticket_links_from_pr_description(
+                user_description, git_provider.repo, git_provider.base_url_html
+            )
+            branch_name = git_provider.get_pr_branch()
+            branch_tickets = extract_tickets_link_from_branch_name(
+                branch_name, git_provider.repo, git_provider.base_url_html
+            )
+            tickets = list(set(description_tickets) | set(branch_tickets))
+            if len(tickets) > 3:
+                get_logger().info(f"Too many tickets (description + branch): {len(tickets)}")
+                tickets = tickets[:3]
             tickets_content = []
 
             if tickets:
