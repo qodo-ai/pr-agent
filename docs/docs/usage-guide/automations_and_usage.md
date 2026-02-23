@@ -29,7 +29,7 @@ verbosity_level=2
 
 This is useful for debugging or experimenting with different tools.
 
-3. **git provider**: The [git_provider](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L5) field in a configuration file determines the GIT provider that will be used by PR-Agent. Currently, the following providers are supported:
+3. **git provider**: The [git_provider](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L12) field in a configuration file determines the GIT provider that will be used by PR-Agent. Currently, the following providers are supported:
 `github` **(default)**, `gitlab`, `bitbucket`, `azure`, `codecommit`, `local`, and `gitea`.
 
 ### CLI Health Check
@@ -96,7 +96,7 @@ When this parameter is set to `true`, PR-Agent will not run any automatic tools 
 
 #### GitHub app automatic tools when a new PR is opened
 
-The [github_app](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L220) section defines GitHub app specific configurations.
+The [github_app](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L223) section defines GitHub app specific configurations.
 
 The configuration parameter `pr_commands` defines the list of tools that will be **run automatically** when a new PR is opened:
 

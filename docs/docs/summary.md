@@ -36,7 +36,7 @@
 ## Core Abilities
 
 * [Core Abilities](core-abilities/index.md)
-* [Chat on code suggestions](core-abilities/chat_on_code_suggestions.md)
+* [Chat on code suggestions](core-abilities/interactivity.md)
 * [Compression strategy](core-abilities/compression_strategy.md)
 * [Dynamic context](core-abilities/dynamic_context.md)
 * [Fetching ticket context](core-abilities/fetching_ticket_context.md)
