@@ -1,6 +1,6 @@
 To run PR-Agent locally, you first need to acquire two keys:
 
-1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/), if you prefer).
+1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](../usage-guide/changing_a_model.md), if you prefer).
 2. A personal access token from your Git platform (GitHub, GitLab, BitBucket,Gitea) with repo scope. GitHub token, for example, can be issued from [here](https://github.com/settings/tokens){:target="_blank"}
 
 ## Using Docker image
@@ -53,7 +53,7 @@ To invoke a tool (for example `review`), you can run PR-Agent directly from the 
     ```
 
 
-For other git providers, update `CONFIG.GIT_PROVIDER` accordingly and check the [`pr_agent/settings/.secrets_template.toml`](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/.secrets_template.toml) file for environment variables expected names and values.
+For other git providers, update `CONFIG.GIT_PROVIDER` accordingly and check the [`pr_agent/settings/.secrets_template.toml`](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/.secrets_template.toml) file for environment variables expected names and values.
 
 ### Utilizing environment variables
 
@@ -87,8 +87,8 @@ Note that litellm, which is used by pr-agent, sometimes returns non-informative 
 Carefully check the api keys and tokens you provided and make sure they are correct.
 Adjustments may be needed depending on your llm provider.
 
-For example, for Azure OpenAI, additional keys are [needed](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/#azure).
-Same goes for other providers, make sure to check the [documentation](https://qodo-merge-docs.qodo.ai/usage-guide/changing_a_model/#changing-a-model)
+For example, for Azure OpenAI, additional keys are [needed](../usage-guide/changing_a_model.md#azure).
+Same goes for other providers, make sure to check the [documentation](../usage-guide/changing_a_model.md#changing-a-model)
 
 ## Using pip package
 
@@ -111,7 +111,7 @@ def main():
     provider = "github" # github/gitlab/bitbucket/azure_devops
     user_token = "..."  #  user token
     openai_key = "..."  # OpenAI key
-    pr_url = "..."      # PR URL, for example 'https://github.com/Codium-ai/pr-agent/pull/809'
+    pr_url = "..."      # PR URL, for example 'https://github.com/qodo-ai/pr-agent/pull/809'
     command = "/review" # Command to run (e.g. '/review', '/describe', '/ask="What is the purpose of this PR?"', ...)
 
     # Setting the configurations
@@ -132,7 +132,7 @@ if __name__ == '__main__':
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/Codium-ai/pr-agent.git
+git clone https://github.com/qodo-ai/pr-agent.git
 ```
 
 2. Navigate to the `/pr-agent` folder and install the requirements in your favorite virtual environment:

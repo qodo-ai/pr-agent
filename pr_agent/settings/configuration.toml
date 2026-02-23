@@ -1,8 +1,6 @@
 # Important: This file contains all available configuration options.
 # Do not copy this entire file to your repository configuration.
 # Your repository configuration should only include options you wish to override from the defaults.
-#
-# Use this page: 'https://qodo-merge-docs.qodo.ai/ai_search/' to ask questions about the configuration options.
 
 [config]
 # models
@@ -41,17 +39,12 @@ patch_extra_lines_before = 5 # Number of extra lines (+3 default ones) to includ
 patch_extra_lines_after = 1 # Number of extra lines (+3 default ones) to include after each hunk in the patch
 secret_provider="" # "" (disabled), "google_cloud_storage", or "aws_secrets_manager" for secure secret management
 cli_mode=false
-ai_disclaimer_title=""  # Pro feature, title for a collapsible disclaimer to AI outputs
-ai_disclaimer=""  # Pro feature, full text for the AI disclaimer
 output_relevant_configurations=false
 large_patch_policy = "clip" # "clip", "skip"
 duplicate_prompt_examples = false
 # seed
 seed=-1 # set positive value to fix the seed (and ensure temperature=0)
 temperature=0.2
-# bring repo metadata 💎
-add_repo_metadata=false # if true, will try to add metadata from files like 'AGENTS.MD', 'CLAUDE.MD', 'QODO.MD'
-add_repo_metadata_file_list =["AGENTS.MD", "CLAUDE.MD", "QODO.MD"]
 # ignore logic
 ignore_pr_title = ["^\\[Auto\\]", "^Auto"] # a list of regular expressions to match against the PR title to ignore the PR agent
 ignore_pr_target_branches = [] # a list of regular expressions of target branches to ignore from PR agent when an PR is created
@@ -64,11 +57,6 @@ ignore_language_framework = [] # a list of code-generation languages or framewor
 is_auto_command = false # will be auto-set to true if the command is triggered by an automation
 enable_ai_metadata = false # will enable adding ai metadata
 reasoning_effort = "medium" # "low", "medium", "high"
-# auto approval 💎
-enable_auto_approval=false # Set to true to enable auto-approval of PRs under certain conditions
-auto_approve_for_low_review_effort=-1 # -1 to disable, [1-5] to set the threshold for auto-approval
-auto_approve_for_no_suggestions=false # If true, the PR will be auto-approved if there are no suggestions
-ensure_ticket_compliance=false # Set to true to disable auto-approval of PRs if the ticket is not compliant
 # extended thinking for Claude reasoning models
 enable_claude_extended_thinking = false # Set to true to enable extended thinking feature
 extended_thinking_budget_tokens = 2048
@@ -119,14 +107,9 @@ publish_description_as_comment_persistent=true
 enable_semantic_files_types=true
 collapsible_file_list='adaptive' # true, false, 'adaptive'
 collapsible_file_list_threshold=6
-inline_file_summary=false # false, true, 'table'
 # markers
 use_description_markers=false
 include_generated_by_header=true
-# large pr mode 💎
-enable_large_pr_handling=true
-max_ai_calls=4
-async_ai_calls=true
 #custom_labels = ['Bug fix', 'Tests', 'Bug fix with tests', 'Enhancement', 'Documentation', 'Other']
 
 [pr_questions] # /ask #
@@ -145,8 +128,6 @@ enable_chat_text=false
 persistent_comment=true
 max_history_len=4
 publish_output_no_suggestions=true
-# enable to apply suggestion 💎
-apply_suggestions_checkbox=true
 # suggestions scoring
 suggestions_score_threshold=0 # [0-10]| recommend not to set this value above 8, since above it may clip highly relevant suggestions
 new_score_mechanism=true
@@ -155,7 +136,6 @@ new_score_mechanism_th_medium=7
 # params for '/improve --extended' mode
 auto_extended_mode=true
 num_code_suggestions_per_chunk=3
-num_best_practice_suggestions=1 # 💎
 max_number_of_calls = 3
 parallel_calls = true
 
@@ -164,12 +144,8 @@ decouple_hunks = false
 # self-review checkbox
 demand_code_suggestions_self_review=false # add a checkbox for the author to self-review the code suggestions
 code_suggestions_self_review_text= "**Author self-review**: I have reviewed the PR code suggestions, and addressed the relevant ones."
-approve_pr_on_self_review=false # Pro feature. if true, the PR will be auto-approved after the author clicks on the self-review checkbox
-fold_suggestions_on_self_review=true # Pro feature. if true, the code suggestions will be folded after the author clicks on the self-review checkbox
-# Suggestion impact 💎
-publish_post_process_suggestion_impact=true
-wiki_page_accepted_suggestions=true
-allow_thumbs_up_down=false
+approve_pr_on_self_review=false # if true, the PR will be auto-approved after the author clicks on the self-review checkbox
+fold_suggestions_on_self_review=true # if true, the code suggestions will be folded after the author clicks on the self-review checkbox
 
 [pr_custom_prompt] # /custom_prompt #
 prompt = """\
@@ -213,13 +189,6 @@ num_code_suggestions=4
 extra_instructions = ""
 file = ""              # in case there are several components with the same name, you can specify the relevant file
 class_name = ""        # in case there are several methods with the same name in the same file, you can specify the relevant class name
-
-[checks] # /checks (pro feature) #
-enable_auto_checks_feedback=true
-excluded_checks_list=["lint"] # list of checks to exclude, for example: ["check1", "check2"]
-persistent_comment=true
-enable_help_text=true
-final_update_message = false
 
 [pr_help] # /help #
 force_local_db=false

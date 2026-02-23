@@ -1,6 +1,6 @@
 ## Run a Gitea webhook server
 
-1. In Gitea create a new user and give it "Reporter" role ("Developer" if using Pro version of the agent) for the intended group or project.
+1. In Gitea create a new user and give it "Reporter" role for the intended group or project.
 
 2. For the user from step 1. generate a `personal_access_token` with `api` access.
 

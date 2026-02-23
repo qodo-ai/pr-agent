@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock, call
-from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
+
 import pr_agent.algo.ai_handlers.litellm_ai_handler as litellm_handler
+from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 
 
 def create_mock_settings(reasoning_effort_value):

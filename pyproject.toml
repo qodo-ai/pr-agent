@@ -77,3 +77,12 @@ lint.ignore = ["E999", "B008"]
 exclude_dirs = ["tests"]
 skips = ["B101"]
 tests = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--color=yes"
+console_output_style = "progress"
