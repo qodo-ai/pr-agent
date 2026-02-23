@@ -6,23 +6,18 @@ Keep this list minimal to ease upstream rebases.
 ## Upstream baseline
 
 - Upstream repo: qodo-ai/pr-agent
-- Upstream tag: v0.31
-- Upstream commit: d36ad319f7fb0049205017405a71275c41599587
-- Synced on: 2026-02-16
+- Upstream tag: main
+- Upstream commit: 1b0609a013f53694c36d457149bde70abf50c048
+- Synced on: 2026-02-23
 
 ## Local patches
 
-| Patch ID | Ticket | Type | Files | Why | Upstream status | Removal criteria |
-| --- | --- | --- | --- | --- | --- | --- |
-| azure-annotations | OPS-24074 | Fix | pr_agent/git_providers/azuredevops_provider.py | Avoid import-time NameError when optional Azure DevOps dependencies are missing; this crash happens even when git_provider=github. | Not upstreamed yet. | Remove once upstream includes the fix and we rebase to a tag containing it. |
-| pyjwt-pin | OPS-24074 | Fix | requirements.txt | GitHub App JWT expects integer iss, but PyJWT >= 2.9 requires string; pin to a compatible PyJWT range to avoid auth failures. | Not upstreamed yet. | Remove once upstream pins PyJWT compatibly or updates auth logic. |
+None. Fork matches upstream as of the sync date above.
 
 ## Rebase checklist
 
-1) Fetch upstream tag and reset local baseline.
-2) Cherry-pick patch commits listed above (or re-apply manually).
-3) Verify container boots without Azure DevOps deps installed.
-4) Run a canary PR comment to confirm GitHub App workflow.
+1) Fetch upstream and reset local baseline.
+2) Verify fork still matches upstream after the sync.
 
 ## Notes
 
