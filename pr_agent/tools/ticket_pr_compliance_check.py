@@ -68,17 +68,25 @@ def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url
 def extract_tickets_link_from_branch_name(branch_name, repo_path, base_url_html="https://github.com"):
     """
     Extract GitHub issue URLs from branch name. Numbers are matched at start of branch or after /,
-    followed by - or end (e.g. feature/1-test-issue -> #1). Respects config.extract_issue_from_branch
-    and optional config.branch_issue_regex.
+    followed by - or end (e.g. feature/1-test-issue -> #1). Respects extract_issue_from_branch
+    and optional branch_issue_regex (may be under [config] in TOML).
     """
     if not branch_name or not repo_path:
         return []
-    if not get_settings().get("config.extract_issue_from_branch", True):
+    settings = get_settings()
+    if not settings.get("extract_issue_from_branch", settings.get("config.extract_issue_from_branch", True)):
         return []
     github_tickets = set()
+    custom_regex_str = settings.get("branch_issue_regex") or settings.get("config.branch_issue_regex", "") or ""
+    if custom_regex_str:
+        try:
+            pattern = re.compile(custom_regex_str)
+        except re.error as e:
+            get_logger().error(f"Invalid custom regex for branch issue extraction: {e}")
+            return []
+    else:
+        pattern = BRANCH_ISSUE_PATTERN
     try:
-        custom_regex = get_settings().get("config.branch_issue_regex", "") or None
-        pattern = re.compile(custom_regex) if custom_regex else BRANCH_ISSUE_PATTERN
         for match in pattern.finditer(branch_name):
             issue_number = match.group(1)
             if issue_number and issue_number.isdigit():
@@ -87,7 +95,7 @@ def extract_tickets_link_from_branch_name(branch_name, repo_path, base_url_html=
                 )
     except Exception as e:
         get_logger().error(
-            f"Error extracting tickets from branch name error= {e}",
+            f"Error extracting tickets from branch name: {e}",
             artifact={"traceback": traceback.format_exc()},
         )
     return list(github_tickets)

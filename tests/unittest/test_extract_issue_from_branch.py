@@ -52,9 +52,28 @@ class TestExtractTicketsLinkFromBranchName:
         assert result == ["https://github.com/org/repo/issues/1"]
 
     def test_disable_via_config_returns_empty(self, monkeypatch):
-        """When config.extract_issue_from_branch is False, return []"""
+        """When extract_issue_from_branch is False, return []"""
         fake_settings = type("Settings", (), {})()
-        fake_settings.get = lambda key, default=None: default if key != "config.extract_issue_from_branch" else False
+        fake_settings.get = lambda key, default=None: (
+            False if key in ("extract_issue_from_branch", "config.extract_issue_from_branch") else (
+                "" if key in ("branch_issue_regex", "config.branch_issue_regex") else default
+            )
+        )
+        import pr_agent.tools.ticket_pr_compliance_check as m
+        monkeypatch.setattr(m, "get_settings", lambda: fake_settings)
+        result = extract_tickets_link_from_branch_name(
+            "feature/1-test", "org/repo", "https://github.com"
+        )
+        assert result == []
+
+    def test_invalid_custom_regex_returns_empty(self, monkeypatch):
+        """When branch_issue_regex is invalid, log and return []"""
+        fake_settings = type("Settings", (), {})()
+        fake_settings.get = lambda key, default=None: (
+            True if key in ("extract_issue_from_branch", "config.extract_issue_from_branch") else (
+                "[" if key in ("branch_issue_regex", "config.branch_issue_regex") else default
+            )
+        )
         import pr_agent.tools.ticket_pr_compliance_check as m
         monkeypatch.setattr(m, "get_settings", lambda: fake_settings)
         result = extract_tickets_link_from_branch_name(
