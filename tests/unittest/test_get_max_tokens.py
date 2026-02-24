@@ -38,6 +38,25 @@ class TestGetMaxTokens:
 
         assert get_max_tokens(model) == expected
 
+    @pytest.mark.parametrize("model", [
+        "gpt-5.1-codex",
+        "gpt-5.2-codex",
+        "gpt-5.3-codex",
+    ])
+    def test_gpt_codex_models_max_tokens(self, monkeypatch, model):
+        fake_settings = type('', (), {
+            'config': type('', (), {
+                'custom_model_max_tokens': 0,
+                'max_model_tokens': 0
+            })()
+        })()
+
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+
+        expected = MAX_TOKENS[model]
+
+        assert get_max_tokens(model) == expected
+
     def test_model_not_max_tokens_and_not_has_custom(self, monkeypatch):
         fake_settings = type('', (), {
             'config': type('', (), {
