@@ -1,0 +1,2522 @@
+<!DOCTYPE html><html lang="en" class="no-js"><head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../core-abilities/self_reflection/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/favicon.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.3">
+    
+    
+      
+        <title>PR Benchmark - PR-Agent</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../css/custom.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  <link href="../assets/stylesheets/glightbox.min.css" rel="stylesheet"><script src="../assets/javascripts/glightbox.min.js"></script><style id="glightbox-style">
+            html.glightbox-open { overflow: initial; height: 100%; }
+            .gslide-title { margin-top: 0px; user-select: text; }
+            .gslide-desc { color: #666; user-select: text; }
+            .gslide-image img { background: white; }
+            .gscrollbar-fixer { padding-right: 15px; }
+            .gdesc-inner { font-size: 0.75rem; }
+            body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color); }
+            body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color); }
+            body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color); }
+        </style></head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pr-agent-pull-request-benchmark" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="PR-Agent" class="md-header__button md-logo" aria-label="PR-Agent" data-md-component="logo">
+      
+  <img src="../assets/favicon.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PR-Agent
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PR Benchmark
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo" aria-label="Switch to light mode" type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"></path></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom" aria-label="Switch to dark mode" type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 6H7c-3.31 0-6 2.69-6 6s2.69 6 6 6h10c3.31 0 6-2.69 6-6s-2.69-6-6-6m0 10H7c-2.21 0-4-1.79-4-4s1.79-4 4-4h10c2.21 0 4 1.79 4 4s-1.79 4-4 4M7 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3"></path></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom" aria-label="Switch to light mode" type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"></path></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/qodo-ai/pr-agent" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"></path></svg>
+  </div>
+  <div class="md-source__repository">
+    Qodo-ai/pr-agent
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href=".." class="md-tabs__link">
+          
+  
+  
+    
+  
+  Overview
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../installation/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Installation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../usage-guide/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Usage Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../tools/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Tools
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../core-abilities/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Core Abilities
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  PR Benchmark
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="PR-Agent" class="md-nav__button md-logo" aria-label="PR-Agent" data-md-component="logo">
+      
+  <img src="../assets/favicon.svg" alt="logo">
+
+    </a>
+    PR-Agent
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/qodo-ai/pr-agent" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"></path></svg>
+  </div>
+  <div class="md-source__repository">
+    Qodo-ai/pr-agent
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_1">
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href=".." class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_1" id="__nav_1_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Overview
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/data_privacy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Privacy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2">
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../installation/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Installation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/pr_agent/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PR-Agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3">
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../usage-guide/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage Guide
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Usage Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage-guide/introduction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage-guide/configuration_options/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration File
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage-guide/automations_and_usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage and Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage-guide/mail_notifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Managing Mail Notifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage-guide/changing_a_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changing a Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usage-guide/additional_configurations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Additional Configurations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frequently Asked Questions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4">
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../tools/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tools
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/describe/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Describe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Review
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/improve/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Improve
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/ask/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ask
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/add_docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Add Docs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/generate_labels/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generate Labels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/similar_issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Similar Issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/help/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Help
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/help_docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Help Docs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tools/update_changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Update Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5">
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../core-abilities/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Abilities
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core Abilities
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-abilities/compression_strategy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compression strategy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-abilities/dynamic_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dynamic context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-abilities/fetching_ticket_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fetching ticket context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-abilities/interactivity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interactivity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-abilities/metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local and global metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../core-abilities/self_reflection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Self-reflection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="./" class="md-nav__link md-nav__link--active">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PR Benchmark
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    PR Benchmark
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+  
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#methodology" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Methodology
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pr-benchmark-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR Benchmark Results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#results-analysis-latest-additions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results Analysis (Latest Additions)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Results Analysis (Latest Additions)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gpt-52-medium-thinking-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPT-5.2 ('medium' thinking budget)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gpt-52-low-thinking-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPT-5.2 ('low' thinking budget)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gpt-5-pro" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPT-5-pro
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gemini-3-pro-review-high-thinking-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemini-3-pro-review (high thinking budget)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gemini-25-pro-4096-thinking-tokens" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemini-2.5 Pro (4096 thinking tokens)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gemini-3-pro-review-low-thinking-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemini-3-pro-review (low thinking budget)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-haiku-45-4096-thinking-tokens" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude-haiku-4.5 (4096 thinking tokens)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gpt-51-medium-thinking-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPT-5.1 ('medium' thinking budget)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-sonnet-45-4096-thinking-tokens" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude-sonnet-4.5 (4096 thinking tokens)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-sonnet-45" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude-sonnet-4.5
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-haiku-45" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude-haiku-4.5
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#openai-codex-mini" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OpenAI codex-mini
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gemini-25-flash" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemini-2.5 Flash
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-4-opus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude-4 Opus
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#grok-4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Grok-4
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#claude-opus-45-high-thinking-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Claude-Opus-4.5 (high thinking budget)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-example-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix - Example Results
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Appendix - Example Results">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#models-used-for-benchmarking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models Used for Benchmarking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#programming-languages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Programming Languages
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+                
+
+
+
+
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pr-agent-pull-request-benchmark">PR-Agent Pull Request Benchmark<a class="headerlink" href="#pr-agent-pull-request-benchmark" title="Permanent link">¶</a></h1>
+<h2 id="methodology">Methodology<a class="headerlink" href="#methodology" title="Permanent link">¶</a></h2>
+<p>PR-Agent PR Benchmark evaluates and compares the performance of Large Language Models (LLMs) in analyzing pull request code and providing meaningful code suggestions.
+Our diverse dataset contains 400 pull requests from over 100 repositories, spanning multiple <a href="#programming-languages">programming languages</a> to reflect real-world scenarios.</p>
+<ul>
+<li>
+<p>For each pull request, we have pre-generated suggestions from eleven different top-performing models using the PR-Agent <code>improve</code> tool. The prompt for response generation can be found <a href="https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml">here</a>. </p>
+</li>
+<li>
+<p>To benchmark a model, we generate its suggestions for the same pull requests and ask a high-performing judge model to <strong>rank</strong> the new model's output against the pre-generated baseline suggestions. We utilize OpenAI's <code>o3</code> model as the judge, though other models have yielded consistent results. The prompt for this ranking judgment is available <a href="https://github.com/qodo-ai/pr-agent-settings/tree/main/benchmark">here</a>.</p>
+</li>
+<li>
+<p>We aggregate ranking outcomes across all pull requests, calculating performance metrics for the evaluated model. </p>
+</li>
+<li>
+<p>We also analyze the qualitative feedback from the judge to identify the model's comparative strengths and weaknesses against the established baselines.
+This approach provides not just a quantitative score but also a detailed analysis of each model's strengths and weaknesses.</p>
+</li>
+</ul>
+<p>A list of the models used for generating the baseline suggestions, and example results, can be found in the <a href="#appendix-example-results">Appendix</a>.</p>
+<h2 id="pr-benchmark-results">PR Benchmark Results<a class="headerlink" href="#pr-benchmark-results" title="Permanent link">¶</a></h2>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left;">Model Name</th>
+      <th style="text-align:left;">Version (Date)</th>
+      <th style="text-align:left;">Thinking budget tokens</th>
+      <th style="text-align:center;">Score</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:left;">GPT-5.2</td>
+      <td style="text-align:left;">2025-12-11</td>
+      <td style="text-align:left;">medium</td>
+      <td style="text-align:center;"><b>80.8</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">GPT-5.2</td>
+      <td style="text-align:left;">2025-12-11</td>
+      <td style="text-align:left;">low</td>
+      <td style="text-align:center;"><b>79.1</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">GPT-5-pro</td>
+      <td style="text-align:left;">2025-10-06</td>
+      <td style="text-align:left;"></td>
+      <td style="text-align:center;"><b>73.4</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">GPT-5</td>
+      <td style="text-align:left;">2025-08-07</td>
+      <td style="text-align:left;">medium</td>
+      <td style="text-align:center;"><b>72.2</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">GPT-5</td>
+      <td style="text-align:left;">2025-08-07</td>
+      <td style="text-align:left;">low</td>
+      <td style="text-align:center;"><b>67.8</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">GPT-5</td>
+      <td style="text-align:left;">2025-08-07</td>
+      <td style="text-align:left;">minimal</td>
+      <td style="text-align:center;"><b>62.7</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">o3</td>
+      <td style="text-align:left;">2025-04-16</td>
+      <td style="text-align:left;">'medium' (<a href="https://ai.google.dev/gemini-api/docs/openai">8000</a>)</td>
+      <td style="text-align:center;"><b>62.5</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">o4-mini</td>
+      <td style="text-align:left;">2025-04-16</td>
+      <td style="text-align:left;">'medium' (<a href="https://ai.google.dev/gemini-api/docs/openai">8000</a>)</td>
+      <td style="text-align:center;"><b>57.7</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Gemini-3-pro-review</td>
+      <td style="text-align:left;">2025-11-18</td>
+      <td style="text-align:left;">high</td>
+      <td style="text-align:center;"><b>57.3</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Gemini-2.5-pro</td>
+      <td style="text-align:left;">2025-06-05</td>
+      <td style="text-align:left;">4096</td>
+      <td style="text-align:center;"><b>56.3</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Gemini-3-pro-review</td>
+      <td style="text-align:left;">2025-11-18</td>
+      <td style="text-align:left;">low</td>
+      <td style="text-align:center;"><b>55.6</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-haiku-4.5</td>
+      <td style="text-align:left;">2025-10-01</td>
+      <td style="text-align:left;">4096</td>
+      <td style="text-align:center;"><b>48.8</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">GPT-5.1</td>
+      <td style="text-align:left;">2025-11-13</td>
+      <td style="text-align:left;">medium</td>
+      <td style="text-align:center;"><b>44.9</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Gemini-2.5-pro</td>
+      <td style="text-align:left;">2025-06-05</td>
+      <td style="text-align:left;">1024</td>
+      <td style="text-align:center;"><b>44.3</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-sonnet-4.5</td>
+      <td style="text-align:left;">2025-09-29</td>
+      <td style="text-align:left;">4096</td>
+      <td style="text-align:center;"><b>44.2</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-haiku-4.5</td>
+      <td style="text-align:left;">2025-10-01</td>
+      <td style="text-align:left;"></td>
+      <td style="text-align:center;"><b>40.7</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-sonnet-4.5</td>
+      <td style="text-align:left;">2025-09-29</td>
+      <td style="text-align:left;"></td>
+      <td style="text-align:center;"><b>40.7</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-4-sonnet</td>
+      <td style="text-align:left;">2025-05-14</td>
+      <td style="text-align:left;">4096</td>
+      <td style="text-align:center;"><b>39.7</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-4-sonnet</td>
+      <td style="text-align:left;">2025-05-14</td>
+      <td style="text-align:left;"></td>
+      <td style="text-align:center;"><b>39.0</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Codex-mini</td>
+      <td style="text-align:left;">2025-06-20</td>
+      <td style="text-align:left;"><a href="https://platform.openai.com/docs/models/codex-mini-latest">unknown</a></td>
+      <td style="text-align:center;"><b>37.2</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Gemini-2.5-flash</td>
+      <td style="text-align:left;">2025-04-17</td>
+      <td style="text-align:left;"></td>
+      <td style="text-align:center;"><b>33.5</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Grok-4</td>
+      <td style="text-align:left;">2025-07-09</td>
+      <td style="text-align:left;">unknown</td>
+      <td style="text-align:center;"><b>32.8</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-4-opus-20250514</td>
+      <td style="text-align:left;">2025-05-14</td>
+      <td style="text-align:left;"></td>
+      <td style="text-align:center;"><b>32.8</b></td>
+    </tr>
+    <tr>
+      <td style="text-align:left;">Claude-opus-4.5</td>
+      <td style="text-align:left;">2025-11-01</td>
+      <td style="text-align:left;">high</td>
+      <td style="text-align:center;"><b>30.3</b></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="results-analysis-latest-additions">Results Analysis (Latest Additions)<a class="headerlink" href="#results-analysis-latest-additions" title="Permanent link">¶</a></h2>
+<h3 id="gpt-52-medium-thinking-budget">GPT-5.2 ('medium' thinking budget)<a class="headerlink" href="#gpt-52-medium-thinking-budget" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>80.8</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Broad, context-aware coverage:</strong> Frequently identifies multiple high-impact faults in the added lines and proposes fixes that surpass or equal the best prior answer in many cases (≈60 % of the 399 comparisons).</li>
+<li><strong>Actionable, minimal patches:</strong> Tends to supply concise before/after code snippets that compile/run, keep changes local, and respect limits (≤3 suggestions, touched-lines only) – making the advice easy to apply.</li>
+<li><strong>Clear reasoning &amp; prioritisation:</strong> Usually explains why an issue is critical, ranks it properly (e.g., crash &gt; style), and avoids clutter, resulting in focused reviews that align with real test failures.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Critical omissions remain common:</strong> In a sizeable minority of examples the model overlooks the single most blocking error (e.g., compile-time break, nil-deref, enum mismatch), causing it to trail a sharper peer answer.</li>
+<li><strong>Occasional inaccurate or harmful fixes:</strong> It sometimes introduces non-compiling code, speculative refactors, or misguided changes to unchanged lines, lowering reliability.</li>
+<li><strong>Inconsistent guideline adherence:</strong> A non-trivial set of replies add off-scope edits, non-critical style nits, or empty suggestion lists when clear bugs exist, leading to avoidable downgrades.</li>
+</ul>
+<h3 id="gpt-52-low-thinking-budget">GPT-5.2 ('low' thinking budget)<a class="headerlink" href="#gpt-52-low-thinking-budget" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>79.1</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Often spots multiple critical regressions:</strong> In many cases the model is the only or one of very few answers that simultaneously catches several high-impact bugs (e.g. Examples 25, 55, 134, 206, 371).</li>
+<li><strong>Produces concise, actionable patches:</strong> Suggestions are usually well-scoped, supply minimal working code/YAML snippets and respect the three-item limit, so reviewers can apply them quickly.</li>
+<li><strong>Good rule compliance most of the time:</strong> It generally limits itself to '+' lines, avoids stylistic nit-picking, and honours output format and suggestion cap, which keeps responses focused.</li>
+<li><strong>Broad language &amp; domain coverage:</strong> The model successfully reviews changes in many stacks (C/C++, Rust, Go, TS/JS, Python, Kotlin, SQL, CSS/MD/PO, CI scripts), showing solid cross-domain competence.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Misses higher-severity issues fairly often:</strong> In a substantial fraction of examples it overlooks a more critical bug that other answers find (e.g. 6, 21, 30, 94, 310), lowering its relative rank.</li>
+<li><strong>Occasional invented or non-critical advice:</strong> Sometimes raises speculative, cosmetic or out-of-scope points (17, 106, 171, 230, 390), violating the "critical bugs only" rule and hurting ranking.</li>
+<li><strong>Technical inaccuracies &amp; unsafe fixes:</strong> A number of replies introduce uncompilable code, wrong APIs, or contradictory edits (24, 341, 346, 375), indicating imperfect code-level precision.</li>
+<li><strong>Inconsistency in restraint:</strong> While usually concise, the model sporadically adds redundant or excessive suggestions, touches unchanged lines, or conflicts with its own fixes (238, 270, 330), showing uneven guideline adherence.</li>
+</ul>
+<h3 id="gpt-5-pro">GPT-5-pro<a class="headerlink" href="#gpt-5-pro" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>73.4</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High bug‐finding accuracy and depth:</strong> In many cases the model uncovers the core compile-time or run-time regression that other answers miss and frequently combines several distinct critical issues into one reply.</li>
+<li><strong>Actionable, minimal patches:</strong> Suggestions almost always include clear before/after code blocks that touch only the added lines and respect the ≤3-suggestion limit, making them easy to apply.</li>
+<li><strong>Good guideline compliance:</strong> The model generally honours the task rules—no edits to unchanged code, no version bumps, no more than three items—and shows solid judgment about when an empty list is appropriate.</li>
+<li><strong>Concise, impact-oriented reasoning:</strong> Explanations focus on severity, crash potential and build breakage rather than style, helping reviewers prioritise fixes.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Coverage gaps:</strong> In a noticeable minority of examples the model misses a higher-impact defect that several other answers catch, or returns an empty list despite clear bugs.</li>
+<li><strong>Occasional incorrect or harmful fixes:</strong> A few replies introduce new errors or rest on wrong assumptions about functionality or language-specific behavior.</li>
+<li><strong>Formatting / guideline slips:</strong> Sporadic duplication of suggestions, missing or empty <code>improved_code</code> blocks, or YAML mishaps undermine otherwise good answers.</li>
+<li><strong>Uneven criticality judgement:</strong> Some suggestions drift into low-impact territory while overlooking more severe problems, indicating inconsistent prioritisation.</li>
+</ul>
+<h3 id="gemini-3-pro-review-high-thinking-budget">Gemini-3-pro-review (high thinking budget)<a class="headerlink" href="#gemini-3-pro-review-high-thinking-budget" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>57.3</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Good schema &amp; format discipline:</strong> Consistently returns well-formed YAML with correct fields and respects the 3-suggestion limit; rarely breaks the required output structure.</li>
+<li><strong>Reasonable guideline awareness:</strong> Often recognises when a diff contains only data / translations and properly emits an empty list, avoiding over-reporting.</li>
+<li><strong>Clear, actionable patches when correct:</strong> When it does find a bug it usually supplies minimal-diff, compilable code snippets with concise explanations, and occasionally surfaces issues no other model spotted.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Spot-coverage gaps on critical defects:</strong> In a large share of cases it overlooks the principal regression the tests were written for, while fixating on minor style or performance nits.</li>
+<li><strong>False or speculative fixes:</strong> A noticeable number of answers invent non-existent problems or propose changes that would not compile or would re-introduce removed behaviour.</li>
+<li><strong>Guideline violations creep in:</strong> Sometimes touches unchanged lines, adds forbidden imports / labels, or supplies more than "critical" advice, showing imperfect rule adherence.</li>
+<li><strong>High variance / inconsistency:</strong> Quality swings from best-in-class to harmful within consecutive examples, indicating unstable defect-prioritisation and review depth.</li>
+</ul>
+<h3 id="gemini-25-pro-4096-thinking-tokens">Gemini-2.5 Pro (4096 thinking tokens)<a class="headerlink" href="#gemini-25-pro-4096-thinking-tokens" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>56.3</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High formatting compliance:</strong> The model almost always produces valid YAML, respects the three-suggestion limit, and supplies clear before/after code snippets and short rationales.</li>
+<li><strong>Good “first-bug” detection:</strong> It frequently notices the single most obvious regression (crash, compile error, nil/NPE risk, wrong path, etc.) and gives a minimal, correct patch—often judged “on-par” with other solid answers.</li>
+<li><strong>Clear, concise writing:</strong> Explanations are brief yet understandable for reviewers; fixes are scoped to the changed lines and rarely include extraneous context.</li>
+<li><strong>Low rate of harmful fixes:</strong> Truly dangerous or build-breaking advice is rare; most mistakes are omissions rather than wrong code.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Limited breadth of review:</strong> The model regularly stops after the first or second issue, missing additional critical problems that stronger answers surface, so it is often out-ranked by more comprehensive peers.</li>
+<li><strong>Occasional guideline violations:</strong> A noticeable minority of answers touch unchanged lines, exceed the 3-item cap, suggest adding imports, or drop the required YAML wrapper, leading to automatic downgrades.</li>
+<li><strong>False positives / speculative fixes:</strong> In several cases it flags non-issues (style, performance, redundant code) or supplies debatable “improvements”, lowering precision and sometimes breaching the “critical bugs only” rule.</li>
+<li><strong>Inconsistent error coverage:</strong> For certain domains (build scripts, schema files, test code) it either returns an empty list when real regressions exist or proposes cosmetic edits, indicating gaps in specialised knowledge.</li>
+</ul>
+<h3 id="gemini-3-pro-review-low-thinking-budget">Gemini-3-pro-review (low thinking budget)<a class="headerlink" href="#gemini-3-pro-review-low-thinking-budget" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>55.6</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Concise, well-structured patches:</strong> Suggestions are usually expressed in short, self-contained YAML items with clear before/after code blocks and just enough rationale, making them easy for reviewers to apply.</li>
+<li><strong>Good eye for crash-level defects:</strong> When the model does spot a problem it often focuses on high-impact issues such as compile-time errors, NPEs, nil-pointer races, buffer overflows, etc., and supplies a minimal, correct fix.</li>
+<li><strong>High guideline compliance (format &amp; scope):</strong> In most cases it respects the 1-3-item limit and the "new lines only" rule, avoids changing imports, and keeps snippets syntactically valid.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Coverage inconsistency:</strong> Many answers miss other obvious or even more critical regressions spotted by peers; breadth fluctuates from excellent to empty, leaving reviewers with partial insight.</li>
+<li><strong>False positives &amp; speculative advice:</strong> A noticeable share of suggestions target stylistic or non-critical tweaks, or even introduce wrong changes, betraying occasional mis-reading of the diff and hurting trust.</li>
+<li><strong>Rule violations still occur:</strong> There are repeated instances of touching unchanged code, recommending version bumps/imports, mis-labelling severities, or outputting malformed snippets—showing lapses in instruction adherence.</li>
+<li><strong>Quality variance / empty outputs:</strong> Some responses provide no suggestions despite real bugs, while others supply harmful fixes; this volatility lowers overall reliability.</li>
+</ul>
+<h3 id="claude-haiku-45-4096-thinking-tokens">Claude-haiku-4.5 (4096 thinking tokens)<a class="headerlink" href="#claude-haiku-45-4096-thinking-tokens" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>48.8</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High precision on detected issues:</strong> When the model does flag a problem it is usually a real, high-impact bug; many answers are judged equal or better than strong baselines because the proposed fix is correct, minimal and easy to apply.</li>
+<li><strong>Language- and domain-agnostic competence:</strong> It successfully diagnoses defects across a wide range of languages (Python, Go, C/C++, Rust, JS/TS, CSS, SQL, Markdown, etc.) and domains (backend logic, build files, tests, docs).</li>
+<li><strong>Clear, actionable patches:</strong> Suggested code is typically concise, well-explained and scoped exactly to the added lines, making it practical for reviewers to adopt.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Low recall / narrow coverage:</strong> The model often stops after one or two findings, leaving other obvious critical bugs unmentioned; in many examples stronger answers simply covered more ground.</li>
+<li><strong>Occasional faulty or speculative fixes:</strong> A non-trivial number of responses either mis-diagnose the issue or introduce new errors (e.g., wrong logic, undeclared imports), dropping them below baseline quality.</li>
+<li><strong>Inconsistent output robustness:</strong> Several cases show truncated or malformed responses, reducing value despite correct analysis elsewhere.</li>
+<li><strong>Frequent false negatives:</strong> The model sometimes returns an empty list even when clear regressions exist, indicating conservative behaviour that misses mandatory fixes.</li>
+</ul>
+<h3 id="gpt-51-medium-thinking-budget">GPT-5.1 ('medium' thinking budget)<a class="headerlink" href="#gpt-51-medium-thinking-budget" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>44.9</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High precision &amp; guideline compliance:</strong> When the model does emit suggestions they are almost always technically sound, respect the "new-lines-only / ≤3 suggestions / no-imports" rules, and are formatted correctly. It rarely introduces harmful changes and often provides clear, runnable patches.</li>
+<li><strong>Ability to spot subtle or unique defects:</strong> In several cases the model caught a critical issue that most or all baselines missed, showing good deep-code reasoning when it does engage.</li>
+<li><strong>Good judgment on noise-free diffs:</strong> On purely data or documentation changes the model frequently (and correctly) returns an empty list, avoiding false-positive "nit" feedback.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Very low recall / over-conservatism:</strong> In a large fraction of examples it outputs an empty suggestion list while clear critical bugs exist (well over 50 % of cases), making it inferior to almost every baseline answer that offered any fix.</li>
+<li><strong>Narrow coverage when it speaks:</strong> Even when it flags one bug, it often stops there and ignores other equally critical problems present in the same diff, leaving reviewers with partial insight.</li>
+<li><strong>Occasional misdiagnosis or harmful fix:</strong> A minority of suggestions are wrong or counter-productive, showing that precision, while good, is not perfect.</li>
+</ul>
+<h3 id="claude-sonnet-45-4096-thinking-tokens">Claude-sonnet-4.5 (4096 thinking tokens)<a class="headerlink" href="#claude-sonnet-45-4096-thinking-tokens" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>44.2</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High precision / low noise:</strong> When the model does offer fixes they are usually correct, concise and confined to the new '+' lines, rarely introducing spurious or off-scope changes.</li>
+<li><strong>Clear, actionable patches:</strong> Suggestions come with well-explained reasoning and minimal but valid code snippets, making them easy for a reviewer to apply.</li>
+<li><strong>Good rule compliance:</strong> It almost always respects the 1-3 suggestion limit, avoids touching unchanged code and seldom violates formatting or other task guidelines.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Low recall / frequent omissions:</strong> In a large share of cases the model returns an empty list or only one minor tip while overlooking obvious, higher-impact regressions found by peers.</li>
+<li><strong>Narrow coverage when it does respond:</strong> Even in non-empty outputs it typically fixes a single issue and ignores related defects in the same diff, indicating shallow analysis.</li>
+<li><strong>Occasional harmful or incomplete fixes:</strong> A few suggestions introduce new errors (e.g., wrong logic, missing imports, malformed snippets) or mark non-critical style nits as "critical", reducing trust.</li>
+</ul>
+<h3 id="claude-sonnet-45">Claude-sonnet-4.5<a class="headerlink" href="#claude-sonnet-45" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>40.7</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Concise &amp; well-formatted output:</strong> Most replies strictly follow the schema, stay within the 3-suggestion limit, and include clear, copy-paste-ready patches, making them easy to apply.</li>
+<li><strong>Can spot headline bugs:</strong> When a single, obvious regression is present (e.g. duplicated regex block, missing null-check, wrong macro name) the model often detects it and proposes an accurate, minimal fix.</li>
+<li><strong>Scope discipline (usually):</strong> It frequently restricts changes to newly-added lines and avoids broad refactors, so many answers comply with the “new code only / critical bugs only” rule.</li>
+<li><strong>Reasonable explanations:</strong> The accompanying rationales are typically short but precise, helping reviewers understand why the change is needed.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Low recall of critical issues:</strong> In a large fraction of examples the model misses the primary bug or flags nothing at all while other reviewers find clear problems. Coverage is therefore unreliable.</li>
+<li><strong>False or harmful fixes:</strong> A notable number of suggestions mis-diagnose the code, touch unchanged lines, violate task rules, or would break compilation/runtime (wrong paths, bad types, guideline-forbidden advice).</li>
+<li><strong>Priority mistakes:</strong> The model often downgrades severe defects to “general” or upgrades cosmetic nits to “critical”, showing weak bug-severity judgment.</li>
+<li><strong>Inconsistent quality:</strong> Performance swings widely between excellent and poor; reviewers cannot predict whether a given answer will be thorough, partial, or incorrect.</li>
+</ul>
+<h3 id="claude-haiku-45">Claude-haiku-4.5<a class="headerlink" href="#claude-haiku-45" title="Permanent link">¶</a></h3>
+<p>Final score: 40.7</p>
+<p>Strengths:</p>
+<ul>
+<li>**Good format &amp; clarity: Consistently produces valid YAML and readable, minimally-intrusive patches with clear before/after snippets, so its outputs are easy to apply.</li>
+<li>**Basic bug-spotting ability: Often detects the most obvious new-line defect (e.g., syntax error, missing guard, wrong constant) and supplies a correct, concise fix; rarely ranks last in the set.</li>
+<li>**Rule compliance in many cases: Usually stays within the 3-suggestion limit, touches only '+' lines, and avoids speculative refactors—returning an empty list when no code was added.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li>**Shallow coverage: Frequently fixes just one surface-level issue and misses additional, higher-impact bugs that stronger reviewers catch, leaving regressions in place.</li>
+<li>**Occasional incorrect or no-op patches: A noticeable share of suggestions either leave code unchanged, contain invalid code, or introduce new errors, lowering trust.</li>
+<li>**Guideline slips: In several examples it edits unchanged lines, adds forbidden imports/version bumps, mis-labels severities, or supplies non-critical stylistic advice.</li>
+<li>**Inconsistent diligence: Roughly a quarter of the cases return an empty list despite real problems, while others duplicate existing PR changes, indicating weak diff comprehension.</li>
+</ul>
+<h3 id="openai-codex-mini">OpenAI codex-mini<a class="headerlink" href="#openai-codex-mini" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>37.2</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Can spot high-impact defects:</strong> When it "locks on", codex-mini often identifies the main runtime or security regression (e.g., race-conditions, logic inversions, blocking I/O, resource leaks) and proposes a minimal, direct patch that compiles and respects neighbouring style.</li>
+<li><strong>Produces concise, scoped fixes:</strong> Valid answers usually stay within the allowed 3-suggestion limit, reference only the added lines, and contain clear before/after snippets that reviewers can apply verbatim.</li>
+<li><strong>Occasional broad coverage:</strong> In a minority of cases the model catches multiple independent issues (logic + tests + docs) and outperforms every baseline answer, showing good contextual understanding of heterogeneous diffs.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Output instability / format errors:</strong> A very large share of responses are unusable—plain refusals, shell commands, or malformed/empty YAML—indicating brittle adherence to the required schema and tanking overall usefulness.</li>
+<li><strong>Critical-miss rate:</strong> Even when the format is correct the model frequently overlooks the single most serious bug the diff introduces, instead focusing on stylistic nits or speculative refactors.</li>
+<li><strong>Introduces new problems:</strong> Several suggestions add unsupported APIs, undeclared variables, wrong types, or break compilation, hurting trust in the recommendations.</li>
+<li><strong>Rule violations:</strong> It often edits lines outside the diff, exceeds the 3-suggestion cap, or labels cosmetic tweaks as "critical", showing inconsistent guideline compliance.</li>
+</ul>
+<h3 id="gemini-25-flash">Gemini-2.5 Flash<a class="headerlink" href="#gemini-25-flash" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>33.5</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High precision / low false-positive rate:</strong> The model often stays silent or gives a single, well-justified fix, so when it does speak the suggestion is usually correct and seldom touches unchanged lines, keeping guideline compliance high.  </li>
+<li><strong>Good guideline awareness:</strong> YAML structure is consistently valid; suggestions rarely exceed the 3-item limit and generally restrict themselves to newly-added lines.  </li>
+<li><strong>Clear, concise patches:</strong> When a defect is found, the model produces short rationales and tidy “improved_code” blocks that reviewers can apply directly.  </li>
+<li><strong>Risk-averse behaviour pays off in “no-bug” PRs:</strong> In examples where the diff truly contained no critical issue, the model’s empty output ranked above peers that offered speculative or stylistic advice.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Very low recall / shallow coverage:</strong> In a large majority of cases it gives 0-1 suggestions and misses other evident, critical bugs highlighted by peer models, leading to inferior rankings.  </li>
+<li><strong>Occasional incorrect or harmful fixes:</strong> A noticeable subset of answers propose changes that break functionality or misunderstand the code (e.g. bad constant, wrong header logic, speculative rollbacks).  </li>
+<li><strong>Non-actionable placeholders:</strong> Some “improved_code” sections contain comments or “…” rather than real patches, reducing practical value.  </li>
+</ul>
+<h3 id="claude-4-opus">Claude-4 Opus<a class="headerlink" href="#claude-4-opus" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>32.8</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Format &amp; rule adherence:</strong> Almost always returns valid YAML, stays within the ≤3-suggestion limit, and usually restricts edits to newly-added lines, so its output is easy to apply automatically.</li>
+<li><strong>Concise, focused patches:</strong> When it does find a real bug it gives short, well-scoped explanations plus minimal diff snippets, often outperforming verbose baselines in clarity.</li>
+<li><strong>Able to catch subtle edge-cases:</strong> In several examples it detected overflow, race-condition or enum-mismatch issues that many other models missed, showing solid code‐analysis capability.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Low recall / narrow coverage:</strong> In a large share of the 399 examples the model produced an empty list or only one minor tip while more serious defects were present, causing it to be rated inferior to most baselines.</li>
+<li><strong>Frequent incorrect or no-op fixes:</strong> It sometimes supplies identical “before/after” code, flags non-issues, or suggests changes that would break compilation or logic, reducing reviewer trust.</li>
+<li><strong>Shaky guideline consistency:</strong> Although generally compliant, it still occasionally violates rules (touches unchanged lines, offers stylistic advice, adds imports) and duplicates suggestions, indicating unstable internal checks.</li>
+</ul>
+<h3 id="grok-4">Grok-4<a class="headerlink" href="#grok-4" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>32.8</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>Focused and concise fixes:</strong> When the model does detect a problem it usually proposes a minimal, well-scoped patch that compiles and directly addresses the defect without unnecessary noise.</li>
+<li><strong>Good critical-bug instinct:</strong> It often prioritises show-stoppers (compile failures, crashes, security issues) over cosmetic matters and occasionally spots subtle issues that all other reviewers miss.</li>
+<li><strong>Clear explanations &amp; snippets:</strong> Explanations are short, readable and paired with ready-to-paste code, making the advice easy to apply.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>High miss rate:</strong> In a large fraction of examples the model returned an empty list or covered only one minor issue while overlooking more serious newly-introduced bugs.</li>
+<li><strong>Inconsistent accuracy:</strong> A noticeable subset of answers contain wrong or even harmful fixes (e.g., removing valid flags, creating compile errors, re-introducing bugs).</li>
+<li><strong>Limited breadth:</strong> Even when it finds a real defect it rarely reports additional related problems that peers catch, leading to partial reviews.</li>
+<li><strong>Occasional guideline slips:</strong> A few replies modify unchanged lines, suggest new imports, or duplicate suggestions, showing imperfect compliance with instructions.</li>
+</ul>
+<h3 id="claude-opus-45-high-thinking-budget">Claude-Opus-4.5 (high thinking budget)<a class="headerlink" href="#claude-opus-45-high-thinking-budget" title="Permanent link">¶</a></h3>
+<p>Final score: <strong>30.3</strong></p>
+<p>Strengths:</p>
+<ul>
+<li><strong>High rule compliance &amp; formatting:</strong> Consistently produces valid YAML, respects the ≤3-suggestion limit, and usually confines edits to added lines, avoiding many guideline violations seen in peers.</li>
+<li><strong>Low false-positive rate:</strong> Tends to stay silent unless convinced of a real problem; when the diff is a pure version bump / docs tweak it often (correctly) returns an empty list, beating noisier baselines.</li>
+<li><strong>Clear, focused patches when it fires:</strong> In the minority of cases where it does spot a bug, it explains the issue crisply and supplies concise, copy-paste-able code snippets.</li>
+</ul>
+<p>Weaknesses:</p>
+<ul>
+<li><strong>Very low recall:</strong> In the vast majority of examples it misses obvious critical issues or suggests only a subset, frequently returning an empty list; this places it below most baselines on overall usefulness.</li>
+<li><strong>Shallow coverage:</strong> Even when it catches a defect it typically lists a single point and overlooks other high-impact problems present in the same diff.</li>
+<li><strong>Occasional incorrect or incomplete fixes:</strong> A non-trivial number of suggestions are wrong, compile-breaking, duplicate unchanged code, or touch out-of-scope lines, reducing trust.</li>
+<li><strong>Inconsistent severity tagging &amp; duplication:</strong> Sometimes mis-labels critical vs general, repeats the same suggestion, or leaves <code>improved_code</code> blocks empty.</li>
+</ul>
+<h2 id="appendix-example-results">Appendix - Example Results<a class="headerlink" href="#appendix-example-results" title="Permanent link">¶</a></h2>
+<p>Some examples of benchmarked PRs and their results:</p>
+<ul>
+<li><a href="https://www.codium.ai/images/pr_agent_benchmark/example_results1.html">Example 1</a></li>
+<li><a href="https://www.codium.ai/images/pr_agent_benchmark/example_results2.html">Example 2</a></li>
+<li><a href="https://www.codium.ai/images/pr_agent_benchmark/example_results3.html">Example 3</a></li>
+<li><a href="https://www.codium.ai/images/pr_agent_benchmark/example_results4.html">Example 4</a></li>
+</ul>
+<h3 id="models-used-for-benchmarking">Models Used for Benchmarking<a class="headerlink" href="#models-used-for-benchmarking" title="Permanent link">¶</a></h3>
+<p>The following models were used for generating the benchmark baseline:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>(1) anthropic_sonnet_3.7_v1:0
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>(2) claude-4-opus-20250514
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>(3) claude-4-sonnet-20250514
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>(4) claude-4-sonnet-20250514_thinking_2048
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>(5) gemini-2.5-flash-preview-04-17
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>(6) gemini-2.5-pro-preview-05-06
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>(7) gemini-2.5-pro-preview-06-05_1024
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>(8) gemini-2.5-pro-preview-06-05_4096
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>(9) gpt-4.1
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>(10) o3
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>(11) o4-mini_medium
+</code></pre></div>
+<h3 id="programming-languages">Programming Languages<a class="headerlink" href="#programming-languages" title="Permanent link">¶</a></h3>
+<p>The PR benchmark dataset includes pull requests containing code in the following programming languages:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>["Python", "JavaScript", "TypeScript", "Java", "CSharp", "PHP", "C++", "Go", "Rust", "Swift", "Kotlin", "Ruby", "Dart", "Scala"
+</code></pre></div>
+<p>Pull requests may also include non-code files such as <code>YAML</code>, <code>JSON</code>, <code>Markdown</code>, <code>Dockerfile</code> ,<code>Shell</code>, etc. 
+The benchmarked models should also analyze these files, as they commonly appear in real-world pull requests.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"></path></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        
+
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Footer</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    font-size: 16px;
+  }
+
+  .wrapper {
+    background-color: #1a202c;
+  }
+
+  .container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    color: white;
+    padding: 20px;
+    max-width: 61rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .footer-links, .social-icons {
+    padding: 0;
+    list-style-type: none;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .footer-links a:hover, .social-icons a:hover {
+    color: #a0aec0;
+  }
+
+  .social-icons svg {
+    width: 24px;
+    height: auto;
+    fill: white;
+  }
+
+  .footer-text {
+    width: 240px;
+  }
+
+  @media (max-width: 768px) {
+    .container {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .footer-links, .social-icons, .footer-text {
+      width: 100%;
+      justify-content: center;
+      margin: 10px 0;
+    }
+
+    .footer-links {
+      order: 1;
+    }
+
+    .social-icons {
+      order: 2;
+    }
+
+    .footer-text {
+      order: 3;
+    }
+  }
+</style>
+
+
+
+<footer class="wrapper">
+  <div class="container">
+    <p class="footer-text">© 2026 PR-Agent Contributors</p>
+    <div class="footer-links">
+      <a href="https://github.com/qodo-ai/pr-agent">GitHub</a>
+    </div>
+    <div class="social-icons">
+      <a href="https://github.com/qodo-ai/pr-agent" target="_blank" rel="noopener" title="github.com" class="social-link">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.5.1 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2023 Fonticons, Inc.--><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"></path></svg>
+      </a>
+    </div>
+  </div>
+</footer>
+
+
+
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.expand", "navigation.path", "navigation.top", "navigation.tracking", "navigation.indexes", "search.suggest", "search.highlight", "content.tabs.link", "content.code.annotation", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5C9KZBM3" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+
+  
+<script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});
+document$.subscribe(()=>{ lightbox.reload(); });
+</script></body></html>
