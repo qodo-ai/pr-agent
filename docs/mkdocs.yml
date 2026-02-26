@@ -90,6 +90,7 @@ plugins:
   - glightbox
 
 extra:
+  announcement: "Open-source PR Agent documentation. For the Qodo free version, [Get Started](https://www.qodo.ai/get-started/)."
   generator: false
   social:
     - icon: fontawesome/brands/github
