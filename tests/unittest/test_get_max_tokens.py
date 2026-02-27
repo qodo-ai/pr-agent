@@ -69,6 +69,8 @@ class TestGetMaxTokens:
         assert get_max_tokens(model) == expected
 
     @pytest.mark.parametrize("model", [
+        "gemini/gemini-3-flash-preview",
+        "vertex_ai/gemini-3-flash-preview",
         "gemini/gemini-3-pro-preview",
         "vertex_ai/gemini-3-pro-preview",
         "gemini/gemini-3.1-pro-preview",
