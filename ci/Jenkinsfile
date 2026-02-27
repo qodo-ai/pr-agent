@@ -1,0 +1,522 @@
+// ==========================================
+// Scripted Jenkins Pipeline with Active Choices
+// ==========================================
+
+properties([
+  pipelineTriggers([
+    [
+      $class: 'BitBucketPPRTrigger',
+      triggers: [
+        [
+          $class: 'BitBucketPPRRepositoryTriggerFilter',
+          actionFilter: [
+            $class: 'BitBucketPPRRepositoryPushActionFilter',
+            triggerAlsoIfNothingChanged: true,
+            triggerAlsoIfTagPush: false,
+            // Here you specify the branch that triggers the pipeline
+            allowedBranches: "main-ejump",
+            isToApprove: true
+          ]
+        ]
+      ]
+    ]
+  ]),
+
+  parameters([
+    // ----------------------------
+    // Refresh only
+    // ----------------------------
+    booleanParam(
+      name: 'REFRESH',
+      defaultValue: false,
+      description: 'Don’t run any action, just refresh pipeline from GIT'
+    ),
+    // ----------------------------
+    // Laravel Actions (boolean)
+    // ----------------------------
+    booleanParam(name: 'COMPOSER_INSTALL', defaultValue: true, description: 'Run composer install'),
+    booleanParam(name: 'MIGRATE', defaultValue: true, description: 'Run php artisan migrate'),
+    booleanParam(name: 'CACHE_CLEAR', defaultValue: false, description: 'Run php artisan cache:clear'),
+    booleanParam(name: 'OPTIMIZE_CLEAR', defaultValue: false, description: 'Run php artisan optimize:clear'),
+    booleanParam(name: 'OPTIMIZE', defaultValue: false, description: 'Run php artisan optimize'),
+    booleanParam(name: 'CONFIG_CLEAR', defaultValue: false, description: 'Run php artisan config:clear'),
+    booleanParam(name: 'CONFIG_CACHE', defaultValue: false, description: 'Run php artisan config:cache'),
+    booleanParam(name: 'EVENT_CACHE', defaultValue: false, description: 'Run php artisan event:cache'),
+    booleanParam(name: 'ROUTE_CLEAR', defaultValue: false, description: 'Run php artisan route:clear'),
+    booleanParam(name: 'ROUTE_CACHE', defaultValue: false, description: 'Run php artisan route:cache'),
+    booleanParam(name: 'ROUTE_LIST', defaultValue: false, description: 'Run php artisan route:list'),
+    booleanParam(name: 'VIEW_CACHE', defaultValue: false, description: 'Run php artisan view:cache')
+  ])
+])
+
+
+// =============================
+// Scripted Pipeline Execution
+// =============================
+node {
+
+  // ----------------------------
+  // Environment variables
+  // ----------------------------
+  env.PIPELINE_TYPE = "docker"
+  env.ENV = "main-ejump" // Sets the ENV variable to know in which environment the deployment is done (live, stage)
+  env.SSH_HOST = "10.20.30.241" // IP or domain of the server where the deployment is done
+  env.SSH_HOST_PORT = "22" // Port for the SSH connection
+  env.SSH_USER = "ovidiuradu" // User for the SSH connection
+  env.PROJECT_DIR = "/home/developers/ovidiuradu/docker/pr-agent" // Directory where the deployment is done
+  env.SSH_CREDS = "cicd-ssh-creds" // SSH credentials, SSH key, and user for server connection
+  env.DISCORD_WEBHOOK = "oxide-webhook" // The webhook for the Discord test channel, intended for deployment notifications.
+  // env.DISCORD_WEBHOOK = "project-webhook" // The webhook for the Discord official project channel, intended for deployment notifications.
+  // env.TEAMS_WEBHOOK = "project-teams-webhook" //The webhook for the Teams project channel, intended for deployment notifications.
+  // env.EMAIL_NOTIFICATION_RECIPIENTS = "user@example.com,user2@example.com"
+  // env.EMAIL_NOTIFICATION_SENDER = "sender@example.com"
+
+  // Commands
+  // env.COMMAND='echo "Command ran successfully"'
+  // env.COMMAND_NAME='Deploy Command' // This will appear as stage name
+  env.COMPOSER_PATH = "/home/developers/ovidiuradu/bin/composer.phar" // Path to the composer executable, ~/bin/composer.phar if installed for the user, or just composer if installed globally
+  env.PHP_PATH = "php" // Path to the PHP executable, ~/bin/php if installed for the user, or just php if installed globally
+
+  // Here you can add any number of commands to run before or after the deployment step
+  // env.COMMAND_BEFORE_1="echo 'Command BEFORE 1'"
+  // env.COMMAND_BEFORE_2="echo 'Command BEFORE 2'"
+  // env.COMMAND_AFTER_1="echo 'Command AFTER 1'"
+  // env.COMMAND_AFTER_2="echo 'Command AFTER 2'"
+
+  // FTP Deployment variables
+  // env.FTP_CREDS = "cicd-ftp-creds" // Credentials ID for FTP (Username and Password)
+  // env.FTP_REMOTE_HOST = "10.20.30.241"
+  // env.FTP_REMOTE_PORT = "21"
+  // env.FTP_BUILD_FOLDER = "./" // Local folder to upload
+  // env.FTP_LIVE_FOLDER = "./cicd-development/command" // Remote folder
+  // env.FTP_EXCLUDES = "--exclude .git --exclude .idea --exclude app/out.txt --exclude cicd --exclude README.md --exclude .gitignore --exclude .well-known --exclude .htaccess --exclude node_modules"
+
+  // Constants
+  def HOSTKEY_CHECKING = false // Set to true to enable strict host key validation, or false to disable it. At first ssh login it must be false, after that, it should be changed to true.
+  def SERVER_STORAGE_OUTAGE = false
+  env.SERVER_STORAGE = "N/A"
+  env.BRANCH = env.ENV == 'live' ? 'main' : (env.ENV == 'stage' ? 'stage' : env.ENV)
+  env.PIPELINE_VERSION = "2.5.1"
+
+
+
+  // ----------------------------
+  // Helper to run dynamic commands (COMMAND_BEFORE_1, COMMAND_BEFORE_2, etc.)
+  // ----------------------------
+  def executeDynamicCommands = { remoteObj, prefix ->
+    int i = 1
+    while (true) {
+      def cmdKey = "${prefix}_${i}"
+      def cmdValue = env."${cmdKey}"
+      if (cmdValue) {
+        echo "Executing dynamic command ${cmdKey}: ${cmdValue}"
+        sshCommand remote: remoteObj, command: cmdValue
+        i++
+      } else {
+        break
+      }
+    }
+  }
+
+  try {
+    checkout scm
+    // ----------------------------
+    // Print Pipeline Type
+    // ----------------------------
+
+    echo "PIPELINE_TYPE = ${env.PIPELINE_TYPE}"
+
+    // ----------------------------
+    // Refresh only
+    // ----------------------------
+    if (params.REFRESH) {
+      stage('Refresh') {
+        echo "Refreshing pipeline from GIT"
+        echo "Pipeline Version: ${env.PIPELINE_VERSION} ${env.PIPELINE_TYPE}"
+      }
+      return
+    }
+    // ----------------------------
+    // Extract BitBucket payload
+    // ----------------------------
+    if (env.BITBUCKET_PAYLOAD) {
+      stage('Extracting BitBucket payload data') {
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDS, keyFileVariable: 'SSH_KEY')]) {
+          def sshOptions = HOSTKEY_CHECKING ? "StrictHostKeyChecking=yes" : "StrictHostKeyChecking=no"
+          sh "GIT_SSH_COMMAND='ssh -i \$SSH_KEY -o ${sshOptions}' git fetch origin \$BRANCH"
+        }
+
+        env.BITBUCKET_COMMIT_MESSAGE = sh(
+          script: "git log origin/${BRANCH} -1 --pretty=%B",
+          returnStdout: true
+        ).trim().replaceAll('\n','\\\\n')
+
+        echo "Commit Message: ${env.BITBUCKET_COMMIT_MESSAGE}"
+
+        def parsed = readJSON(text: env.BITBUCKET_PAYLOAD)
+        if (parsed.push?.changes) {
+          env.BITBUCKET_COMMIT_HASH = parsed.push.changes[0].commits[0].hash
+          echo "Commit Hash: ${env.BITBUCKET_COMMIT_HASH}"
+        } else {
+          error("Invalid BITBUCKET_PAYLOAD structure")
+        }
+      }
+    }
+    // ----------------------------
+    // Deploy Laravel
+    // ----------------------------
+    if (env.PIPELINE_TYPE?.tokenize()?.contains('laravel')) {
+      stage('Deploy Laravel') {
+        def laravel = params.LARAVEL_ACTIONS ?: []
+
+        def remote = [:]
+        remote.name = 'deployment-server'
+        remote.host = env.SSH_HOST
+        remote.port = env.SSH_HOST_PORT.toInteger()
+        remote.allowAnyHosts = !HOSTKEY_CHECKING
+        def knownHostsPath = "${env.HOME ?: env.USERPROFILE}/.ssh/known_hosts"
+        if (HOSTKEY_CHECKING) {
+            remote.knownHosts = knownHostsPath
+        } else {
+            sh "mkdir -p \"\$(dirname \"${knownHostsPath}\")\" && ssh-keygen -R ${env.SSH_HOST} -f \"${knownHostsPath}\" || true"
+            sh "ssh-keyscan -p ${env.SSH_HOST_PORT} ${env.SSH_HOST} >> \"${knownHostsPath}\""
+        }
+        remote.logLevel = 'INFO'
+
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDS, keyFileVariable: 'SSH_KEY')]) {
+          remote.user = env.SSH_USER
+          remote.identityFile = SSH_KEY
+
+          def sshOptions = HOSTKEY_CHECKING ? "-o StrictHostKeyChecking=yes" : "-o StrictHostKeyChecking=no"
+          def storageResult = sh(script: "ssh -i ${SSH_KEY} ${sshOptions} -p ${env.SSH_HOST_PORT} ${env.SSH_USER}@${env.SSH_HOST} \"df -Ph ${env.PROJECT_DIR} | awk 'NR==2 {print \\\$5}' | sed 's/%//'\"", returnStdout: true).trim()
+          env.SERVER_STORAGE = storageResult
+          echo "Disk usage: ${env.SERVER_STORAGE}%"
+          if (env.SERVER_STORAGE.isInteger() && env.SERVER_STORAGE.toInteger() > 95) {
+              SERVER_STORAGE_OUTAGE = true
+              error "Not enough space on the server for deployment! (Used: ${env.SERVER_STORAGE}%)"
+          }
+
+          executeDynamicCommands(remote, "COMMAND_BEFORE")
+          sshCommand remote: remote, command: "cd ${env.PROJECT_DIR} && git fetch origin && git checkout ${env.BRANCH} && git reset --hard origin/${env.BRANCH}"
+
+          def profileSource = "if [ -f ~/.profile ]; then source ~/.profile; elif [ -f ~/.bashrc ]; then source ~/.bashrc; fi && cd ${env.PROJECT_DIR}"
+
+            if (params.COMPOSER_INSTALL == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.COMPOSER_PATH} install --no-interaction --prefer-dist --optimize-autoloader"
+            if (params.MIGRATE == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan migrate --force"
+            if (params.CACHE_CLEAR == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan cache:clear"
+            if (params.OPTIMIZE_CLEAR == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan optimize:clear"
+            if (params.OPTIMIZE == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan optimize"
+            if (params.CONFIG_CLEAR == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan config:clear"
+            if (params.CONFIG_CACHE == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan config:cache"
+            if (params.EVENT_CACHE == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan event:cache"
+            if (params.ROUTE_CLEAR == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan route:clear"
+            if (params.ROUTE_CACHE == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan route:cache"
+            if (params.ROUTE_LIST == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan route:list"
+            if (params.VIEW_CACHE == true)
+            sshCommand remote: remote, command: "${profileSource} && ${env.PHP_PATH} artisan view:cache"
+
+          executeDynamicCommands(remote, "COMMAND_AFTER")
+        }
+      }
+    }
+
+    // ----------------------------
+    // Deploy Docker
+    // ----------------------------
+    if (env.PIPELINE_TYPE?.tokenize()?.contains('docker')) {
+      stage('Deploy Docker') {
+        def remote = [:]
+        remote.host = env.SSH_HOST
+        remote.name = 'deployment-server'
+        remote.port = env.SSH_HOST_PORT.toInteger()
+        remote.allowAnyHosts = !HOSTKEY_CHECKING
+        def knownHostsPath = "${env.HOME ?: env.USERPROFILE}/.ssh/known_hosts"
+        if (HOSTKEY_CHECKING) {
+            remote.knownHosts = knownHostsPath
+        } else {
+            sh "mkdir -p \"\$(dirname \"${knownHostsPath}\")\" && ssh-keygen -R ${env.SSH_HOST} -f \"${knownHostsPath}\" || true"
+            sh "ssh-keyscan -p ${env.SSH_HOST_PORT} ${env.SSH_HOST} >> \"${knownHostsPath}\""
+        }
+        remote.logLevel = 'INFO'
+
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDS, keyFileVariable: 'SSH_KEY')]) {
+          remote.user = env.SSH_USER
+          remote.identityFile = SSH_KEY
+
+          def sshOptions = HOSTKEY_CHECKING ? "-o StrictHostKeyChecking=yes" : "-o StrictHostKeyChecking=no"
+          def storageResult = sh(script: "ssh -i ${SSH_KEY} ${sshOptions} -p ${env.SSH_HOST_PORT} ${env.SSH_USER}@${env.SSH_HOST} \"df -Ph ${env.PROJECT_DIR} | awk 'NR==2 {print \\\$5}' | sed 's/%//'\"", returnStdout: true).trim()
+          env.SERVER_STORAGE = storageResult
+          echo "Disk usage: ${env.SERVER_STORAGE}%"
+          if (env.SERVER_STORAGE.isInteger() && env.SERVER_STORAGE.toInteger() > 95) {
+              SERVER_STORAGE_OUTAGE = true
+              error "Not enough space on the server for deployment! (Used: ${env.SERVER_STORAGE}%)"
+          }
+
+          executeDynamicCommands(remote, "COMMAND_BEFORE")
+          sshCommand remote: remote, command: "cd ${env.PROJECT_DIR} && git fetch origin && git checkout ${env.BRANCH} && git reset --hard origin/${env.BRANCH}"
+
+          sshCommand remote: remote, command: """
+            [ -f ~/.profile ] && source ~/.profile
+            [ -f ~/.bashrc ] && source ~/.bashrc
+            cd ${env.PROJECT_DIR}
+            set -a && source .env && set +a
+            docker compose -f ci/docker-compose.${env.ENV}.yaml -p ${env.ENV} up --build --force-recreate -d
+          """
+          sshCommand remote: remote, command: """
+            [ -f ~/.profile ] && source ~/.profile
+            [ -f ~/.bashrc ] && source ~/.bashrc
+            docker image prune -af --filter 'until=72h'
+            docker builder prune -af --filter 'until=72h'
+          """
+          executeDynamicCommands(remote, "COMMAND_AFTER")
+        }
+      }
+    }
+    // ----------------------------
+    // Git Update
+    // ----------------------------
+    if (env.PIPELINE_TYPE?.tokenize()?.contains('git')) {
+      stage('Git Update') {
+        def remote = [:]
+        remote.host = env.SSH_HOST
+        remote.name = 'deployment-server'
+        remote.port = env.SSH_HOST_PORT.toInteger()
+        remote.allowAnyHosts = !HOSTKEY_CHECKING
+        def knownHostsPath = "${env.HOME ?: env.USERPROFILE}/.ssh/known_hosts"
+        if (HOSTKEY_CHECKING) {
+            remote.knownHosts = knownHostsPath
+        } else {
+            sh "mkdir -p \"\$(dirname \"${knownHostsPath}\")\" && ssh-keygen -R ${env.SSH_HOST} -f \"${knownHostsPath}\" || true"
+            sh "ssh-keyscan -p ${env.SSH_HOST_PORT} ${env.SSH_HOST} >> \"${knownHostsPath}\""
+        }
+        remote.logLevel = 'INFO'
+
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDS, keyFileVariable: 'SSH_KEY')]) {
+          remote.user = env.SSH_USER
+          remote.identityFile = SSH_KEY
+
+          def sshOptions = HOSTKEY_CHECKING ? "-o StrictHostKeyChecking=yes" : "-o StrictHostKeyChecking=no"
+          def storageResult = sh(script: "ssh -i ${SSH_KEY} ${sshOptions} -p ${env.SSH_HOST_PORT} ${env.SSH_USER}@${env.SSH_HOST} \"df -Ph ${env.PROJECT_DIR} | awk 'NR==2 {print \\\$5}' | sed 's/%//'\"", returnStdout: true).trim()
+          env.SERVER_STORAGE = storageResult
+          echo "Disk usage: ${env.SERVER_STORAGE}%"
+          if (env.SERVER_STORAGE.isInteger() && env.SERVER_STORAGE.toInteger() > 95) {
+              SERVER_STORAGE_OUTAGE = true
+              error "Not enough space on the server for deployment! (Used: ${env.SERVER_STORAGE}%)"
+          }
+
+          executeDynamicCommands(remote, "COMMAND_BEFORE")
+
+          sshCommand remote: remote, command: "cd ${env.PROJECT_DIR} && git fetch origin && git checkout ${env.BRANCH} && git reset --hard origin/${env.BRANCH}"
+
+          executeDynamicCommands(remote, "COMMAND_AFTER")
+        }
+      }
+    }
+
+    // ----------------------------
+    // Deploy FTP
+    // ----------------------------
+    if (env.PIPELINE_TYPE?.tokenize()?.contains('ftp')) {
+      stage('Check LFTP Installed') {
+        def lftpInstalled = sh(script: 'lftp -v', returnStatus: true)
+        if (lftpInstalled != 0) {
+          error('LFTP is not installed on this machine. Please install LFTP and try again.')
+        } else {
+          echo 'LFTP is installed on this machine.'
+        }
+      }
+
+      stage('Checkout Branch (FTP)') {
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDS, keyFileVariable: 'SSH_KEY')]) {
+          def sshOptions = HOSTKEY_CHECKING ? "StrictHostKeyChecking=yes" : "StrictHostKeyChecking=no"
+          sh """
+            eval \$(ssh-agent -s)
+            ssh-add \${SSH_KEY}
+            GIT_SSH_COMMAND='ssh -o ${sshOptions}' git fetch origin ${env.BRANCH}
+            git checkout ${env.BRANCH} || git checkout -b ${env.BRANCH} origin/${env.BRANCH}
+            git reset --hard origin/${env.BRANCH}
+          """
+        }
+      }
+
+      stage('Deploy FTP') {
+        echo "Pipeline Version: ${env.PIPELINE_VERSION} ${env.PIPELINE_TYPE}"
+        withCredentials([usernamePassword(credentialsId: env.FTP_CREDS, usernameVariable: 'REMOTE_CREDS_USR', passwordVariable: 'REMOTE_CREDS_PSW')]) {
+          env.LFTP_PASSWORD = REMOTE_CREDS_PSW
+          echo "Deploying files from: ${env.BRANCH}"
+          sh "git log -1 --oneline"
+          echo "Current workspace branch:"
+          sh "git branch --show-current"
+
+          sh """
+            lftp -u "\${REMOTE_CREDS_USR}" --env-password -e "set ssl:verify-certificate no; mirror -vvvv --no-perms --no-umask --reverse --continue --verbose ${env.FTP_EXCLUDES} ${env.FTP_BUILD_FOLDER} ${env.FTP_LIVE_FOLDER}; quit" ${env.FTP_REMOTE_HOST}:${env.FTP_REMOTE_PORT}
+          """
+        }
+      }
+    }
+
+    // ----------------------------
+    // Deploy Command
+    // ----------------------------
+    if (env.PIPELINE_TYPE?.tokenize()?.contains('command')) {
+      stage("${env.COMMAND_NAME}") {
+        def remote = [:]
+        remote.host = env.SSH_HOST
+        remote.name = 'deployment-server'
+        remote.port = env.SSH_HOST_PORT.toInteger()
+        remote.allowAnyHosts = !HOSTKEY_CHECKING
+        def knownHostsPath = "${env.HOME ?: env.USERPROFILE}/.ssh/known_hosts"
+        if (HOSTKEY_CHECKING) {
+            remote.knownHosts = knownHostsPath
+        } else {
+            sh "mkdir -p \"\$(dirname \"${knownHostsPath}\")\" && ssh-keygen -R ${env.SSH_HOST} -f \"${knownHostsPath}\" || true"
+            sh "ssh-keyscan -p ${env.SSH_HOST_PORT} ${env.SSH_HOST} >> \"${knownHostsPath}\""
+        }
+        remote.logLevel = 'INFO'
+
+        withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDS, keyFileVariable: 'SSH_KEY')]) {
+          remote.user = env.SSH_USER
+          remote.identityFile = SSH_KEY
+
+          def sshOptions = HOSTKEY_CHECKING ? "-o StrictHostKeyChecking=yes" : "-o StrictHostKeyChecking=no"
+          def storageResult = sh(script: "ssh -i ${SSH_KEY} ${sshOptions} -p ${env.SSH_HOST_PORT} ${env.SSH_USER}@${env.SSH_HOST} \"df -Ph ${env.PROJECT_DIR} | awk 'NR==2 {print \\\$5}' | sed 's/%//'\"", returnStdout: true).trim()
+          env.SERVER_STORAGE = storageResult
+          echo "Disk usage: ${env.SERVER_STORAGE}%"
+          if (env.SERVER_STORAGE.isInteger() && env.SERVER_STORAGE.toInteger() > 95) {
+              SERVER_STORAGE_OUTAGE = true
+              error "Not enough space on the server for deployment! (Used: ${env.SERVER_STORAGE}%)"
+          }
+
+          executeDynamicCommands(remote, "COMMAND_BEFORE")
+          sshCommand remote: remote, command: env.COMMAND
+          executeDynamicCommands(remote, "COMMAND_AFTER")
+        }
+      }
+    }
+
+
+
+  } catch (err) {
+    currentBuild.result = 'FAILURE'
+    throw err
+  } finally {
+    stage('Post-build Notifications') {
+
+      // ----------------------------
+      // Email notifications
+      // ----------------------------
+      if (!params.REFRESH && env.EMAIL_NOTIFICATION_RECIPIENTS && env.EMAIL_NOTIFICATION_SENDER) {
+        def subject = currentBuild.result == 'FAILURE' ? "FAIL: Build on ${env.ENV.toUpperCase()} #${env.BUILD_NUMBER}" : "SUCCESS: Build on ${env.ENV.toUpperCase()} #${env.BUILD_NUMBER}"
+        def body = currentBuild.result == 'FAILURE' ? "Build FAILED on ${env.ENV.toUpperCase()}.\nServer Storage: ${env.SERVER_STORAGE}%\nSee details: ${env.BUILD_URL}" : "Build SUCCEEDED on ${env.ENV.toUpperCase()}.\nServer Storage: ${env.SERVER_STORAGE}%\nSee details: ${env.BUILD_URL}"
+
+        emailext(
+          to: "${env.EMAIL_NOTIFICATION_RECIPIENTS}",
+          from: "${env.EMAIL_NOTIFICATION_SENDER}",
+          subject: subject,
+          body: body
+        )
+      }
+
+      // ----------------------------
+      // Teams notifications
+      // ----------------------------
+      if (!params.REFRESH && env.TEAMS_WEBHOOK) {
+        def teamsWebhookUrl = ''
+        withCredentials([string(credentialsId: env.TEAMS_WEBHOOK, variable: 'TEAMS_WEBHOOK_EXTRACTED')]) {
+          teamsWebhookUrl = TEAMS_WEBHOOK_EXTRACTED
+        }
+
+        def payload = [
+          "@type": "MessageCard",
+          "@context": "http://schema.org/extensions",
+          "summary": currentBuild.result == 'FAILURE' ? "Build FAILURE" : "Build SUCCESS",
+          "themeColor": currentBuild.result == 'FAILURE' ? "FF0000" : "00FF00",
+          "title": "${currentBuild.currentResult}: Build ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+          "text": "Deploy-ul pe mediul ${env.ENV.toUpperCase()} ${currentBuild.result == 'FAILURE' ? 's-a finalizat cu ESEC :(' : 's-a finalizat cu SUCCES :)'} \nServer Storage: ${env.SERVER_STORAGE}% \n[View Build](${env.BUILD_URL})"
+        ]
+
+        httpRequest(
+          httpMode: 'POST',
+          contentType: 'APPLICATION_JSON',
+          url: teamsWebhookUrl,
+          requestBody: groovy.json.JsonOutput.toJson(payload)
+        )
+      }
+
+      // ----------------------------
+      // Discord notifications
+      // ----------------------------
+      if (!params.REFRESH && env.DISCORD_WEBHOOK && !SERVER_STORAGE_OUTAGE) {
+        withCredentials([string(credentialsId: env.DISCORD_WEBHOOK, variable: 'DISCORD_WEBHOOK_URL')]) {
+          def embedFields = [[name: "Job name", value: "${env.JOB_NAME}"], [name: "Server Storage", value: "${env.SERVER_STORAGE}%"]]
+
+          if (env.BITBUCKET_PAYLOAD) {
+            def pld = new groovy.json.JsonSlurper().parseText(env.BITBUCKET_PAYLOAD)
+            def commitURLs = pld.push.changes.collectMany { change -> change.commits.collect { it.links.html.href } }
+            embedFields += [
+              [name: "Branch name", value: "${env.BITBUCKET_TARGET_BRANCH}"],
+              [name: "Commit author", value: "${env.BITBUCKET_ACTOR}"],
+              [name: "Commit message", value: "${env.BITBUCKET_COMMIT_MESSAGE}"],
+              [name: "Commit URL(s)", value: commitURLs.take(4).join('\n')],
+              [name: "Commit hash", value: "${env.BITBUCKET_COMMIT_HASH}"]
+            ]
+          } else {
+            embedFields += [[name: "Pipeline triggered manually", value: "No commit data available"]]
+          }
+
+          def payloadMap = [
+            username: "Jenkins",
+            embeds: [[
+              title: "Deployment Status",
+              description: (currentBuild.result == 'FAILURE' ? "Deployment failed!" : "Deployment was successful!") + " (Server Storage: ${env.SERVER_STORAGE}%)",
+              color: currentBuild.result == 'FAILURE' ? 15158332 : 3066993,
+              fields: embedFields
+            ]]
+          ]
+
+          def jsonPayload = groovy.json.JsonOutput.toJson(payloadMap)
+          writeFile file: 'discord_payload.json', text: jsonPayload
+          sh 'curl -X POST -H "Content-Type: application/json" --data @discord_payload.json $DISCORD_WEBHOOK_URL'
+          sh 'rm discord_payload.json'
+        }
+      }
+
+      // ----------------------------
+      // Server Storage Outage Discord Notification
+      // ----------------------------
+      if (SERVER_STORAGE_OUTAGE && env.DISCORD_WEBHOOK) {
+        withCredentials([string(credentialsId: env.DISCORD_WEBHOOK, variable: 'DISCORD_WEBHOOK_URL')]) {
+          def outagePayload = [
+            username: "Jenkins Storage Monitor",
+            embeds: [[
+              title: "Storage Outage Alert",
+              description: "Not enough space on the server for deployment! (Storage: ${env.SERVER_STORAGE}%)",
+              color: 15158332,
+              fields: [
+                [name: "Server", value: "${env.SSH_HOST}"],
+                [name: "Project Dir", value: "${env.PROJECT_DIR}"],
+                [name: "Job", value: "${env.JOB_NAME} #${env.BUILD_NUMBER}"],
+                [name: "Storage Usage", value: "${env.SERVER_STORAGE}%"]
+              ]
+            ]]
+          ]
+          def outageJson = groovy.json.JsonOutput.toJson(outagePayload)
+          writeFile file: 'outage_payload.json', text: outageJson
+          sh 'curl -X POST -H "Content-Type: application/json" --data @outage_payload.json $DISCORD_WEBHOOK_URL'
+          sh 'rm outage_payload.json'
+        }
+      }
+    }
+  }
+}

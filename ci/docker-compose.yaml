@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  pr-agent:
+    image: codiumai/pr-agent:latest
+    container_name: pr-agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "30014:30014"   # map container port 30014 to host
+    command: python -m pr_agent.servers.bitbucket_server
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
