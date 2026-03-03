@@ -314,6 +314,11 @@ failure_callback = []
 service_callback = []
 # model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
+[claude_code]
+# cli_path = "claude"  # path to the Claude Code CLI binary
+# model = ""           # override model (leave empty to use config.model with prefix stripped)
+# timeout = 120        # timeout in seconds for CLI invocations
+
 [pr_similar_issue]
 skip_comments = false
 force_update_dataset = false
