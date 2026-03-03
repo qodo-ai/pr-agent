@@ -61,6 +61,7 @@ theme:
     - content.tabs.link
     - content.code.annotation
     - content.code.copy
+    - announce.dismiss
   language: en
   custom_dir: overrides
 
@@ -90,7 +91,6 @@ plugins:
   - glightbox
 
 extra:
-  announcement: "Open-source PR Agent documentation. For the Qodo free version, [Get Started](https://www.qodo.ai/get-started/)."
   generator: false
   social:
     - icon: fontawesome/brands/github
