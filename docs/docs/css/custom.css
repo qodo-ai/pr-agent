@@ -105,3 +105,18 @@
     border-color: rgba(226, 232, 240, 0.2);
     outline-color: rgba(226, 232, 240, 0.3);
 }
+
+.md-banner {
+    background-color: #1d4ed8;
+}
+
+[data-md-color-scheme="slate"] .md-banner {
+    background-color: #2563eb;
+}
+
+.md-banner .md-typeset a,
+.md-banner .md-typeset a:hover,
+.md-banner .md-typeset a:focus {
+    color: currentColor;
+    text-decoration: underline;
+}
