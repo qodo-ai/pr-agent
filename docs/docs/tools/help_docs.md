@@ -44,7 +44,7 @@ This can be useful, for example, for providing immediate feedback to users who o
 
 Here's how:
 
-1) Follow the steps depicted under [Run as a Github Action](https://qodo-merge-docs.qodo.ai/installation/github/#run-as-a-github-action) to create a new workflow, such as:`.github/workflows/help_docs.yml`:
+1) Follow the steps depicted under [Run as a Github Action](../installation/github.md#run-as-a-github-action) to create a new workflow, such as:`.github/workflows/help_docs.yml`:
 
 2) Edit your yaml file to the following:
 
@@ -100,7 +100,7 @@ When a new issue is opened, you should see a comment from `github-actions` bot w
 
 ## Configuration options
 
-Under the section `pr_help_docs`, the [configuration file](https://github.com/Codium-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L50) contains options to customize the 'help docs' tool:
+Under the section `pr_help_docs`, the [configuration file](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L50) contains options to customize the 'help docs' tool:
 
 - `repo_url`: If not overwritten, will use the repo from where the context came from (issue or PR), otherwise - use the given repo as context.
 - `repo_default_branch`: The branch to use in case repo_url overwritten, otherwise - has no effect.

@@ -1,13 +1,13 @@
-# Qodo Merge Pull Request Benchmark
+# PR-Agent Pull Request Benchmark
 
 ## Methodology
 
-Qodo Merge PR Benchmark evaluates and compares the performance of Large Language Models (LLMs) in analyzing pull request code and providing meaningful code suggestions.
+PR-Agent PR Benchmark evaluates and compares the performance of Large Language Models (LLMs) in analyzing pull request code and providing meaningful code suggestions.
 Our diverse dataset contains 400 pull requests from over 100 repositories, spanning multiple [programming languages](#programming-languages) to reflect real-world scenarios.
 
-- For each pull request, we have pre-generated suggestions from eleven different top-performing models using the Qodo Merge `improve` tool. The prompt for response generation can be found [here](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml). 
+- For each pull request, we have pre-generated suggestions from eleven different top-performing models using the PR-Agent `improve` tool. The prompt for response generation can be found [here](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml). 
 
-- To benchmark a model, we generate its suggestions for the same pull requests and ask a high-performing judge model to **rank** the new model's output against the pre-generated baseline suggestions. We utilize OpenAI's `o3` model as the judge, though other models have yielded consistent results. The prompt for this ranking judgment is available [here](https://github.com/Codium-ai/pr-agent-settings/tree/main/benchmark).
+- To benchmark a model, we generate its suggestions for the same pull requests and ask a high-performing judge model to **rank** the new model's output against the pre-generated baseline suggestions. We utilize OpenAI's `o3` model as the judge, though other models have yielded consistent results. The prompt for this ranking judgment is available [here](https://github.com/qodo-ai/pr-agent-settings/tree/main/benchmark).
 
 - We aggregate ranking outcomes across all pull requests, calculating performance metrics for the evaluated model. 
 
@@ -460,10 +460,10 @@ Weaknesses:
 
 Some examples of benchmarked PRs and their results:
 
-- [Example 1](https://www.qodo.ai/images/qodo_merge_benchmark/example_results1.html)
-- [Example 2](https://www.qodo.ai/images/qodo_merge_benchmark/example_results2.html)
-- [Example 3](https://www.qodo.ai/images/qodo_merge_benchmark/example_results3.html)
-- [Example 4](https://www.qodo.ai/images/qodo_merge_benchmark/example_results4.html)
+- [Example 1](https://www.codium.ai/images/pr_agent_benchmark/example_results1.html)
+- [Example 2](https://www.codium.ai/images/pr_agent_benchmark/example_results2.html)
+- [Example 3](https://www.codium.ai/images/pr_agent_benchmark/example_results3.html)
+- [Example 4](https://www.codium.ai/images/pr_agent_benchmark/example_results4.html)
 
 ### Models Used for Benchmarking
 

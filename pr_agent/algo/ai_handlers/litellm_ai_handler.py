@@ -292,16 +292,24 @@ class LiteLLMAIHandler(BaseAiHandler):
 
             thinking_kwargs_gpt5 = None
             if model.startswith('gpt-5'):
-                if model.endswith('_thinking'):
-                    thinking_kwargs_gpt5 = {
-                        "reasoning_effort": 'low',
-                        "allowed_openai_params": ["reasoning_effort"],
-                    }
-                else:
-                    thinking_kwargs_gpt5 = {
-                        "reasoning_effort": 'minimal',
-                        "allowed_openai_params": ["reasoning_effort"],
-                    }
+                # Use configured reasoning_effort or default to MEDIUM
+                config_effort = get_settings().config.reasoning_effort
+                try:
+                    ReasoningEffort(config_effort)
+                    effort = config_effort
+                except (ValueError, TypeError):
+                    effort = ReasoningEffort.MEDIUM.value
+                    if config_effort is not None:
+                        get_logger().warning(
+                            f"Invalid reasoning_effort '{config_effort}' in config. "
+                            f"Using default '{effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
+                        )
+
+                thinking_kwargs_gpt5 = {
+                    "reasoning_effort": effort,
+                    "allowed_openai_params": ["reasoning_effort"],
+                }
+                get_logger().info(f"Using reasoning_effort='{effort}' for GPT-5 model")
                 model = 'openai/'+model.replace('_thinking', '')  # remove _thinking suffix
 
 
@@ -338,9 +346,19 @@ class LiteLLMAIHandler(BaseAiHandler):
                     del kwargs['temperature']
 
             # Add reasoning_effort if model supports it
-            if (model in self.support_reasoning_models):
-                supported_reasoning_efforts = [ReasoningEffort.HIGH.value, ReasoningEffort.MEDIUM.value, ReasoningEffort.LOW.value]
-                reasoning_effort = get_settings().config.reasoning_effort if (get_settings().config.reasoning_effort in supported_reasoning_efforts) else ReasoningEffort.MEDIUM.value
+            if model in self.support_reasoning_models:
+                config_effort = get_settings().config.reasoning_effort
+                try:
+                    ReasoningEffort(config_effort)
+                    reasoning_effort = config_effort
+                except (ValueError, TypeError):
+                    reasoning_effort = ReasoningEffort.MEDIUM.value
+                    if config_effort is not None:
+                        get_logger().warning(
+                            f"Invalid reasoning_effort '{config_effort}' in config. "
+                            f"Using default '{reasoning_effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
+                        )
+
                 get_logger().info(f"Adding reasoning_effort with value {reasoning_effort} to model {model}.")
                 kwargs["reasoning_effort"] = reasoning_effort
 
