@@ -42,6 +42,8 @@ MAX_TOKENS = {
     'gpt-5.2-chat-latest': 128000,  # 128K, but may be limited by config.max_model_tokens
     'gpt-5.2-codex': 400000,  # 400K, but may be limited by config.max_model_tokens
     'gpt-5.3-codex': 400000,  # 400K, but may be limited by config.max_model_tokens
+    'gpt-5.4': 272000,  # 272K safe default without opt-in 1M context parameters
+    'gpt-5.4-2026-03-05': 272000,  # 272K safe default without opt-in 1M context parameters
     'o1-mini': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-mini-2024-09-12': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
