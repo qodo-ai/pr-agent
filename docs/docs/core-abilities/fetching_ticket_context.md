@@ -2,6 +2,9 @@
 
 `Supported Git Platforms: GitHub, GitLab, Bitbucket`
 
+!!! note "Branch-name issue linking: GitHub only (for now)"
+    Extracting issue links from the **branch name** (and the optional `branch_issue_regex` setting) is currently implemented for **GitHub only**. Support for GitLab, Bitbucket, and other platforms is planned for a later release. The GitHub flow was the most relevant to implement first; other providers will follow.
+
 ## Overview
 
 PR-Agent streamlines code review workflows by seamlessly connecting with multiple ticket management systems.
@@ -84,6 +87,8 @@ Examples of valid GitHub/Gitlab issue references:
 
 Branch names can also be used to link issues, for example:
 - `123-fix-bug` (where `123` is the issue number)
+
+This branch-name detection applies **only when the git provider is GitHub**. Support for other platforms is planned for later.
 
 Since PR-Agent is integrated with GitHub, it doesn't require any additional configuration to fetch GitHub issues.
 
