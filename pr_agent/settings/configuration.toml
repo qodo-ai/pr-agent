@@ -107,10 +107,14 @@ publish_description_as_comment_persistent=true
 enable_semantic_files_types=true
 collapsible_file_list='adaptive' # true, false, 'adaptive'
 collapsible_file_list_threshold=6
+inline_file_summary=false # false, true, 'table'
 # markers
 use_description_markers=false
 include_generated_by_header=true
 #custom_labels = ['Bug fix', 'Tests', 'Bug fix with tests', 'Enhancement', 'Documentation', 'Other']
+enable_large_pr_handling=true
+max_ai_calls=4
+async_ai_calls=true
 
 [pr_questions] # /ask #
 enable_help_text=false
