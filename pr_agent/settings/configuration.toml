@@ -4,7 +4,7 @@
 
 [config]
 # models
-model="gpt-5.2-2025-12-11"
+model="gpt-5.4-2026-03-05"
 fallback_models=["o4-mini"]
 #model_reasoning="o4-mini" # dedicated reasoning model for self-reflection
 #model_weak="gpt-4o" # optional, a weaker model to use for some easier tasks
