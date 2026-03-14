@@ -81,6 +81,21 @@ class TestExtractTicketsLinkFromBranchName:
         )
         assert result == []
 
+    def test_custom_regex_without_capturing_group_falls_back_to_default(self, monkeypatch):
+        """When branch_issue_regex has no capturing group, fall back to default pattern (no crash)."""
+        fake_settings = type("Settings", (), {})()
+        fake_settings.get = lambda key, default=None: (
+            True if key in ("extract_issue_from_branch", "config.extract_issue_from_branch") else (
+                r"\d+" if key in ("branch_issue_regex", "config.branch_issue_regex") else default
+            )
+        )
+        import pr_agent.tools.ticket_pr_compliance_check as m
+        monkeypatch.setattr(m, "get_settings", lambda: fake_settings)
+        result = extract_ticket_links_from_branch_name(
+            "feature/1-test", "org/repo", "https://github.com"
+        )
+        assert result == ["https://github.com/org/repo/issues/1"]
+
     def test_empty_repo_path_returns_empty(self):
         """Empty repo_path -> [] (guard in function)"""
         result = extract_ticket_links_from_branch_name("feature/1-test", "", "https://github.com")

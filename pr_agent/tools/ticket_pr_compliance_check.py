@@ -83,13 +83,21 @@ def extract_ticket_links_from_branch_name(branch_name, repo_path, base_url_html=
     if custom_regex_str:
         try:
             pattern = re.compile(custom_regex_str)
+            if pattern.groups < 1:
+                get_logger().error(
+                    "branch_issue_regex must contain at least one capturing group for the issue number; using default pattern."
+                )
+                pattern = BRANCH_ISSUE_PATTERN
         except re.error as e:
             get_logger().error(f"Invalid custom regex for branch issue extraction: {e}")
             return []
     else:
         pattern = BRANCH_ISSUE_PATTERN
     for match in pattern.finditer(branch_name):
-        issue_number = match.group(1)
+        try:
+            issue_number = match.group(1)
+        except IndexError:
+            continue
         if issue_number and issue_number.isdigit():
             github_tickets.add(
                 f"{base_url_html.strip('/')}/{repo_path}/issues/{issue_number}"
