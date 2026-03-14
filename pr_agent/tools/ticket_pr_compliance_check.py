@@ -65,13 +65,15 @@ def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url
 
     return list(github_tickets)
 
-def extract_tickets_link_from_branch_name(branch_name, repo_path, base_url_html="https://github.com"):
+def extract_ticket_links_from_branch_name(branch_name, repo_path, base_url_html="https://github.com"):
     """
     Extract GitHub issue URLs from branch name. Numbers are matched at start of branch or after /,
     followed by - or end (e.g. feature/1-test-issue -> #1). Respects extract_issue_from_branch
     and optional branch_issue_regex (may be under [config] in TOML).
     """
     if not branch_name or not repo_path:
+        return []
+    if not isinstance(branch_name, str):
         return []
     settings = get_settings()
     if not settings.get("extract_issue_from_branch", settings.get("config.extract_issue_from_branch", True)):
@@ -86,18 +88,12 @@ def extract_tickets_link_from_branch_name(branch_name, repo_path, base_url_html=
             return []
     else:
         pattern = BRANCH_ISSUE_PATTERN
-    try:
-        for match in pattern.finditer(branch_name):
-            issue_number = match.group(1)
-            if issue_number and issue_number.isdigit():
-                github_tickets.add(
-                    f"{base_url_html.strip('/')}/{repo_path}/issues/{issue_number}"
-                )
-    except Exception as e:
-        get_logger().error(
-            f"Error extracting tickets from branch name: {e}",
-            artifact={"traceback": traceback.format_exc()},
-        )
+    for match in pattern.finditer(branch_name):
+        issue_number = match.group(1)
+        if issue_number and issue_number.isdigit():
+            github_tickets.add(
+                f"{base_url_html.strip('/')}/{repo_path}/issues/{issue_number}"
+            )
     return list(github_tickets)
 
 
@@ -110,13 +106,20 @@ async def extract_tickets(git_provider):
                 user_description, git_provider.repo, git_provider.base_url_html
             )
             branch_name = git_provider.get_pr_branch()
-            branch_tickets = extract_tickets_link_from_branch_name(
+            branch_tickets = extract_ticket_links_from_branch_name(
                 branch_name, git_provider.repo, git_provider.base_url_html
             )
-            tickets = list(set(description_tickets) | set(branch_tickets))
-            if len(tickets) > 3:
-                get_logger().info(f"Too many tickets (description + branch): {len(tickets)}")
-                tickets = tickets[:3]
+            seen = set()
+            merged = []
+            for link in description_tickets + branch_tickets:
+                if link not in seen:
+                    seen.add(link)
+                    merged.append(link)
+            if len(merged) > 3:
+                get_logger().info(f"Too many tickets (description + branch): {len(merged)}")
+                tickets = merged[:3]
+            else:
+                tickets = merged
             tickets_content = []
 
             if tickets:
