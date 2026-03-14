@@ -40,7 +40,7 @@ PR-Agent offers comprehensive pull request functionalities integrated with vario
 |       | [Actions](./installation/github.md#run-as-a-github-action)                            |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       |                                                                                       |        |        |           |              |       |
 | [CORE](./core-abilities/index.md) | [Adaptive and token-aware file patch fitting](./core-abilities/compression_strategy.md) |   ✅   |   ✅   |    ✅     |      ✅       |       |
-|       | [Chat on code suggestions](./core-abilities/chat_on_code_suggestions.md)              |   ✅   |  ✅   |           |              |       |
+|       | [Chat on code suggestions](./core-abilities/interactivity.md)                         |   ✅   |  ✅   |           |              |       |
 |       | [Compression strategy](./core-abilities/compression_strategy.md)                      |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Dynamic context](./core-abilities/dynamic_context.md)                                |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Fetching ticket context](./core-abilities/fetching_ticket_context.md)                |   ✅   |  ✅   |    ✅     |              |       |

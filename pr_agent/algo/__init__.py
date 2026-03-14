@@ -41,6 +41,9 @@ MAX_TOKENS = {
     'gpt-5.2-2025-12-11': 400000,  # 400K, but may be limited by config.max_model_tokens
     'gpt-5.2-chat-latest': 128000,  # 128K, but may be limited by config.max_model_tokens
     'gpt-5.2-codex': 400000,  # 400K, but may be limited by config.max_model_tokens
+    'gpt-5.3-codex': 400000,  # 400K, but may be limited by config.max_model_tokens
+    'gpt-5.4': 272000,  # 272K safe default without opt-in 1M context parameters
+    'gpt-5.4-2026-03-05': 272000,  # 272K safe default without opt-in 1M context parameters
     'o1-mini': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-mini-2024-09-12': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
@@ -89,6 +92,7 @@ MAX_TOKENS = {
     'vertex_ai/gemini-2.5-flash-preview-04-17': 1048576,
     'vertex_ai/gemini-2.5-flash-preview-05-20': 1048576,
     'vertex_ai/gemini-2.5-flash': 1048576,
+    'vertex_ai/gemini-3-flash-preview': 1048576,
     'vertex_ai/gemini-3-pro-preview': 1048576,
     'vertex_ai/gemini-3.1-pro-preview': 1048576,
     'vertex_ai/gemma2': 8200,
@@ -102,6 +106,7 @@ MAX_TOKENS = {
     'gemini/gemini-2.5-pro-preview-05-06': 1048576,
     'gemini/gemini-2.5-pro-preview-06-05': 1048576,
     'gemini/gemini-2.5-pro': 1048576,
+    'gemini/gemini-3-flash-preview': 1048576,
     'gemini/gemini-3-pro-preview': 1048576,
     'gemini/gemini-3.1-pro-preview': 1048576,
     'codechat-bison': 6144,
@@ -249,6 +254,7 @@ NO_SUPPORT_TEMPERATURE_MODELS = [
     "gpt-5.1-codex",
     "gpt-5.1-codex-mini",
     "gpt-5.2-codex",
+    "gpt-5.3-codex",
     "gpt-5-mini"
 ]
 

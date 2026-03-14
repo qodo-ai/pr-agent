@@ -2,7 +2,7 @@
 
 See [here](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/algo/__init__.py) for a list of supported models in PR-Agent.
 The default model of PR-Agent is `GPT-5` from OpenAI.
-To use a different model than the default, you need to edit in the [configuration file](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L2) the fields:
+To use a different model than the default, you need to edit in the [configuration file](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L7) the fields:
 
 ```toml
 [config]
@@ -145,7 +145,7 @@ key = ...
 
 (you can obtain a Llama2 key from [here](https://replicate.com/replicate/llama-2-70b-chat/api))
 
-Also, review the [AiHandler](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/algo/ai_handler.py) file for instructions on how to set keys for other models.
+Also, review the [.secrets_template.toml](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/.secrets_template.toml) file for instructions on how to set keys for other models.
 
 ### Groq
 
