@@ -122,7 +122,7 @@ class TokenHandler:
 
         except Exception as e:
             get_logger().error(f"Error in Anthropic token counting: {e}")
-            return max_tokens
+            return 0
 
     def _apply_estimation_factor(self, model_name: str, default_estimate: int) -> int:
         factor = 1 + get_settings().get('config.model_token_count_estimate_factor', 0)
