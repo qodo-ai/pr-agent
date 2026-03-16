@@ -147,8 +147,11 @@ class TokenHandler:
             return default_estimate
 
         if ModelTypeValidator.is_anthropic_model(model_name) and get_settings(use_context=False).get('anthropic.key'):
-            return self._calc_claude_tokens(patch)
-        
+            claude_count = self._calc_claude_tokens(patch)
+            if claude_count > 0:
+                return claude_count
+            return self._apply_estimation_factor(model_name, default_estimate)
+
         return self._apply_estimation_factor(model_name, default_estimate)
     
     def count_tokens(self, patch: str, force_accurate: bool = False) -> int:
