@@ -11,7 +11,7 @@
  
 Try the free version on our website.
 
-👉[Get Started Now](www.qodo.ai/get-started/)
+👉[Get Started Now](https://www.qodo.ai/get-started/)
 
 PR-Agent is an open-source, AI-powered code review agent and a community-maintained legacy project of Qodo. It is distinct from Qodo’s primary AI code review offering, which provides a feature-rich, context-aware experience. Qodo now offers a free tier that integrates seamlessly with GitHub, GitLab, Bitbucket, and Azure DevOps for high-quality automated reviews.
 
@@ -221,9 +221,6 @@ ___
 </p>
 </div>
 
-<div align="left">
-
-</div>
 <hr>
 
 ## Try It Now
