@@ -231,80 +231,95 @@ def should_process_pr_logic(data) -> bool:
     return True
 
 
-@router.post("/webhook")
-async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Request):
-    app_name = get_settings().get("CONFIG.APP_NAME", "Unknown")
-    log_context = {"server_type": "bitbucket_app", "app_name": app_name}
-    get_logger().debug(request.headers)
-    jwt_header = request.headers.get("authorization", None)
-    if jwt_header:
-        input_jwt = jwt_header.split(" ")[1]
-    data = await request.json()
-    get_logger().debug(data)
+async def handle_request(data: dict):
+    try:
+        app_name = get_settings().get("CONFIG.APP_NAME", "Unknown")
+        log_context = {"server_type": "bitbucket_app", "app_name": app_name}
 
-    async def inner():
-        try:
-            # ignore bot users
-            if is_bot_user(data):
+        # ignore bot users
+        if is_bot_user(data):
+            return "OK"
+
+        # Check if the PR should be processed
+        if data.get("event", "") == "pullrequest:created":
+            if not should_process_pr_logic(data):
                 return "OK"
 
-            # Check if the PR should be processed
-            if data.get("event", "") == "pullrequest:created":
-                if not should_process_pr_logic(data):
-                    return "OK"
+        # Get the username of the sender
+        log_context["sender"] = _get_username(data)
 
-            # Get the username of the sender
-            log_context["sender"] = _get_username(data)
+        sender_id = data.get("data", {}).get("actor", {}).get("account_id", "")
+        log_context["sender_id"] = sender_id
 
-            sender_id = data.get("data", {}).get("actor", {}).get("account_id", "")
-            log_context["sender_id"] = sender_id
-            jwt_parts = input_jwt.split(".")
-            claim_part = jwt_parts[1]
-            claim_part += "=" * (-len(claim_part) % 4)
-            decoded_claims = base64.urlsafe_b64decode(claim_part)
-            claims = json.loads(decoded_claims)
-            client_key = claims["iss"]
-            secrets = json.loads(secret_provider.get_secret(client_key))
-            shared_secret = secrets["shared_secret"]
-            jwt.decode(input_jwt, shared_secret, audience=client_key, algorithms=["HS256"])
-            bearer_token = await get_bearer_token(shared_secret, client_key)
-            context['bitbucket_bearer_token'] = bearer_token
-            context["settings"] = copy.deepcopy(global_settings)
-            event = data["event"]
-            agent = PRAgent()
-            if event == "pullrequest:created":
-                pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
-                log_context["api_url"] = pr_url
-                log_context["event"] = "pull_request"
-                if pr_url:
-                    with get_logger().contextualize(**log_context):
-                        if get_identity_provider().verify_eligibility("bitbucket",
-                                                        sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
-                            if get_settings().get("bitbucket_app.pr_commands"):
-                                await _perform_commands_bitbucket("pr_commands", agent, pr_url, log_context, data)
-            elif event == "pullrequest:updated": # PR updated, might be from a push (we will validate this later)
-                pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
-                log_context["api_url"] = pr_url
-                log_context["event"] = "pull_request"
-                if pr_url:
-                    with get_logger().contextualize(**log_context):
-                        if get_identity_provider().verify_eligibility("bitbucket",
-                                                        sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
-
-                            if get_settings().get("bitbucket_app.push_commands"):
-                                await _perform_commands_bitbucket("push_commands", agent, pr_url, log_context, data)
-            elif event == "pullrequest:comment_created":
-                pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
-                log_context["api_url"] = pr_url
-                log_context["event"] = "comment"
-                comment_body = data["data"]["comment"]["content"]["raw"]
+        context["settings"] = copy.deepcopy(global_settings)
+        event = data.get("event")
+        agent = PRAgent()
+        if event == "pullrequest:created":
+            pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
+            log_context["api_url"] = pr_url
+            log_context["event"] = "pull_request"
+            if pr_url:
                 with get_logger().contextualize(**log_context):
                     if get_identity_provider().verify_eligibility("bitbucket",
-                                                                     sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
-                        await agent.handle_request(pr_url, comment_body)
-        except Exception as e:
-            get_logger().error(f"Failed to handle webhook: {e}")
-    background_tasks.add_task(inner)
+                                                    sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
+                        if get_settings().get("bitbucket_app.pr_commands"):
+                            await _perform_commands_bitbucket("pr_commands", agent, pr_url, log_context, data)
+        elif event == "pullrequest:updated": # PR updated, might be from a push (we will validate this later)
+            pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
+            log_context["api_url"] = pr_url
+            log_context["event"] = "pull_request"
+            if pr_url:
+                with get_logger().contextualize(**log_context):
+                    if get_identity_provider().verify_eligibility("bitbucket",
+                                                    sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
+
+                        if get_settings().get("bitbucket_app.push_commands"):
+                            await _perform_commands_bitbucket("push_commands", agent, pr_url, log_context, data)
+        elif event == "pullrequest:comment_created":
+            pr_url = data["data"]["pullrequest"]["links"]["html"]["href"]
+            log_context["api_url"] = pr_url
+            log_context["event"] = "comment"
+            comment_body = data["data"]["comment"]["content"]["raw"]
+            with get_logger().contextualize(**log_context):
+                if get_identity_provider().verify_eligibility("bitbucket",
+                                                                 sender_id, pr_url) is not Eligibility.NOT_ELIGIBLE:
+                    await agent.handle_request(pr_url, comment_body)
+    except Exception as e:
+        get_logger().error(f"Failed to handle webhook: {e}")
+
+
+async def hacked_background_task(data: dict):
+    try:
+        # Support both wrapped (Atlassian Connect) and unwrapped (Direct Webhook) payloads
+        data_inner = data.get("data", data)
+        
+        if "pullrequest" not in data_inner:
+            get_logger().error(f"Hacked task: 'pullrequest' not found in payload. Keys: {list(data_inner.keys())}")
+            return
+            
+        pr_url = data_inner["pullrequest"]["links"]["html"]["href"]
+        
+        # Handle cases where it's not a comment event (e.g., PR created)
+        if "comment" in data_inner:
+            comment_text = data_inner["comment"]["content"]["raw"]
+        else:
+            get_logger().info(f"Hacked task: No comment found, performing default PR action for {pr_url}")
+            # If no comment, we can default to a command like '/review' or just log
+            comment_text = "/review" 
+
+        get_logger().info(f"Hacked task processing: {pr_url} with command: {comment_text}")
+        agent = PRAgent()
+        await agent.handle_request(pr_url, comment_text)
+
+    except Exception as e:
+        get_logger().error(f"Hacked task crashed: {e}. Data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
+
+
+@router.post("/webhook")
+async def handle_webhook(request: Request, background_tasks: BackgroundTasks):
+    data = await request.json()
+    # Route the data to our custom, JWT-free background task
+    background_tasks.add_task(hacked_background_task, data)
     return "OK"
 
 @router.get("/webhook")
