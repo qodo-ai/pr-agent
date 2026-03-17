@@ -35,6 +35,19 @@ class TestGetMaxTokens:
 
         assert get_max_tokens(model) == 272000
 
+    @pytest.mark.parametrize("model", ["gpt-5.4-mini", "gpt-5.4-mini-2026-03-17"])
+    def test_gpt54_mini_model_max_tokens(self, monkeypatch, model):
+        fake_settings = type('', (), {
+            'config': type('', (), {
+                'custom_model_max_tokens': 0,
+                'max_model_tokens': 0
+            })()
+        })()
+
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+
+        assert get_max_tokens(model) == 400000
+
     # Test situations where the model is not registered and exists as a custom model
     def test_model_has_custom(self, monkeypatch):
         fake_settings = type('', (), {

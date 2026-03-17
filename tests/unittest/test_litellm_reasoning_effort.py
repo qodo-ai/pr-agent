@@ -311,6 +311,8 @@ class TestLiteLLMReasoningEffort:
             "gpt-5-2025-08-07",
             "gpt-5.1",
             "gpt-5.4",
+            "gpt-5.4-mini",
+            "gpt-5.4-mini-2026-03-17",
             "gpt-5.4-2026-03-05",
             "gpt-5-turbo",
             "gpt-5.1-codex",
