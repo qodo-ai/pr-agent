@@ -82,6 +82,8 @@ class LiteLLMAIHandler(BaseAiHandler):
         if get_settings().get("OLLAMA.API_BASE", None):
             litellm.api_base = get_settings().ollama.api_base
             self.api_base = get_settings().ollama.api_base
+        if get_settings().get("OLLAMA.API_KEY", None):
+            litellm.api_key = get_settings().ollama.api_key
         if get_settings().get("HUGGINGFACE.REPETITION_PENALTY", None):
             self.repetition_penalty = float(get_settings().huggingface.repetition_penalty)
         if get_settings().get("VERTEXAI.VERTEX_PROJECT", None):
@@ -403,6 +405,8 @@ class LiteLLMAIHandler(BaseAiHandler):
             if get_settings().config.verbosity_level >= 2:
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
+
+            kwargs["api_key"] = litellm.api_key
 
             # Get completion with automatic streaming detection
             resp, finish_reason, response_obj = await self._get_completion(**kwargs)
