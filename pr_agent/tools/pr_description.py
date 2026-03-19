@@ -774,7 +774,7 @@ def sanitize_diagram(diagram_raw: str) -> str:
     if not isinstance(diagram_raw, str):
         return ''
     diagram = diagram_raw.strip()
-    if not diagram.startswith('```'):
+    if not diagram.startswith('```mermaid'):
         return ''
     
     # fallback missing closing

@@ -73,3 +73,6 @@ class TestPRDescriptionDiagram:
 
     def test_non_string_input_returns_empty(self):
         assert sanitize_diagram(123) == ''
+
+    def test_non_mermaid_fence_returns_empty(self):
+        assert sanitize_diagram('```python\nprint("hello")\n```') == ''
