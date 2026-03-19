@@ -782,8 +782,14 @@ def sanitize_diagram(diagram_raw: str) -> str:
         diagram += '\n```'  
     
     # remove backticks inside node labels: ["`label`"] -> ["label"]
-    lines = diagram.split('\n')
-    result = [re.sub(r'\["([^"]*?)"\]', lambda m: '["' + m.group(1).replace('`', '') + '"]', line) for line in lines]
+    result = []
+    for line in diagram.split('\n'):
+        line = re.sub(
+            r'\["([^"]*?)"\]',
+            lambda m: '["' + m.group(1).replace('`', '') + '"]',
+            line,
+        )
+        result.append(line)
     return '\n' + '\n'.join(result)
 
 
