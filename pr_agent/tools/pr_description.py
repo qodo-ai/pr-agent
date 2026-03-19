@@ -769,6 +769,7 @@ class PRDescription:
 """
         return pr_body
 
+
 def sanitize_diagram(diagram_raw: str) -> str:
     """Sanitize a diagram string: fix missing closing fence and remove backticks."""
     if not isinstance(diagram_raw, str):
@@ -776,11 +777,12 @@ def sanitize_diagram(diagram_raw: str) -> str:
     diagram = diagram_raw.strip()
     if not diagram.startswith('```mermaid'):
         return ''
-    
+
     # fallback missing closing
     if not diagram.endswith('```'):
-        diagram += '\n```'  
-    
+        diagram += '\n```'
+
+
     # remove backticks inside node labels: ["`label`"] -> ["label"]
     result = []
     for line in diagram.split('\n'):

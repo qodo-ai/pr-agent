@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 import yaml
 
 from pr_agent.tools.pr_description import PRDescription, sanitize_diagram
