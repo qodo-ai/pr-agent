@@ -4,7 +4,7 @@
 
 - **Do** match the interpreter requirement declared in `pyproject.toml` (Python ≥ 3.12) and install `requirements.txt` plus `requirements-dev.txt` before running tools.
 - **Do** run tests with `PYTHONPATH=.` set to keep imports functional (for example `PYTHONPATH=. ./.venv/bin/pytest tests/unittest/test_fix_json_escape_char.py -q`).
-- **Do** adjust configuration through `.pr_agent.toml` or files under `pr_agent/settings/` instead of hard-coding values.
+- **Do** adjust configuration through `.pr_agent.toml` or files under `pr_agent/settings/` instead of hard-coding values. The `MAX_TOKENS` dictionary in `pr_agent/algo/__init__.py` is the designated model token registry — new model entries there are expected, not hardcoded configuration.
 - **Don’t** commit secrets or access tokens; rely on environment variables as shown in the health and e2e tests.
 - **Don’t** reformat or reorder files globally; match existing 120-character lines, import ordering, and docstring style.
 - **Don’t** delete or rename configuration, prompt, or workflow files without maintainer approval.
