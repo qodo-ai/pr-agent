@@ -28,3 +28,9 @@ pr_compliances:
     objective: "In a code snippet containing multiple logic conditions (such as 'if-else'), prefer an early return on edge cases than deep nesting"
     success_criteria: "When relevant, utilize early return that reduces nesting"
     failure_criteria: "Unjustified deep nesting that can be simplified by early return"
+
+  - title: "Model Registry Entries Are Not Hardcoded Config"
+    compliance_label: false
+    objective: "The MAX_TOKENS dictionary in pr_agent/algo/__init__.py is the designated model token registry. Adding new model entries there is the expected pattern, not a hardcoded configuration violation"
+    success_criteria: "New model entries follow existing patterns in the MAX_TOKENS dictionary with appropriate comments"
+    failure_criteria: "Model token limits added outside of the MAX_TOKENS registry or without following the existing entry format"
