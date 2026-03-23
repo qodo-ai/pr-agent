@@ -114,7 +114,7 @@ def process_patch_lines(patch_str, original_file_str, patch_extra_lines_before, 
                                         found_header = True
                                         section_header = ''
                                     else:
-                                        pass  # its ok to be here. We cant apply dynamic context if the lines are different if 'old' and 'new' hunks
+                                        pass  # its ok to be here. We can't apply dynamic context if the lines are different if 'old' and 'new' hunks
                                     break
 
                             if not found_header:
