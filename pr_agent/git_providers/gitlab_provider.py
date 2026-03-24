@@ -790,12 +790,46 @@ class GitLabProvider(GitProvider):
         return self.mr.notes.list(get_all=True)[::-1]
 
     def get_repo_settings(self):
+        contents = ""
+        # 1. Try from the main project
         try:
-            main_branch = self.gl.projects.get(self.id_project).default_branch
-            contents = self.gl.projects.get(self.id_project).files.get(file_path='.pr_agent.toml', ref=main_branch).decode()
-            return contents
+            project = self.gl.projects.get(self.id_project)
+            main_branch = project.default_branch
+            contents = project.files.get(file_path='.pr_agent.toml', ref=main_branch).decode()
         except Exception:
+            pass
+
+        # 2. Try from the wiki project
+        if not contents and get_settings().config.get("use_wiki_settings_file", True):
+            try:
+                # For GitLab, we can access wikis through the main project object
+                # Attempt to get the '.pr_agent.toml' page
+                wiki_project_id = get_settings().get("GITLAB.WIKI_PROJECT_ID", self.id_project)
+                project = self.gl.projects.get(wiki_project_id)
+                wiki_page = None
+                for slug in ['.pr_agent.toml', 'pr-agent-settings', 'pr_agent.toml']:
+                    try:
+                        wiki_page = project.wikis.get(slug)
+                        if wiki_page:
+                            break
+                    except Exception:
+                        continue
+
+                if wiki_page:
+                    contents = self._extract_toml_from_markdown(wiki_page.content)
+            except Exception as e:
+                get_logger().warning(f"Failed to fetch settings from wiki: {e}")
+
+        return contents.encode() if isinstance(contents, str) else contents
+
+    def _extract_toml_from_markdown(self, content: str) -> str:
+        if not content:
             return ""
+        # Match ```toml ... ``` or ```ini ... ``` or ``` ... ```
+        toml_match = re.search(r"```(?:toml|ini)?\s*\n(.*?)\n```", content, re.DOTALL | re.IGNORECASE)
+        if toml_match:
+            return toml_match.group(1).strip()
+        return content.strip()
 
     def get_workspace_name(self):
         return self.id_project.split('/')[0]
