@@ -15,7 +15,7 @@ from pr_agent.algo.pr_processing import (add_ai_metadata_to_diff_files,
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, PRReviewHeader,
                                  convert_to_markdown_v2, github_action_output,
-                                 load_yaml, show_relevant_configurations)
+                                 load_yaml, show_relevant_configurations, push_outputs)
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import (get_git_provider,
                                     get_git_provider_with_context)
@@ -269,6 +269,13 @@ class PRReviewer:
         # Output the relevant configurations if enabled
         if get_settings().get('config', {}).get('output_relevant_configurations', False):
             markdown_text += show_relevant_configurations(relevant_section='pr_reviewer')
+
+        # Push outputs to optional external channels (stdout/file/webhook) without provider APIs
+        try:
+            push_outputs("review", payload=data.get('review', {}), markdown=markdown_text)
+        except Exception:
+            # non-fatal
+            pass
 
         # Add custom labels from the review prediction (effort, security)
         self.set_review_labels(data)
