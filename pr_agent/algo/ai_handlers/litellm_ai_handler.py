@@ -405,11 +405,11 @@ class LiteLLMAIHandler(BaseAiHandler):
             if get_settings().config.verbosity_level >= 2:
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
-
-            api_key = getattr(litellm, "api_key", None)
-            if api_key:
-                kwargs["api_key"] = api_key
-
+            
+            # Specific only for ollma cloud api key
+            if get_settings().get("OLLAMA.API_KEY", None):
+                kwargs["api_key"] = litellm.api_key
+            
             # Get completion with automatic streaming detection
             resp, finish_reason, response_obj = await self._get_completion(**kwargs)
 
