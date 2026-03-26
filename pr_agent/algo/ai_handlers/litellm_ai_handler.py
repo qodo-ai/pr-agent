@@ -406,8 +406,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
             
-            # Specific only for ollma cloud api key
-            if get_settings().get("OLLAMA.API_KEY", None):
+            # Support for Ollama Cloud
+            if model.startswith('ollama') and get_settings().get("OLLAMA.API_KEY", None):
                 kwargs["api_key"] = litellm.api_key
             
             # Get completion with automatic streaming detection
