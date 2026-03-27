@@ -406,7 +406,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
 
-            kwargs["api_key"] = litellm.api_key
+            if litellm.api_key and litellm.api_key != "dummy_key":
+                kwargs["api_key"] = litellm.api_key
 
             # Get completion with automatic streaming detection
             resp, finish_reason, response_obj = await self._get_completion(**kwargs)
