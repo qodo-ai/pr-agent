@@ -35,7 +35,7 @@ class GiteaProvider(GitProvider):
             self.logger.error("Gitea access token not found in settings.")
             raise ValueError("Gitea access token not found in settings.")
 
-        self.repo_settings = get_settings().get("GITEA.REPO_SETTING", None)
+        self.repo_settings = ".pr_agent.toml"
         configuration = giteapy.Configuration()
         configuration.host = "{}/api/v1".format(self.base_url)
         configuration.api_key['Authorization'] = f'token {self.gitea_access_token}'
@@ -543,6 +543,15 @@ class GiteaProvider(GitProvider):
         """Get number of files changed in the PR"""
         return len(self.git_files)
 
+    def get_issue_main_description(self, issue_num: int) -> str:
+        """The AI validation logic automatically looks for this method name to retrieve acceptance criteria."""
+        try:
+            issue = self.repo_api.get_issue(self.owner, self.repo, issue_num)
+            return issue.body if issue and hasattr(issue, 'body') else ""
+        except Exception as e:
+            self.logger.error(f"Failed to fetch Gitea issue body: {e}")
+            return ""
+
     def get_issue_comments(self) -> List[Dict[str, Any]]:
         """Get all comments in the PR"""
         index = self.issue_number if self.enabled_issue else self.pr_number
@@ -605,23 +614,25 @@ class GiteaProvider(GitProvider):
 
         return [label.name for label in labels]
 
-    def get_repo_settings(self) -> str:
-        """Get repository settings"""
-        if not self.repo_settings:
-            self.logger.error("Repository settings not found")
-            return ""
-
-        response = self.repo_api.get_file_content(
-            owner=self.owner,
-            repo=self.repo,
-            commit_sha=self.sha,
-            filepath=self.repo_settings
-        )
-        if not response:
-            self.logger.error("Failed to get repository settings")
-            return ""
-
-        return response
+    def get_repo_settings(self) -> str:  
+        try:
+            response = self.repo_api.get_file_content(
+                owner=self.owner,
+                repo=self.repo,
+                commit_sha=self.sha,
+                filepath=".pr_agent.toml"
+            )
+            
+            
+            if isinstance(response, str):
+                return response.encode('utf-8')
+            return response
+        except Exception as e:
+            if "404" in str(e):
+                self.logger.info("No .pr_agent.toml found, using defaults")
+            else:
+                self.logger.error(f"Error fetching settings: {e}")
+            return b""  # Return an empty bytes object.
 
     def get_user_id(self) -> str:
         """Get the ID of the authenticated user"""
@@ -957,6 +968,9 @@ class RepoApi(giteapy.RepositoryApi):
             repo=repo,
             index=issue_number
         )
+    def get_issue(self, owner: str, repo: str, index: int):
+        """Get ticket issue """
+        return self.issue.issue_get_issue(owner=owner, repo=repo, index=index)
 
     def list_all_commits(self, owner: str, repo: str):
         return self.repository.repo_get_all_commits(
