@@ -144,6 +144,13 @@ class TestApiKeyGuard:
         # Override settings to simulate Anthropic configured, OpenAI not configured
         monkeypatch.setattr(litellm_handler, "get_settings", _make_anthropic_settings)
 
+        # Ensure deterministic preconditions: delete OPENAI_API_KEY env var so __init__
+        # will set litellm.api_key to DUMMY_LITELLM_API_KEY (line 42-43 of litellm_ai_handler.py)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        # Reset litellm.api_key to avoid cross-test state pollution
+        monkeypatch.setattr(litellm, "api_key", None)
+
         with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
                    new_callable=AsyncMock) as mock_call:
             mock_call.return_value = _mock_response()
