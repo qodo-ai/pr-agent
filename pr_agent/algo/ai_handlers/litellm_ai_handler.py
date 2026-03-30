@@ -15,7 +15,7 @@ from pr_agent.log import get_logger
 import json
 
 MODEL_RETRIES = 2
-DUMMY_LITELLM_API_KEY = "dummy_key"
+DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
 
 
 class LiteLLMAIHandler(BaseAiHandler):
@@ -407,6 +407,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
 
+            # Inject api_key to the call. This key is populated during init by providers
+            # like Groq, XAI, Azure AD, and OpenRouter. Skip if None or placeholder.
             if litellm.api_key and litellm.api_key != DUMMY_LITELLM_API_KEY:
                 kwargs["api_key"] = litellm.api_key
 
