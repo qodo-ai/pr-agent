@@ -55,7 +55,7 @@ def _make_anthropic_settings():
     This simulates the original bug scenario: ANTHROPIC.KEY is set,
     but OPENAI.KEY is not, so litellm.api_key falls back to DUMMY_LITELLM_API_KEY.
     """
-    anthropic_key = "sk-ant-test-real-key"
+    anthropic_key = "test-anthropic-key-12345"
     return type("Settings", (), {
         "config": type("Config", (), {
             "reasoning_effort": None,
@@ -118,7 +118,7 @@ class TestApiKeyGuard:
         The key is set after __init__ to simulate a provider having stored its key there
         during initialization, without triggering the placeholder value in __init__.
         """
-        real_key = "sk-test-real-provider-key"
+        real_key = "test-provider-key-67890"
 
         with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
                    new_callable=AsyncMock) as mock_call:
