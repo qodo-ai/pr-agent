@@ -323,6 +323,7 @@ enable_callbacks = false
 success_callback = []
 failure_callback = []
 service_callback = []
+# custom_llm_provider = "" # Optional: Override LiteLLM provider inference for hosted OpenAI-compatible endpoints
 # model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
 [pr_similar_issue]
