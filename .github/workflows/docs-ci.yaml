@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - add-docs-portal
     paths:
       - docs/**
 permissions:
@@ -12,22 +11,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - name: Configure Git Credentials
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          python-version: 3.x
-      - run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV
-      - uses: actions/cache@v4
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci
+        working-directory: docs
+      - run: npm run build
+        working-directory: docs
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          key: mkdocs-material-${{ env.cache_id }}
-          path: .cache
-          restore-keys: |
-            mkdocs-material-
-      - run: pip install mkdocs-material
-      - run: pip install "mkdocs-material[imaging]"
-      - run: pip install mkdocs-glightbox
-      - run: mkdocs gh-deploy -f docs/mkdocs.yml --force
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/build
+          cname: qodo-merge-docs.qodo.ai

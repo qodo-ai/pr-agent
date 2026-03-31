@@ -1,3 +1,8 @@
+---
+title: "Installation"
+sidebar_position: 1
+---
+
 # Installation
 
 There are several ways to use PR-Agent:

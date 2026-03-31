@@ -1,3 +1,8 @@
+---
+title: "Overview"
+sidebar_position: 1
+---
+
 # Overview
 
 [PR-Agent](https://github.com/qodo-ai/pr-agent) is an open-source, AI-powered code review agent and a community-maintained legacy project of Qodo. It is distinct from Qodo's primary AI code review offering, which provides a feature-rich, context-aware experience. Qodo now offers a free tier that integrates seamlessly with GitHub, GitLab, Bitbucket, and Azure DevOps for high-quality automated reviews.
@@ -24,7 +29,7 @@ PR-Agent offers comprehensive pull request functionalities integrated with vario
 | ----- |---------------------------------------------------------------------------------------|:------:|:------:|:---------:|:------------:|:-----:|
 | [TOOLS](./tools/index.md) | [Describe](./tools/describe.md)                                     |   ✅   |   ✅   |    ✅     |      ✅       |  ✅   |
 |       | [Review](./tools/review.md)                                                           |   ✅   |   ✅   |    ✅     |      ✅       |  ✅   |
-|       | [Improve](./tools/improve.md)                                                         |   ✅   |   ✅   |    ✅     |      ✅       |  ✅   |
+|       | [Improve](./tools/improve.mdx)                                                         |   ✅   |   ✅   |    ✅     |      ✅       |  ✅   |
 |       | [Ask](./tools/ask.md)                                                                 |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | ⮑ [Ask on code lines](./tools/ask.md#ask-lines)                                       |   ✅   |   ✅   |           |              |       |
 |       | [Add Docs](./tools/add_docs.md)                                                       |   ✅   |   ✅   |    ✅     |      ✅       |       |
@@ -43,7 +48,7 @@ PR-Agent offers comprehensive pull request functionalities integrated with vario
 |       | [Chat on code suggestions](./core-abilities/interactivity.md)                         |   ✅   |  ✅   |           |              |       |
 |       | [Compression strategy](./core-abilities/compression_strategy.md)                      |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Dynamic context](./core-abilities/dynamic_context.md)                                |   ✅   |   ✅   |    ✅     |      ✅       |       |
-|       | [Fetching ticket context](./core-abilities/fetching_ticket_context.md)                |   ✅   |  ✅   |    ✅     |              |       |
+|       | [Fetching ticket context](./core-abilities/fetching_ticket_context.mdx)                |   ✅   |  ✅   |    ✅     |              |       |
 |       | [Interactivity](./core-abilities/interactivity.md)                                    |   ✅   |  ✅   |           |              |       |
 |       | [Local and global metadata](./core-abilities/metadata.md)                             |   ✅   |   ✅   |    ✅     |      ✅       |       |
 |       | [Multiple models support](./usage-guide/changing_a_model.md)                          |   ✅   |   ✅   |    ✅     |      ✅       |       |
@@ -55,22 +60,22 @@ PR-Agent offers comprehensive pull request functionalities integrated with vario
 
 #### [/describe](https://github.com/qodo-ai/pr-agent/pull/530)
 
-<figure markdown="1">
-![/describe](https://www.codium.ai/images/pr_agent/describe_new_short_main.png){width=512}
+<figure>
+<img src="https://www.codium.ai/images/pr_agent/describe_new_short_main.png" alt="/describe" width="512" />
 </figure>
 <hr>
 
 #### [/review](https://github.com/qodo-ai/pr-agent/pull/732#issuecomment-1975099151)
 
-<figure markdown="1">
-![/review](https://www.codium.ai/images/pr_agent/review_new_short_main.png){width=512}
+<figure>
+<img src="https://www.codium.ai/images/pr_agent/review_new_short_main.png" alt="/review" width="512" />
 </figure>
 <hr>
 
 #### [/improve](https://github.com/qodo-ai/pr-agent/pull/732#issuecomment-1975099159)
 
-<figure markdown="1">
-![/improve](https://www.codium.ai/images/pr_agent/improve_new_short_main.png){width=512}
+<figure>
+<img src="https://www.codium.ai/images/pr_agent/improve_new_short_main.png" alt="/improve" width="512" />
 </figure>
 <hr>
 
