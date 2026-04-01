@@ -170,3 +170,164 @@ class TestApiKeyGuard:
             # Verify the dummy key was NOT passed to the call.
             # This allows litellm to use litellm.anthropic_key internally.
             assert "api_key" not in mock_call.call_args[1]
+
+    @pytest.mark.asyncio
+    async def test_groq_key_forwarded_for_non_ollama_model(self, monkeypatch):
+        """Regression check for PR #2288: Groq key must be forwarded for non-Ollama models.
+
+        PR #2288 changed the forwarding guard to only forward api_key when
+        model.startswith('ollama'). This test verifies whether that approach
+        silently drops the Groq key when calling a non-Ollama model (e.g. gpt-4o).
+
+        Groq sets litellm.api_key during __init__ (see litellm_ai_handler.py line 73)
+        and relies on it being passed via kwargs["api_key"] to acompletion.
+        """
+        groq_key = "test-groq-key-12345"
+
+        groq_settings = type("Settings", (), {
+            "config": type("Config", (), {
+                "reasoning_effort": None,
+                "ai_timeout": 30,
+                "custom_reasoning_model": False,
+                "max_model_tokens": 32000,
+                "verbosity_level": 0,
+                "seed": -1,
+                "get": lambda self, key, default=None: default,
+            })(),
+            "litellm": type("LiteLLM", (), {
+                "get": lambda self, key, default=None: default,
+            })(),
+            "groq": type("Groq", (), {
+                "key": groq_key,
+            })(),
+            "get": lambda self, key, default=None: (
+                groq_key if key == "GROQ.KEY" else default
+            ),
+        })()
+
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: groq_settings)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setattr(litellm, "api_key", None)
+
+        with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+                   new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = _mock_response()
+            handler = LiteLLMAIHandler()
+
+            # Confirm __init__ stored the Groq key in litellm.api_key
+            assert litellm.api_key == groq_key, (
+                f"Expected litellm.api_key to be Groq key after __init__, got: {litellm.api_key!r}"
+            )
+
+            # Call with a non-Ollama model
+            await handler.chat_completion(model="gpt-4o", system="sys", user="usr")
+
+        # The Groq key must be forwarded — without it, Groq calls will fail auth
+        assert mock_call.call_args[1].get("api_key") == groq_key, (
+            f"Groq key was NOT forwarded to acompletion. "
+            f"kwargs had: {mock_call.call_args[1]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_xai_key_forwarded_for_non_ollama_model(self, monkeypatch):
+        """Regression check for PR #2288: xAI key must be forwarded for non-Ollama models.
+
+        Similar to Groq, xAI sets litellm.api_key during __init__ and relies on
+        it being forwarded via kwargs["api_key"]. PR #2288's model-scoped approach
+        would also break xAI.
+        """
+        xai_key = "xai-test-key-67890"
+
+        xai_settings = type("Settings", (), {
+            "config": type("Config", (), {
+                "reasoning_effort": None,
+                "ai_timeout": 30,
+                "custom_reasoning_model": False,
+                "max_model_tokens": 32000,
+                "verbosity_level": 0,
+                "seed": -1,
+                "get": lambda self, key, default=None: default,
+            })(),
+            "litellm": type("LiteLLM", (), {
+                "get": lambda self, key, default=None: default,
+            })(),
+            "xai": type("XAI", (), {
+                "key": xai_key,
+            })(),
+            "get": lambda self, key, default=None: (
+                xai_key if key == "XAI.KEY" else default
+            ),
+        })()
+
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: xai_settings)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setattr(litellm, "api_key", None)
+
+        with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+                   new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = _mock_response()
+            handler = LiteLLMAIHandler()
+
+            assert litellm.api_key == xai_key
+            await handler.chat_completion(model="gpt-4o", system="sys", user="usr")
+
+        assert mock_call.call_args[1].get("api_key") == xai_key
+
+    @pytest.mark.asyncio
+    async def test_ollama_and_groq_coexist(self, monkeypatch):
+        """Verify both Ollama and Groq keys can coexist and be forwarded correctly.
+
+        When multiple providers are configured, litellm.api_key gets overwritten
+        sequentially during __init__. The sentinel guard should still forward
+        whatever real key is currently in litellm.api_key.
+        """
+        groq_key = "gsk-groq-key"
+        ollama_key = "ollama-key"
+
+        # Simulate: Groq key set first, then Ollama overwrites litellm.api_key
+        mixed_settings = type("Settings", (), {
+            "config": type("Config", (), {
+                "reasoning_effort": None,
+                "ai_timeout": 30,
+                "custom_reasoning_model": False,
+                "max_model_tokens": 32000,
+                "verbosity_level": 0,
+                "seed": -1,
+                "get": lambda self, key, default=None: default,
+            })(),
+            "litellm": type("LiteLLM", (), {
+                "get": lambda self, key, default=None: default,
+            })(),
+            "groq": type("Groq", (), {"key": groq_key})(),
+            "ollama": type("Ollama", (), {
+                "api_key": ollama_key,
+                "api_base": "http://localhost:11434",
+            })(),
+            "get": lambda self, key, default=None: (
+                groq_key if key == "GROQ.KEY" else
+                ollama_key if key == "OLLAMA.API_KEY" else
+                "http://localhost:11434" if key == "OLLAMA.API_BASE" else
+                default
+            ),
+        })()
+
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: mixed_settings)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.setattr(litellm, "api_key", None)
+
+        with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+                   new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = _mock_response()
+            handler = LiteLLMAIHandler()
+
+            # After init, litellm.api_key should be Ollama (last assignment)
+            assert litellm.api_key == ollama_key
+
+            # Call with Ollama model — should get Ollama key
+            await handler.chat_completion(model="ollama/mistral", system="sys", user="usr")
+            assert mock_call.call_args[1]["api_key"] == ollama_key
+
+            # Call with non-Ollama model — should still forward the key
+            # (which is Ollama in this case, but the guard correctly allows real keys through)
+            await handler.chat_completion(model="gpt-4o", system="sys", user="usr")
+            assert mock_call.call_args[1]["api_key"] == ollama_key
