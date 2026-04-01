@@ -96,7 +96,7 @@ When this parameter is set to `true`, PR-Agent will not run any automatic tools 
 
 #### GitHub app automatic tools when a new PR is opened
 
-The [github_app](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L223) section defines GitHub app specific configurations.
+The [github_app](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L234) section defines GitHub app specific configurations.
 
 The configuration parameter `pr_commands` defines the list of tools that will be **run automatically** when a new PR is opened:
 

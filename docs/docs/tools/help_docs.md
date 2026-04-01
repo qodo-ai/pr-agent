@@ -100,12 +100,12 @@ When a new issue is opened, you should see a comment from `github-actions` bot w
 
 ## Configuration options
 
-Under the section `pr_help_docs`, the [configuration file](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L199) contains options to customize the 'help docs' tool:
+Under the section `pr_help_docs`, the [configuration file](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/configuration.toml#L210) contains options to customize the 'help docs' tool:
 
 - `repo_url`: If not overwritten, will use the repo from where the context came from (issue or PR), otherwise - use the given repo as context.
 - `repo_default_branch`: The branch to use in case repo_url overwritten, otherwise - has no effect.
 - `docs_path`: Relative path from root of repository (either the one this PR has been issued for, or above repo url).
-- `exclude_root_readme`:  Whether or not to exclude the root README file for querying the model.
+- `exclude_root_readme`:  Whether to exclude the root README file for querying the model.
 - `supported_doc_exts` : Which file extensions should be included for the purpose of querying the model.
 
 ---
