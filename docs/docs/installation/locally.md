@@ -1,7 +1,7 @@
 To run PR-Agent locally, you first need to acquire two keys:
 
-1. An OpenAI key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or a key for other [language models](../usage-guide/changing_a_model.md), if you prefer).
-2. A personal access token from your Git platform (GitHub, GitLab, BitBucket, Gitea) with repo scope. GitHub token, for example, can be issued from [here](https://github.com/settings/tokens){:target="_blank"}
+1. An OpenAI API key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or another [language models](../usage-guide/changing_a_model.md), if you prefer).
+2. A personal access token from your Git platform (GitHub, GitLab, Bitbucket, Gitea) with repo scope. GitHub token. For example, you can create a GitHub token [here](https://github.com/settings/tokens){:target="_blank"}
 
 ## Using Docker image
 
@@ -34,7 +34,7 @@ To invoke a tool (for example `review`), you can run PR-Agent directly from the 
     -e GITLAB.URL=<your gitlab instance url>
     ```
 
-- For BitBucket:
+- For Bitbucket:
 
     ```bash
     docker run --rm -it -e CONFIG.GIT_PROVIDER=bitbucket -e OPENAI.KEY=$OPENAI_API_KEY -e BITBUCKET.BEARER_TOKEN=$BITBUCKET_BEARER_TOKEN codiumai/pr-agent:latest --pr_url=<pr_url> review
@@ -53,13 +53,13 @@ To invoke a tool (for example `review`), you can run PR-Agent directly from the 
     ```
 
 
-For other git providers, update `CONFIG.GIT_PROVIDER` accordingly and check the [`pr_agent/settings/.secrets_template.toml`](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/.secrets_template.toml) file for environment variables expected names and values.
+For other git providers, update `CONFIG.GIT_PROVIDER` accordingly and check the [`pr_agent/settings/.secrets_template.toml`](https://github.com/qodo-ai/pr-agent/blob/main/pr_agent/settings/.secrets_template.toml) file for the expected names and values of environment variables.
 
 ### Utilizing environment variables
 
-It is also possible to provide or override the configuration by setting the corresponding environment variables.
-You can define the corresponding environment variables by following this convention: `<TABLE>__<KEY>=<VALUE>` or `<TABLE>.<KEY>=<VALUE>`.
-The `<TABLE>` refers to a table/section in a configuration file and `<KEY>=<VALUE>` refers to the key/value pair of a setting in the configuration file.
+You can also provide or override the configuration by setting the corresponding environment variables.
+You can define the corresponding environment variables using the following convention: `<TABLE>__<KEY>=<VALUE>` or `<TABLE>.<KEY>=<VALUE>`.
+`<TABLE>` refers to a section in a configuration file and `<KEY>=<VALUE>` refers to the key/value pair of a setting in the configuration file.
 
 For example, suppose you want to run `pr_agent` that connects to a self-hosted GitLab instance similar to an example above.
 You can define the environment variables in a plain text file named `.env` with the following content:
