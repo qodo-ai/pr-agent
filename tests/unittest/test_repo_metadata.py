@@ -47,8 +47,6 @@ def _reset_extra_instructions():
 
     for section, value in original_values.items():
         get_settings().set(f"{section}.extra_instructions", value)
-    # Reset the duplicate-guard flag so each test starts fresh
-    get_settings().set("config._repo_metadata_applied", False)
 
 
 class TestRepoMetadata:

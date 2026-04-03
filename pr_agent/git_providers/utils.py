@@ -116,12 +116,14 @@ def apply_repo_settings(pr_url):
     # server handler and again inside PRAgent.handle_request). The TOML settings are idempotent
     # (set/overwrite), but metadata is *appended* to extra_instructions, so we must skip on
     # repeated calls to avoid duplicating content in prompts.
+    # In server mode we use the Starlette request context for a per-request flag. In CLI/polling
+    # mode (no context), we use content-based deduplication to avoid a process-global flag that
+    # would leak across different PRs handled in the same process.
     repo_metadata_applied = False
     try:
         repo_metadata_applied = context.get("repo_metadata_applied", False)
     except Exception:
-        # No request context (e.g. CLI mode) — fall back to a flag on the settings object
-        repo_metadata_applied = get_settings().get("config._repo_metadata_applied", False)
+        pass
     if not repo_metadata_applied and get_settings().config.get("add_repo_metadata", False):
         try:
             metadata_files = get_settings().config.get("add_repo_metadata_file_list",
@@ -139,6 +141,7 @@ def apply_repo_settings(pr_url):
                     get_logger().info(f"Loaded repository metadata file: {file_name}")
 
             # Append combined metadata to extra_instructions for every tool that supports it.
+            # Content-based check prevents duplication in non-context runtimes (CLI, polling).
             if metadata_content_parts:
                 combined_metadata = "\n\n".join(metadata_content_parts)
                 tool_sections = [
@@ -154,17 +157,18 @@ def apply_repo_settings(pr_url):
                     section_obj = get_settings().get(section, None)
                     if section_obj is not None and hasattr(section_obj, "extra_instructions"):
                         existing = section_obj.extra_instructions or ""
+                        if combined_metadata in existing:
+                            continue
                         if existing:
                             new_value = f"{existing}\n\n{combined_metadata}"
                         else:
                             new_value = combined_metadata
                         get_settings().set(f"{section}.extra_instructions", new_value)
-            # Mark as applied so repeated calls within the same request don't re-append
+            # Mark as applied for this request (server mode only)
             try:
                 context["repo_metadata_applied"] = True
             except Exception:
                 pass
-            get_settings().set("config._repo_metadata_applied", True)
         except Exception as e:
             get_logger().debug(f"Failed to load repository metadata files: {e}")
 
