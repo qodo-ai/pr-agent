@@ -623,6 +623,19 @@ class GiteaProvider(GitProvider):
 
         return response
 
+    def get_repo_file(self, file_path: str) -> str:
+        """Get a file from the repository root"""
+        try:
+            response = self.repo_api.get_file_content(
+                owner=self.owner,
+                repo=self.repo,
+                commit_sha=self.sha,
+                filepath=file_path
+            )
+            return response if response else ""
+        except Exception:
+            return ""
+
     def get_user_id(self) -> str:
         """Get the ID of the authenticated user"""
         return f"{self.pr.user.id}" if self.pr else ""

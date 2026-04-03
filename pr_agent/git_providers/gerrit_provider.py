@@ -231,6 +231,13 @@ class GerritProvider(GitProvider):
         except OSError:
             return b""
 
+    def get_repo_file(self, file_path: str) -> str:
+        try:
+            with open(self.repo_path / file_path, 'r') as f:
+                return f.read()
+        except OSError:
+            return ""
+
     def get_diff_files(self) -> list[FilePatchInfo]:
         diffs = self.repo.head.commit.diff(
             self.repo.head.commit.parents[0],  # previous commit

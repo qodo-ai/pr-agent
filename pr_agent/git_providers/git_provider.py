@@ -274,6 +274,13 @@ class GitProvider(ABC):
     def get_repo_settings(self):
         pass
 
+    def get_repo_file(self, file_path: str) -> str:
+        """
+        Read a file from the repository root, if it exists.
+        Returns the file content as a string, or "" if not found.
+        """
+        return ""
+
     def get_workspace_name(self):
         return ""
 

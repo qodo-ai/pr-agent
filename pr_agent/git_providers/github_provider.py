@@ -740,6 +740,13 @@ class GithubProvider(GitProvider):
         except Exception:
             return ""
 
+    def get_repo_file(self, file_path: str) -> str:
+        try:
+            contents = self.repo_obj.get_contents(file_path, ref=self.pr.head.sha).decoded_content
+            return contents.decode("utf-8") if isinstance(contents, bytes) else contents
+        except Exception:
+            return ""
+
     def get_workspace_name(self):
         return self.repo.split('/')[0]
 

@@ -85,6 +85,43 @@ def apply_repo_settings(pr_url):
                 except Exception as e:
                     get_logger().error(f"Failed to remove temporary settings file {repo_settings_file}", e)
 
+    # Load repository metadata files (e.g. AGENTS.md, QODO.md, CLAUDE.md) and append to extra_instructions
+    if get_settings().config.get("add_repo_metadata", False):
+        try:
+            metadata_files = get_settings().config.get("add_repo_metadata_file_list",
+                                                        ["AGENTS.md", "QODO.md", "CLAUDE.md"])
+            metadata_content_parts = []
+            for file_name in metadata_files:
+                try:
+                    content = git_provider.get_repo_file(file_name)
+                    if content and content.strip():
+                        metadata_content_parts.append(content.strip())
+                        get_logger().info(f"Loaded repository metadata file: {file_name}")
+                except Exception as e:
+                    get_logger().debug(f"Failed to load metadata file {file_name}: {e}")
+            if metadata_content_parts:
+                combined_metadata = "\n\n".join(metadata_content_parts)
+                tool_sections = [
+                    "pr_reviewer",
+                    "pr_description",
+                    "pr_code_suggestions",
+                    "pr_add_docs",
+                    "pr_update_changelog",
+                    "pr_test",
+                    "pr_improve_component",
+                ]
+                for section in tool_sections:
+                    section_obj = get_settings().get(section, None)
+                    if section_obj is not None and hasattr(section_obj, 'extra_instructions'):
+                        existing = section_obj.extra_instructions or ""
+                        if existing:
+                            new_value = f"{existing}\n\n{combined_metadata}"
+                        else:
+                            new_value = combined_metadata
+                        get_settings().set(f"{section}.extra_instructions", new_value)
+        except Exception as e:
+            get_logger().debug(f"Failed to load repository metadata files: {e}")
+
     # enable switching models with a short definition
     if get_settings().config.model.lower() == 'claude-3-5-sonnet':
         set_claude_model()

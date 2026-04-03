@@ -116,6 +116,16 @@ class BitbucketServerProvider(GitProvider):
             get_logger().error(f"Failed to load .pr_agent.toml file, error: {e}")
             return ""
 
+    def get_repo_file(self, file_path: str) -> str:
+        try:
+            content = self.bitbucket_client.get_content_of_file(self.workspace_slug, self.repo_slug, file_path)
+            return content.decode("utf-8") if isinstance(content, bytes) else content
+        except Exception as e:
+            if isinstance(e, HTTPError) and e.response.status_code == 404:
+                return ""
+            get_logger().error(f"Failed to load {file_path} file, error: {e}")
+            return ""
+
     def get_pr_id(self):
         return self.pr_num
 

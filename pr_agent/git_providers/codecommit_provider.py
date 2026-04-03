@@ -299,6 +299,13 @@ class CodeCommitProvider(GitProvider):
         settings_filename = ".pr_agent.toml"
         return self.codecommit_client.get_file(self.repo_name, settings_filename, self.pr.source_commit, optional=True)
 
+    def get_repo_file(self, file_path: str) -> str:
+        try:
+            content = self.codecommit_client.get_file(self.repo_name, file_path, self.pr.source_commit, optional=True)
+            return content.decode("utf-8") if isinstance(content, bytes) else (content or "")
+        except Exception:
+            return ""
+
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
         get_logger().info("CodeCommit provider does not support eyes reaction yet")
         return True
