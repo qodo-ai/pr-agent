@@ -799,6 +799,7 @@ class GitLabProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
+            # Read from the MR's source branch so metadata files reflect the branch under review
             contents = self.gl.projects.get(self.id_project).files.get(
                 file_path=file_path, ref=self.mr.source_branch).decode()
             return contents.decode("utf-8") if isinstance(contents, bytes) else contents

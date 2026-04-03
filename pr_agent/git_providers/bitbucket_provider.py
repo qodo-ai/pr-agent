@@ -91,6 +91,7 @@ class BitbucketProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
+            # Read from the PR's source branch so metadata files reflect the branch under review
             url = (f"https://api.bitbucket.org/2.0/repositories/{self.workspace_slug}/{self.repo_slug}/src/"
                    f"{self.pr.source_branch}/{file_path}")
             response = requests.request("GET", url, headers=self.headers)

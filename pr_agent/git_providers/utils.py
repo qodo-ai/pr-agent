@@ -85,11 +85,15 @@ def apply_repo_settings(pr_url):
                 except Exception as e:
                     get_logger().error(f"Failed to remove temporary settings file {repo_settings_file}", e)
 
-    # Load repository metadata files (e.g. AGENTS.md, QODO.md, CLAUDE.md) and append to extra_instructions
+    # Repository metadata: fetch well-known instruction files (AGENTS.md, QODO.md, CLAUDE.md, …)
+    # from the PR's head branch root and inject their contents into every tool's extra_instructions.
+    # See: https://qodo-merge-docs.qodo.ai/usage-guide/additional_configurations/#bringing-additional-repository-metadata-to-pr-agent
     if get_settings().config.get("add_repo_metadata", False):
         try:
             metadata_files = get_settings().config.get("add_repo_metadata_file_list",
                                                         ["AGENTS.md", "QODO.md", "CLAUDE.md"])
+
+            # Collect contents of all metadata files that exist in the repo
             metadata_content_parts = []
             for file_name in metadata_files:
                 try:
@@ -99,6 +103,8 @@ def apply_repo_settings(pr_url):
                         get_logger().info(f"Loaded repository metadata file: {file_name}")
                 except Exception as e:
                     get_logger().debug(f"Failed to load metadata file {file_name}: {e}")
+
+            # Append combined metadata to extra_instructions for every tool that supports it.
             if metadata_content_parts:
                 combined_metadata = "\n\n".join(metadata_content_parts)
                 tool_sections = [

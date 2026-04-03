@@ -742,6 +742,7 @@ class GithubProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
+            # Read from the PR's head branch so metadata files reflect the branch under review
             contents = self.repo_obj.get_contents(file_path, ref=self.pr.head.sha).decoded_content
             return contents.decode("utf-8") if isinstance(contents, bytes) else contents
         except Exception:
