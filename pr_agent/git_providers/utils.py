@@ -111,7 +111,18 @@ def apply_repo_settings(pr_url):
     # Repository metadata: fetch well-known instruction files (AGENTS.md, QODO.md, CLAUDE.md, …)
     # from the PR's head branch root and inject their contents into every tool's extra_instructions.
     # See: https://qodo-merge-docs.qodo.ai/usage-guide/additional_configurations/#bringing-additional-repository-metadata-to-pr-agent
-    if get_settings().config.get("add_repo_metadata", False):
+    #
+    # Guard: apply_repo_settings() can be called multiple times per request (e.g. once in the
+    # server handler and again inside PRAgent.handle_request). The TOML settings are idempotent
+    # (set/overwrite), but metadata is *appended* to extra_instructions, so we must skip on
+    # repeated calls to avoid duplicating content in prompts.
+    repo_metadata_applied = False
+    try:
+        repo_metadata_applied = context.get("repo_metadata_applied", False)
+    except Exception:
+        # No request context (e.g. CLI mode) — fall back to a flag on the settings object
+        repo_metadata_applied = get_settings().get("config._repo_metadata_applied", False)
+    if not repo_metadata_applied and get_settings().config.get("add_repo_metadata", False):
         try:
             metadata_files = get_settings().config.get("add_repo_metadata_file_list",
                                                         ["AGENTS.md", "QODO.md", "CLAUDE.md"])
@@ -148,6 +159,12 @@ def apply_repo_settings(pr_url):
                         else:
                             new_value = combined_metadata
                         get_settings().set(f"{section}.extra_instructions", new_value)
+            # Mark as applied so repeated calls within the same request don't re-append
+            try:
+                context["repo_metadata_applied"] = True
+            except Exception:
+                pass
+            get_settings().set("config._repo_metadata_applied", True)
         except Exception as e:
             get_logger().debug(f"Failed to load repository metadata files: {e}")
 

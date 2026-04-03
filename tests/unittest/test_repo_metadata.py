@@ -47,6 +47,8 @@ def _reset_extra_instructions():
 
     for section, value in original_values.items():
         get_settings().set(f"{section}.extra_instructions", value)
+    # Reset the duplicate-guard flag so each test starts fresh
+    get_settings().set("config._repo_metadata_applied", False)
 
 
 class TestRepoMetadata:
@@ -197,3 +199,19 @@ class TestRepoFilePathValidation:
         # Neither unsafe path should have been forwarded to the provider
         assert calls == []
         assert not (get_settings().pr_reviewer.extra_instructions or "")
+
+    def test_repeated_calls_do_not_duplicate_metadata(self, monkeypatch):
+        """Calling apply_repo_settings() twice must not append metadata twice."""
+        provider = FakeGitProvider(repo_files={"AGENTS.md": "Do not duplicate me"})
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list", ["AGENTS.md"])
+
+        apply_repo_settings("https://example.com/pr/1")
+        apply_repo_settings("https://example.com/pr/1")
+
+        instructions = get_settings().pr_reviewer.extra_instructions
+        assert instructions.count("Do not duplicate me") == 1
