@@ -1,5 +1,6 @@
 import copy
 import os
+import posixpath
 import tempfile
 import traceback
 
@@ -9,6 +10,28 @@ from starlette_context import context
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.log import get_logger
+
+
+def _is_safe_repo_file_path(file_path: str) -> bool:
+    """
+    Validate that a file path is safe to read from a repository root.
+    Rejects absolute paths, paths with '..' traversal components, and backslashes.
+    """
+    if not file_path or not file_path.strip():
+        return False
+    # Reject absolute paths (Unix and Windows-style)
+    if os.path.isabs(file_path) or file_path.startswith('/') or file_path.startswith('\\'):
+        return False
+    if len(file_path) >= 2 and file_path[1] == ':':  # e.g. C:\...
+        return False
+    # Reject backslashes (non-standard on most git providers, potential traversal vector)
+    if '\\' in file_path:
+        return False
+    # Normalize and reject any '..' components
+    normalized = posixpath.normpath(file_path)
+    if normalized.startswith('..') or '/..' in normalized:
+        return False
+    return True
 
 
 def apply_repo_settings(pr_url):
@@ -96,6 +119,9 @@ def apply_repo_settings(pr_url):
             # Collect contents of all metadata files that exist in the repo
             metadata_content_parts = []
             for file_name in metadata_files:
+                if not _is_safe_repo_file_path(file_name):
+                    get_logger().warning(f"Skipping unsafe metadata file path: '{file_name}'")
+                    continue
                 content = git_provider.get_repo_file(file_name)
                 if content and content.strip():
                     metadata_content_parts.append(content.strip())

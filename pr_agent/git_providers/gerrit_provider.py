@@ -233,7 +233,7 @@ class GerritProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
-            with open(self.repo_path / file_path, 'r') as f:
+            with open(self.repo_path / file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except OSError:
             return ""

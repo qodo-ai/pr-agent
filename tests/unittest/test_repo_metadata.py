@@ -9,7 +9,7 @@ are appended to extra_instructions for every tool that supports it.
 import pytest
 
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers.utils import apply_repo_settings
+from pr_agent.git_providers.utils import _is_safe_repo_file_path, apply_repo_settings
 
 
 class FakeGitProvider:
@@ -144,3 +144,56 @@ class TestRepoMetadata:
         apply_repo_settings("https://example.com/pr/1")
 
         assert "Custom content" in get_settings().pr_reviewer.extra_instructions
+
+
+class TestRepoFilePathValidation:
+    """Tests for _is_safe_repo_file_path to prevent directory traversal attacks."""
+
+    @pytest.mark.parametrize("path", [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "docs/QODO.md",
+        "some-file.txt",
+    ])
+    def test_safe_paths_accepted(self, path):
+        assert _is_safe_repo_file_path(path) is True
+
+    @pytest.mark.parametrize("path", [
+        "../etc/passwd",
+        "../../secrets.txt",
+        "foo/../../etc/shadow",
+        "/etc/passwd",
+        "/absolute/path.md",
+        "C:\\Windows\\system32\\config",
+        "foo\\..\\bar",
+        "",
+        "   ",
+        "\\leading-backslash",
+    ])
+    def test_unsafe_paths_rejected(self, path):
+        assert _is_safe_repo_file_path(path) is False
+
+    def test_traversal_path_not_loaded(self, monkeypatch):
+        """A traversal path in add_repo_metadata_file_list must not reach get_repo_file."""
+        calls = []
+
+        class SpyGitProvider:
+            def get_repo_settings(self):
+                return ""
+            def get_repo_file(self, file_path: str) -> str:
+                calls.append(file_path)
+                return "should not be used"
+
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: SpyGitProvider(),
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list",
+                           ["../secrets.txt", "/etc/passwd"])
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        # Neither unsafe path should have been forwarded to the provider
+        assert calls == []
+        assert not (get_settings().pr_reviewer.extra_instructions or "")
