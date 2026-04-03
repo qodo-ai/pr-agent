@@ -176,10 +176,12 @@ class AzureDevopsProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
-            head_sha = self.pr.last_merge_commit
+            # Use the source commit (PR head), not the merge-preview commit,
+            # so metadata files reflect the branch under review
+            source_commit = self.pr.last_merge_source_commit
             version = GitVersionDescriptor(
-                version=head_sha.commit_id, version_type="commit"
-            ) if head_sha else None
+                version=source_commit.commit_id, version_type="commit"
+            ) if source_commit else None
             contents = self.azure_devops_client.get_item_content(
                 repository_id=self.repo_slug,
                 project=self.workspace_slug,
