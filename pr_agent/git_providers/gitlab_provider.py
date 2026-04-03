@@ -803,7 +803,11 @@ class GitLabProvider(GitProvider):
             contents = self.gl.projects.get(self.id_project).files.get(
                 file_path=file_path, ref=self.mr.source_branch).decode()
             return contents.decode("utf-8") if isinstance(contents, bytes) else contents
-        except Exception:
+        except GitlabGetError:
+            # File not found or not accessible — expected when the metadata file doesn't exist
+            return ""
+        except Exception as e:
+            get_logger().debug(f"Failed to get repo file '{file_path}': {e}")
             return ""
 
     def get_workspace_name(self):
