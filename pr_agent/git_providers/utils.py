@@ -20,16 +20,16 @@ def _is_safe_repo_file_path(file_path: str) -> bool:
     if not file_path or not file_path.strip():
         return False
     # Reject absolute paths (Unix and Windows-style)
-    if os.path.isabs(file_path) or file_path.startswith('/') or file_path.startswith('\\'):
+    if os.path.isabs(file_path) or file_path.startswith("/") or file_path.startswith("\\"):
         return False
-    if len(file_path) >= 2 and file_path[1] == ':':  # e.g. C:\...
+    if len(file_path) >= 2 and file_path[1] == ":":  # e.g. C:\...
         return False
     # Reject backslashes (non-standard on most git providers, potential traversal vector)
-    if '\\' in file_path:
+    if "\\" in file_path:
         return False
-    # Normalize and reject any '..' components
+    # Normalize and reject any ".." components
     normalized = posixpath.normpath(file_path)
-    if normalized.startswith('..') or '/..' in normalized:
+    if normalized.startswith("..") or "/.." in normalized:
         return False
     return True
 
@@ -141,7 +141,7 @@ def apply_repo_settings(pr_url):
                 ]
                 for section in tool_sections:
                     section_obj = get_settings().get(section, None)
-                    if section_obj is not None and hasattr(section_obj, 'extra_instructions'):
+                    if section_obj is not None and hasattr(section_obj, "extra_instructions"):
                         existing = section_obj.extra_instructions or ""
                         if existing:
                             new_value = f"{existing}\n\n{combined_metadata}"
