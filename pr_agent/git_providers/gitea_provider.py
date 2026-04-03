@@ -633,7 +633,12 @@ class GiteaProvider(GitProvider):
                 filepath=file_path
             )
             return response if response else ""
-        except Exception:
+        except ApiException as e:
+            if e.status != 404:
+                self.logger.warning(f"Failed to get repo file '{file_path}': {e}")
+            return ""
+        except Exception as e:
+            self.logger.debug(f"Failed to get repo file '{file_path}': {e}")
             return ""
 
     def get_user_id(self) -> str:

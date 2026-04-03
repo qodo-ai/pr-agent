@@ -96,13 +96,10 @@ def apply_repo_settings(pr_url):
             # Collect contents of all metadata files that exist in the repo
             metadata_content_parts = []
             for file_name in metadata_files:
-                try:
-                    content = git_provider.get_repo_file(file_name)
-                    if content and content.strip():
-                        metadata_content_parts.append(content.strip())
-                        get_logger().info(f"Loaded repository metadata file: {file_name}")
-                except Exception as e:
-                    get_logger().debug(f"Failed to load metadata file {file_name}: {e}")
+                content = git_provider.get_repo_file(file_name)
+                if content and content.strip():
+                    metadata_content_parts.append(content.strip())
+                    get_logger().info(f"Loaded repository metadata file: {file_name}")
 
             # Append combined metadata to extra_instructions for every tool that supports it.
             if metadata_content_parts:
