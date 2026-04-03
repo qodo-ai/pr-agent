@@ -176,6 +176,10 @@ class AzureDevopsProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
+            head_sha = self.pr.last_merge_commit
+            version = GitVersionDescriptor(
+                version=head_sha.commit_id, version_type="commit"
+            ) if head_sha else None
             contents = self.azure_devops_client.get_item_content(
                 repository_id=self.repo_slug,
                 project=self.workspace_slug,
@@ -183,10 +187,12 @@ class AzureDevopsProvider(GitProvider):
                 include_content_metadata=False,
                 include_content=True,
                 path=file_path,
+                version_descriptor=version,
             )
             content = list(contents)[0]
             return content.decode("utf-8") if isinstance(content, bytes) else content
-        except Exception:
+        except Exception as e:
+            get_logger().debug(f"Failed to get repo file '{file_path}': {e}")
             return ""
 
     def get_files(self):

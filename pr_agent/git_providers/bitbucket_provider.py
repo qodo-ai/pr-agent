@@ -97,8 +97,13 @@ class BitbucketProvider(GitProvider):
             response = requests.request("GET", url, headers=self.headers)
             if response.status_code == 404:
                 return ""
+            response.raise_for_status()
             return response.text
-        except Exception:
+        except requests.exceptions.HTTPError as e:
+            get_logger().warning(f"Failed to get repo file '{file_path}': {e}")
+            return ""
+        except requests.exceptions.ConnectionError as e:
+            get_logger().warning(f"Connection error getting repo file '{file_path}': {e}")
             return ""
 
     def get_git_repo_url(self, pr_url: str=None) -> str: #bitbucket does not support issue url, so ignore param

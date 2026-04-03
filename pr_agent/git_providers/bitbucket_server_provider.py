@@ -118,11 +118,14 @@ class BitbucketServerProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
-            content = self.bitbucket_client.get_content_of_file(self.workspace_slug, self.repo_slug, file_path)
-            return content.decode("utf-8") if isinstance(content, bytes) else content
+            head_sha = self.pr.fromRef['latestCommit']
+            content = self.get_file(file_path, head_sha)
+            return content.decode("utf-8") if isinstance(content, bytes) else (content or "")
+        except HTTPError as e:
+            if e.response.status_code != 404:
+                get_logger().error(f"Failed to load {file_path} file, error: {e}")
+            return ""
         except Exception as e:
-            if isinstance(e, HTTPError) and e.response.status_code == 404:
-                return ""
             get_logger().error(f"Failed to load {file_path} file, error: {e}")
             return ""
 
