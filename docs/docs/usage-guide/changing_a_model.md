@@ -383,7 +383,7 @@ To bypass chat templates and temperature controls, set `config.custom_reasoning_
 reasoning_effort = "medium" # "low", "medium", "high"
 ```
 
-With the OpenAI models that support reasoning effort (eg: o4-mini), you can specify its reasoning effort via `config` section. The default value is `medium`. You can change it to `high` or `low` based on your usage.
+With the OpenAI models that support reasoning effort (eg: gpt-5.4-mini), you can specify its reasoning effort via `config` section. The default value is `medium`. You can change it to `high` or `low` based on your usage.
 
 ### Anthropic models
 
