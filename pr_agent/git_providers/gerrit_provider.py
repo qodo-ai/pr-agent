@@ -233,9 +233,9 @@ class GerritProvider(GitProvider):
 
     def get_repo_file(self, file_path: str) -> str:
         try:
-            with open(self.repo_path / file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except OSError:
+            blob = self.repo.head.commit.tree[file_path]
+            return blob.data_stream.read().decode('utf-8', errors='replace')
+        except (KeyError, ValueError):
             return ""
 
     def get_diff_files(self) -> list[FilePatchInfo]:
