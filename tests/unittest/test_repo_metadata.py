@@ -31,22 +31,28 @@ class FakeGitProvider:
 
 
 @pytest.fixture(autouse=True)
-def _reset_extra_instructions():
-    """Reset extra_instructions for all tool sections before each test."""
+def _reset_settings():
+    """Snapshot and restore all settings modified by tests to avoid cross-test leakage."""
     tool_sections = [
         "pr_reviewer", "pr_description", "pr_code_suggestions",
         "pr_add_docs", "pr_update_changelog", "pr_test", "pr_improve_component",
     ]
-    original_values = {}
+    original_extra = {}
     for section in tool_sections:
         section_obj = get_settings().get(section, None)
         if section_obj is not None:
-            original_values[section] = getattr(section_obj, 'extra_instructions', "")
+            original_extra[section] = getattr(section_obj, 'extra_instructions', "")
+
+    original_add_repo_metadata = get_settings().config.get("add_repo_metadata", False)
+    original_file_list = get_settings().config.get("add_repo_metadata_file_list",
+                                                    ["AGENTS.md", "QODO.md", "CLAUDE.md"])
 
     yield
 
-    for section, value in original_values.items():
+    for section, value in original_extra.items():
         get_settings().set(f"{section}.extra_instructions", value)
+    get_settings().set("config.add_repo_metadata", original_add_repo_metadata)
+    get_settings().set("config.add_repo_metadata_file_list", original_file_list)
 
 
 class TestRepoMetadata:
