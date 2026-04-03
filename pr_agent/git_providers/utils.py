@@ -3,6 +3,7 @@ import os
 import posixpath
 import tempfile
 import traceback
+import urllib.parse
 
 from dynaconf import Dynaconf
 from starlette_context import context
@@ -11,13 +12,23 @@ from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.log import get_logger
 
+# Baseline extra_instructions values captured before the first metadata injection.
+# Used in non-context runtimes (CLI, polling) to restore clean state between PRs,
+# preventing metadata from one PR leaking into the next.
+_extra_instructions_baseline: dict[str, str] = {}
 
 def _is_safe_repo_file_path(file_path: str) -> bool:
     """
     Validate that a file path is safe to read from a repository root.
-    Rejects absolute paths, paths with '..' traversal components, and backslashes.
+    Rejects absolute paths, paths with '..' traversal components, backslashes,
+    and percent-encoded bypass attempts.
     """
     if not file_path or not file_path.strip():
+        return False
+    # Decode percent-encoded sequences (e.g. %2e%2e/) before validation to prevent bypass
+    file_path = urllib.parse.unquote(file_path)
+    # Reject paths that still contain '%' after decoding (double-encoding, ambiguous encodings)
+    if "%" in file_path:
         return False
     # Reject absolute paths (Unix and Windows-style)
     if os.path.isabs(file_path) or file_path.startswith("/") or file_path.startswith("\\"):
@@ -27,7 +38,11 @@ def _is_safe_repo_file_path(file_path: str) -> bool:
     # Reject backslashes (non-standard on most git providers, potential traversal vector)
     if "\\" in file_path:
         return False
-    # Normalize and reject any ".." components
+    # Reject any ".." path segment to prevent directory traversal
+    segments = file_path.replace("\\", "/").split("/")
+    if ".." in segments:
+        return False
+    # Normalize and reject any ".." components as a defense-in-depth check
     normalized = posixpath.normpath(file_path)
     if normalized.startswith("..") or "/.." in normalized:
         return False
@@ -117,8 +132,8 @@ def apply_repo_settings(pr_url):
     # (set/overwrite), but metadata is *appended* to extra_instructions, so we must skip on
     # repeated calls to avoid duplicating content in prompts.
     # In server mode we use the Starlette request context for a per-request flag. In CLI/polling
-    # mode (no context), we use content-based deduplication to avoid a process-global flag that
-    # would leak across different PRs handled in the same process.
+    # mode (no context), we restore extra_instructions to the pre-metadata baseline before each
+    # application, preventing metadata from one PR leaking into the next.
     repo_metadata_applied = False
     try:
         repo_metadata_applied = context.get("repo_metadata_applied", False)
@@ -126,6 +141,36 @@ def apply_repo_settings(pr_url):
         pass
     if not repo_metadata_applied and get_settings().config.get("add_repo_metadata", False):
         try:
+            tool_sections = [
+                "pr_reviewer",
+                "pr_description",
+                "pr_code_suggestions",
+                "pr_add_docs",
+                "pr_update_changelog",
+                "pr_test",
+                "pr_improve_component",
+            ]
+
+            # In non-context runtimes (CLI, polling), restore extra_instructions to their
+            # pre-metadata baseline so metadata from a previous PR doesn't persist.
+            global _extra_instructions_baseline
+            is_context_mode = False
+            try:
+                is_context_mode = context.exists()
+            except Exception:
+                pass
+            if not is_context_mode:
+                if _extra_instructions_baseline:
+                    # Restore baseline before applying this PR's metadata
+                    for section, baseline_value in _extra_instructions_baseline.items():
+                        get_settings().set(f"{section}.extra_instructions", baseline_value)
+                else:
+                    # First run: capture the current values as the baseline
+                    for section in tool_sections:
+                        section_obj = get_settings().get(section, None)
+                        if section_obj is not None and hasattr(section_obj, "extra_instructions"):
+                            _extra_instructions_baseline[section] = section_obj.extra_instructions or ""
+
             metadata_files = get_settings().config.get("add_repo_metadata_file_list",
                                                         ["AGENTS.md", "QODO.md", "CLAUDE.md"])
 
@@ -141,24 +186,12 @@ def apply_repo_settings(pr_url):
                     get_logger().info(f"Loaded repository metadata file: {file_name}")
 
             # Append combined metadata to extra_instructions for every tool that supports it.
-            # Content-based check prevents duplication in non-context runtimes (CLI, polling).
             if metadata_content_parts:
                 combined_metadata = "\n\n".join(metadata_content_parts)
-                tool_sections = [
-                    "pr_reviewer",
-                    "pr_description",
-                    "pr_code_suggestions",
-                    "pr_add_docs",
-                    "pr_update_changelog",
-                    "pr_test",
-                    "pr_improve_component",
-                ]
                 for section in tool_sections:
                     section_obj = get_settings().get(section, None)
                     if section_obj is not None and hasattr(section_obj, "extra_instructions"):
                         existing = section_obj.extra_instructions or ""
-                        if combined_metadata in existing:
-                            continue
                         if existing:
                             new_value = f"{existing}\n\n{combined_metadata}"
                         else:

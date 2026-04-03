@@ -9,6 +9,7 @@ are appended to extra_instructions for every tool that supports it.
 import pytest
 
 from pr_agent.config_loader import get_settings
+from pr_agent.git_providers import utils as git_utils
 from pr_agent.git_providers.utils import _is_safe_repo_file_path, apply_repo_settings
 
 
@@ -46,6 +47,7 @@ def _reset_settings():
     original_add_repo_metadata = get_settings().config.get("add_repo_metadata", False)
     original_file_list = get_settings().config.get("add_repo_metadata_file_list",
                                                     ["AGENTS.md", "QODO.md", "CLAUDE.md"])
+    original_baseline = git_utils._extra_instructions_baseline.copy()
 
     yield
 
@@ -53,6 +55,8 @@ def _reset_settings():
         get_settings().set(f"{section}.extra_instructions", value)
     get_settings().set("config.add_repo_metadata", original_add_repo_metadata)
     get_settings().set("config.add_repo_metadata_file_list", original_file_list)
+    git_utils._extra_instructions_baseline.clear()
+    git_utils._extra_instructions_baseline.update(original_baseline)
 
 
 class TestRepoMetadata:
@@ -175,6 +179,13 @@ class TestRepoFilePathValidation:
         "",
         "   ",
         "\\leading-backslash",
+        # Percent-encoded traversal attempts
+        "%2e%2e/etc/passwd",
+        "%2e%2e%2fetc%2fpasswd",
+        "foo/%2e%2e/%2e%2e/etc/shadow",
+        "%2F etc/passwd",
+        # Double-encoded (still contains % after first decode)
+        "%252e%252e/secrets",
     ])
     def test_unsafe_paths_rejected(self, path):
         assert _is_safe_repo_file_path(path) is False
@@ -219,3 +230,32 @@ class TestRepoFilePathValidation:
 
         instructions = get_settings().pr_reviewer.extra_instructions
         assert instructions.count("Do not duplicate me") == 1
+
+    def test_cross_pr_metadata_does_not_accumulate(self, monkeypatch):
+        """In non-context mode (CLI/polling), metadata from PR A must not leak into PR B."""
+        # Simulate two different PRs with different metadata files
+        repo_files_by_url = {
+            "https://example.com/pr/1": {"AGENTS.md": "Instructions for repo A"},
+            "https://example.com/pr/2": {"AGENTS.md": "Instructions for repo B"},
+        }
+
+        def fake_provider(pr_url):
+            return FakeGitProvider(repo_files=repo_files_by_url[pr_url])
+
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            fake_provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list", ["AGENTS.md"])
+
+        # Process PR A
+        apply_repo_settings("https://example.com/pr/1")
+        instructions = get_settings().pr_reviewer.extra_instructions
+        assert "Instructions for repo A" in instructions
+
+        # Process PR B — must replace, not accumulate
+        apply_repo_settings("https://example.com/pr/2")
+        instructions = get_settings().pr_reviewer.extra_instructions
+        assert "Instructions for repo B" in instructions
+        assert "Instructions for repo A" not in instructions
