@@ -1,0 +1,146 @@
+"""
+Tests for the add_repo_metadata feature in apply_repo_settings().
+
+When config.add_repo_metadata is true, metadata files (AGENTS.md, QODO.md,
+CLAUDE.md by default) are fetched from the PR's head branch and their contents
+are appended to extra_instructions for every tool that supports it.
+"""
+
+import pytest
+
+from pr_agent.config_loader import get_settings
+from pr_agent.git_providers.utils import apply_repo_settings
+
+
+class FakeGitProvider:
+    """Minimal git provider stub for testing repo metadata loading."""
+
+    def __init__(self, repo_files=None):
+        """
+        Args:
+            repo_files: dict mapping file names to their content strings.
+                        Files not in the dict will return "" (not found).
+        """
+        self._repo_files = repo_files or {}
+
+    def get_repo_settings(self):
+        return ""
+
+    def get_repo_file(self, file_path: str) -> str:
+        return self._repo_files.get(file_path, "")
+
+
+@pytest.fixture(autouse=True)
+def _reset_extra_instructions():
+    """Reset extra_instructions for all tool sections before each test."""
+    tool_sections = [
+        "pr_reviewer", "pr_description", "pr_code_suggestions",
+        "pr_add_docs", "pr_update_changelog", "pr_test", "pr_improve_component",
+    ]
+    original_values = {}
+    for section in tool_sections:
+        section_obj = get_settings().get(section, None)
+        if section_obj is not None:
+            original_values[section] = getattr(section_obj, 'extra_instructions', "")
+
+    yield
+
+    for section, value in original_values.items():
+        get_settings().set(f"{section}.extra_instructions", value)
+
+
+class TestRepoMetadata:
+    def test_metadata_disabled_by_default(self, monkeypatch):
+        """When add_repo_metadata is false, no metadata files are loaded."""
+        provider = FakeGitProvider(repo_files={"AGENTS.md": "should not appear"})
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", False)
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        assert "should not appear" not in (get_settings().pr_reviewer.extra_instructions or "")
+
+    def test_metadata_appended_to_extra_instructions(self, monkeypatch):
+        """When enabled, metadata file contents are appended to extra_instructions."""
+        provider = FakeGitProvider(repo_files={"AGENTS.md": "Review with care"})
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list", ["AGENTS.md"])
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        assert "Review with care" in get_settings().pr_reviewer.extra_instructions
+        assert "Review with care" in get_settings().pr_code_suggestions.extra_instructions
+
+    def test_multiple_metadata_files_combined(self, monkeypatch):
+        """Contents of multiple metadata files are joined together."""
+        provider = FakeGitProvider(repo_files={
+            "AGENTS.md": "Agent instructions",
+            "CLAUDE.md": "Claude instructions",
+        })
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list", ["AGENTS.md", "CLAUDE.md"])
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        instructions = get_settings().pr_reviewer.extra_instructions
+        assert "Agent instructions" in instructions
+        assert "Claude instructions" in instructions
+
+    def test_missing_metadata_files_skipped(self, monkeypatch):
+        """Files that don't exist in the repo are silently skipped."""
+        provider = FakeGitProvider(repo_files={"AGENTS.md": "Found this one"})
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list",
+                           ["AGENTS.md", "NONEXISTENT.md"])
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        instructions = get_settings().pr_reviewer.extra_instructions
+        assert "Found this one" in instructions
+        assert "NONEXISTENT" not in instructions
+
+    def test_metadata_appended_to_existing_extra_instructions(self, monkeypatch):
+        """Metadata is appended to (not replacing) any pre-existing extra_instructions."""
+        provider = FakeGitProvider(repo_files={"AGENTS.md": "From agents file"})
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list", ["AGENTS.md"])
+        get_settings().set("pr_reviewer.extra_instructions", "Existing instructions")
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        instructions = get_settings().pr_reviewer.extra_instructions
+        assert "Existing instructions" in instructions
+        assert "From agents file" in instructions
+
+    def test_custom_file_list(self, monkeypatch):
+        """Users can specify a custom list of metadata files to search for."""
+        provider = FakeGitProvider(repo_files={"CUSTOM.md": "Custom content"})
+        monkeypatch.setattr(
+            "pr_agent.git_providers.utils.get_git_provider_with_context",
+            lambda pr_url: provider,
+        )
+        get_settings().set("config.add_repo_metadata", True)
+        get_settings().set("config.add_repo_metadata_file_list", ["CUSTOM.md"])
+
+        apply_repo_settings("https://example.com/pr/1")
+
+        assert "Custom content" in get_settings().pr_reviewer.extra_instructions
