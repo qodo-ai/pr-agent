@@ -362,6 +362,60 @@ class TestImdsCallBehavior:
         assert os.environ["AWS_ACCESS_KEY_ID"] == "ROTATED-KEY"
         assert os.environ["AWS_SECRET_ACCESS_KEY"] == "ROTATED-SECRET"
 
+    def test_refresh_returns_false_and_warns_when_no_stored_creds(self, monkeypatch):
+        """_refresh_imds_credentials returns False and logs a warning when _aws_boto3_creds is None."""
+        handler = LiteLLMAIHandler()
+        assert handler._aws_boto3_creds is None
+        result = handler._refresh_imds_credentials()
+        assert result is False
+
+    def test_refresh_returns_false_on_exception(self, monkeypatch):
+        """_refresh_imds_credentials returns False when get_frozen_credentials raises."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        frozen = _frozen_creds()
+        mock_creds = MagicMock()
+        mock_creds.get_frozen_credentials.side_effect = [frozen, Exception("token expired")]
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value = mock_creds
+        mock_session.region_name = "us-east-1"
+
+        with patch("boto3.Session", return_value=mock_session):
+            handler = LiteLLMAIHandler()
+
+        result = handler._refresh_imds_credentials()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_static_fallback_activated_on_refresh_failure(self, monkeypatch):
+        """When refresh fails and static creds are available, fallback activates before the call."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        frozen = _frozen_creds()
+        mock_creds = MagicMock()
+        mock_creds.get_frozen_credentials.side_effect = [frozen, Exception("IMDS unreachable")]
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value = mock_creds
+        mock_session.region_name = "us-east-1"
+
+        with patch("boto3.Session", return_value=mock_session):
+            handler = LiteLLMAIHandler()
+
+        handler._aws_static_creds = {
+            "AWS_ACCESS_KEY_ID": "STATICKEY",
+            "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
+            "AWS_REGION_NAME": "us-east-1",
+        }
+
+        with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+                   new_callable=AsyncMock) as mock_call:
+            mock_call.return_value = _mock_acompletion_response()
+            await handler.chat_completion(
+                model="bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0",
+                system="sys", user="usr"
+            )
+
+        assert handler._aws_imds_fell_back is True
+        assert os.environ["AWS_ACCESS_KEY_ID"] == "STATICKEY"
+
     @pytest.mark.asyncio
     async def test_refresh_not_called_for_non_bedrock_model(self, monkeypatch):
         """_refresh_imds_credentials is NOT called when model is not a Bedrock model."""
