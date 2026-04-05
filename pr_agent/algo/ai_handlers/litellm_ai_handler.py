@@ -70,7 +70,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                         "AWS_USE_IMDS is set but boto3 found no credentials; "
                         "falling through to static keys"
                     )
-            except Exception as e:
+            except Exception:
                 get_logger().exception(
                     "AWS_USE_IMDS: failed to resolve credentials via boto3; "
                     "falling through to static keys"
