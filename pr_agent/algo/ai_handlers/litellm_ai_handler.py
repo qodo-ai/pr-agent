@@ -45,6 +45,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         self._aws_imds_mode = False
         self._aws_static_creds = None
         self._aws_imds_fell_back = False
+        self._aws_boto3_creds = None  # original boto3 credentials object for IMDS refresh
         self._aws_bedrock_lock = asyncio.Lock()
 
         if get_settings().get("LITELLM.DISABLE_AIOHTTP", False):
@@ -60,6 +61,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             try:
                 creds = session.get_credentials()
                 if creds:
+                    self._aws_boto3_creds = creds  # store for refresh; avoids env-var re-read
                     frozen = creds.get_frozen_credentials()
                     os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
                     os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
@@ -79,19 +81,22 @@ class LiteLLMAIHandler(BaseAiHandler):
                     "AWS_USE_IMDS: failed to resolve credentials via boto3; "
                     "falling through to static keys"
                 )
-            if not os.environ.get("AWS_REGION_NAME") and not get_settings().get("aws.AWS_REGION_NAME"):
-                try:
-                    region = session.region_name
-                    if region:
-                        os.environ["AWS_REGION_NAME"] = region
-                        get_logger().info(f"AWS region resolved from environment: {region}")
-                    else:
-                        get_logger().warning(
-                            "AWS_USE_IMDS: could not determine AWS region; "
-                            "set AWS_REGION_NAME explicitly"
-                        )
-                except Exception as e:
-                    get_logger().warning(f"AWS_USE_IMDS: failed to resolve region via boto3: {e}")
+            if not os.environ.get("AWS_REGION_NAME"):
+                if get_settings().get("aws.AWS_REGION_NAME"):
+                    os.environ["AWS_REGION_NAME"] = get_settings().aws.AWS_REGION_NAME
+                else:
+                    try:
+                        region = session.region_name
+                        if region:
+                            os.environ["AWS_REGION_NAME"] = region
+                            get_logger().info(f"AWS region resolved from environment: {region}")
+                        else:
+                            get_logger().warning(
+                                "AWS_USE_IMDS: could not determine AWS region; "
+                                "set AWS_REGION_NAME explicitly"
+                            )
+                    except Exception as e:
+                        get_logger().warning(f"AWS_USE_IMDS: failed to resolve region via boto3: {e}")
             if get_settings().get("aws.AWS_ACCESS_KEY_ID"):
                 if get_settings().aws.AWS_SECRET_ACCESS_KEY and get_settings().aws.AWS_REGION_NAME:
                     static_creds = {
@@ -231,20 +236,21 @@ class LiteLLMAIHandler(BaseAiHandler):
 
     def _refresh_imds_credentials(self):
         """Refresh ambient AWS credentials from boto3 provider chain. Called before each Bedrock call
-        to avoid serving stale credentials from long-lived processes (EC2 roles rotate every ~6h)."""
+        to avoid serving stale credentials from long-lived processes (EC2 roles rotate every ~6h).
+
+        Uses the credentials object stored during __init__ rather than creating a new boto3.Session,
+        which would read the already-set AWS_* env vars and return stale values."""
         try:
-            import boto3
-            creds = boto3.Session().get_credentials()
-            if creds:
-                frozen = creds.get_frozen_credentials()
-                os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
-                os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
-                if frozen.token:
-                    os.environ["AWS_SESSION_TOKEN"] = frozen.token
-                elif "AWS_SESSION_TOKEN" in os.environ:
-                    del os.environ["AWS_SESSION_TOKEN"]
-            else:
-                get_logger().warning("IMDS credential refresh: boto3 returned no credentials")
+            if self._aws_boto3_creds is None:
+                get_logger().warning("IMDS credential refresh: no boto3 credentials object stored")
+                return
+            frozen = self._aws_boto3_creds.get_frozen_credentials()
+            os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
+            os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+            if frozen.token:
+                os.environ["AWS_SESSION_TOKEN"] = frozen.token
+            elif "AWS_SESSION_TOKEN" in os.environ:
+                del os.environ["AWS_SESSION_TOKEN"]
         except Exception as e:
             get_logger().exception("IMDS credential refresh failed")
 

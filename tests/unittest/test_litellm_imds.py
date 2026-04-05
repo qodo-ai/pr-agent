@@ -178,6 +178,37 @@ class TestImdsInit:
 
         assert os.environ["AWS_REGION_NAME"] == "us-west-2"
 
+    def test_imds_configured_region_exported_to_env(self, monkeypatch):
+        """aws.AWS_REGION_NAME in settings must be written to env even in IMDS mode."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        frozen = _frozen_creds()
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value.get_frozen_credentials.return_value = frozen
+        mock_session.region_name = "eu-west-1"  # would be used if settings region absent
+
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: _static_aws_settings())
+
+        with patch("boto3.Session", return_value=mock_session):
+            LiteLLMAIHandler()
+
+        # settings region (us-east-1) takes precedence over boto3-resolved region (eu-west-1)
+        assert os.environ["AWS_REGION_NAME"] == "us-east-1"
+
+    def test_imds_boto3_creds_stored_for_refresh(self, monkeypatch):
+        """The boto3 credentials object must be stored so refresh avoids re-reading env vars."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        frozen = _frozen_creds()
+        mock_creds = MagicMock()
+        mock_creds.get_frozen_credentials.return_value = frozen
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value = mock_creds
+        mock_session.region_name = "us-east-1"
+
+        with patch("boto3.Session", return_value=mock_session):
+            handler = LiteLLMAIHandler()
+
+        assert handler._aws_boto3_creds is mock_creds
+
     def test_imds_no_creds_from_boto3(self, monkeypatch):
         """When boto3 returns no credentials, _aws_imds_mode remains False."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
@@ -307,6 +338,29 @@ class TestImdsCallBehavior:
             )
 
         mock_refresh.assert_called_once()
+
+    def test_refresh_uses_stored_creds_not_new_session(self, monkeypatch):
+        """_refresh_imds_credentials must call get_frozen_credentials on the stored object,
+        not create a new boto3.Session (which would re-read env vars and return stale creds)."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        frozen1 = _frozen_creds(access_key="FIRST-KEY", secret_key="FIRST-SECRET")
+        frozen2 = _frozen_creds(access_key="ROTATED-KEY", secret_key="ROTATED-SECRET")
+        mock_creds = MagicMock()
+        mock_creds.get_frozen_credentials.side_effect = [frozen1, frozen2]
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value = mock_creds
+        mock_session.region_name = "us-east-1"
+
+        with patch("boto3.Session", return_value=mock_session) as mock_boto3:
+            handler = LiteLLMAIHandler()
+
+        # boto3.Session should only be called once (in __init__), not during refresh
+        with patch("boto3.Session") as mock_boto3_refresh:
+            handler._refresh_imds_credentials()
+
+        mock_boto3_refresh.assert_not_called()
+        assert os.environ["AWS_ACCESS_KEY_ID"] == "ROTATED-KEY"
+        assert os.environ["AWS_SECRET_ACCESS_KEY"] == "ROTATED-SECRET"
 
     @pytest.mark.asyncio
     async def test_refresh_not_called_for_non_bedrock_model(self, monkeypatch):
