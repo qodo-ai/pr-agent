@@ -54,26 +54,32 @@ class LiteLLMAIHandler(BaseAiHandler):
         if os.environ.get("AWS_USE_IMDS", "").strip().lower() in ("1", "true", "yes"):
             import boto3
             session = boto3.Session()
-            creds = session.get_credentials()
-            if creds:
-                frozen = creds.get_frozen_credentials()
-                os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
-                os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
-                if frozen.token:
-                    os.environ["AWS_SESSION_TOKEN"] = frozen.token
-                elif "AWS_SESSION_TOKEN" in os.environ:
-                    del os.environ["AWS_SESSION_TOKEN"]
-                self._aws_imds_mode = True
-                get_logger().info("Using ambient AWS credentials from IMDS/task-role/IRSA")
-            else:
-                get_logger().warning("AWS_USE_IMDS is set but boto3 found no credentials; falling through to static keys")
-            if not os.environ.get("AWS_REGION_NAME") and not get_settings().get("aws.AWS_REGION_NAME"):
-                region = session.region_name
-                if region:
-                    os.environ["AWS_REGION_NAME"] = region
-                    get_logger().info(f"AWS region resolved from environment: {region}")
+            try:
+                creds = session.get_credentials()
+                if creds:
+                    frozen = creds.get_frozen_credentials()
+                    os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
+                    os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+                    if frozen.token:
+                        os.environ["AWS_SESSION_TOKEN"] = frozen.token
+                    elif "AWS_SESSION_TOKEN" in os.environ:
+                        del os.environ["AWS_SESSION_TOKEN"]
+                    self._aws_imds_mode = True
+                    get_logger().info("Using ambient AWS credentials from IMDS/task-role/IRSA")
                 else:
-                    get_logger().warning("AWS_USE_IMDS: could not determine AWS region; set AWS_REGION_NAME explicitly")
+                    get_logger().warning("AWS_USE_IMDS is set but boto3 found no credentials; falling through to static keys")
+            except Exception as e:
+                get_logger().error(f"AWS_USE_IMDS: failed to resolve credentials via boto3: {e}; falling through to static keys")
+            if not os.environ.get("AWS_REGION_NAME") and not get_settings().get("aws.AWS_REGION_NAME"):
+                try:
+                    region = session.region_name
+                    if region:
+                        os.environ["AWS_REGION_NAME"] = region
+                        get_logger().info(f"AWS region resolved from environment: {region}")
+                    else:
+                        get_logger().warning("AWS_USE_IMDS: could not determine AWS region; set AWS_REGION_NAME explicitly")
+                except Exception as e:
+                    get_logger().warning(f"AWS_USE_IMDS: failed to resolve region via boto3: {e}")
             if get_settings().get("aws.AWS_ACCESS_KEY_ID"):
                 if get_settings().aws.AWS_SECRET_ACCESS_KEY and get_settings().aws.AWS_REGION_NAME:
                     self._aws_static_creds = {
@@ -81,6 +87,9 @@ class LiteLLMAIHandler(BaseAiHandler):
                         "AWS_SECRET_ACCESS_KEY": get_settings().aws.AWS_SECRET_ACCESS_KEY,
                         "AWS_REGION_NAME": get_settings().aws.AWS_REGION_NAME,
                     }
+                    static_token = get_settings().get("aws.AWS_SESSION_TOKEN", None)
+                    if static_token:
+                        self._aws_static_creds["AWS_SESSION_TOKEN"] = static_token
         elif get_settings().get("aws.AWS_ACCESS_KEY_ID"):
             assert get_settings().aws.AWS_SECRET_ACCESS_KEY and get_settings().aws.AWS_REGION_NAME, "AWS credentials are incomplete"
             os.environ["AWS_ACCESS_KEY_ID"] = get_settings().aws.AWS_ACCESS_KEY_ID
@@ -193,12 +202,33 @@ class LiteLLMAIHandler(BaseAiHandler):
         # Models that require streaming
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
 
+    def _refresh_imds_credentials(self):
+        """Refresh ambient AWS credentials from boto3 provider chain. Called before each Bedrock call
+        to avoid serving stale credentials from long-lived processes (EC2 roles rotate every ~6h)."""
+        try:
+            import boto3
+            creds = boto3.Session().get_credentials()
+            if creds:
+                frozen = creds.get_frozen_credentials()
+                os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
+                os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+                if frozen.token:
+                    os.environ["AWS_SESSION_TOKEN"] = frozen.token
+                elif "AWS_SESSION_TOKEN" in os.environ:
+                    del os.environ["AWS_SESSION_TOKEN"]
+            else:
+                get_logger().warning("IMDS credential refresh: boto3 returned no credentials")
+        except Exception as e:
+            get_logger().warning(f"IMDS credential refresh failed: {e}")
+
     def _activate_static_aws_fallback(self):
         """Swap process env to static credentials for Bedrock fallback after IMDS failure."""
         os.environ["AWS_ACCESS_KEY_ID"] = self._aws_static_creds["AWS_ACCESS_KEY_ID"]
         os.environ["AWS_SECRET_ACCESS_KEY"] = self._aws_static_creds["AWS_SECRET_ACCESS_KEY"]
         os.environ["AWS_REGION_NAME"] = self._aws_static_creds["AWS_REGION_NAME"]
-        if "AWS_SESSION_TOKEN" in os.environ:
+        if "AWS_SESSION_TOKEN" in self._aws_static_creds:
+            os.environ["AWS_SESSION_TOKEN"] = self._aws_static_creds["AWS_SESSION_TOKEN"]
+        elif "AWS_SESSION_TOKEN" in os.environ:
             del os.environ["AWS_SESSION_TOKEN"]
         self._aws_imds_fell_back = True
         get_logger().warning("Bedrock call failed with ambient (IMDS) credentials; retrying with static credentials")
@@ -318,6 +348,8 @@ class LiteLLMAIHandler(BaseAiHandler):
         stop=stop_after_attempt(MODEL_RETRIES),
     )
     async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2, img_path: str = None):
+        if self._aws_imds_mode and not self._aws_imds_fell_back and 'bedrock/' in model:
+            self._refresh_imds_credentials()
         try:
             resp, finish_reason = None, None
             deployment_id = self.deployment_id
