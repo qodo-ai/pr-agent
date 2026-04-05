@@ -1,18 +1,25 @@
+import json
 import os
+
 import litellm
 import openai
 import requests
 from litellm import acompletion
-from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
+from tenacity import (retry, retry_if_exception_type,
+                      retry_if_not_exception_type, stop_after_attempt)
 
-from pr_agent.algo import CLAUDE_EXTENDED_THINKING_MODELS, NO_SUPPORT_TEMPERATURE_MODELS, SUPPORT_REASONING_EFFORT_MODELS, USER_MESSAGE_ONLY_MODELS, STREAMING_REQUIRED_MODELS
+from pr_agent.algo import (CLAUDE_EXTENDED_THINKING_MODELS,
+                           NO_SUPPORT_TEMPERATURE_MODELS,
+                           STREAMING_REQUIRED_MODELS,
+                           SUPPORT_REASONING_EFFORT_MODELS,
+                           USER_MESSAGE_ONLY_MODELS)
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
-from pr_agent.algo.ai_handlers.litellm_helpers import _handle_streaming_response, MockResponse, _get_azure_ad_token, \
-    _process_litellm_extra_body
+from pr_agent.algo.ai_handlers.litellm_helpers import (
+    MockResponse, _get_azure_ad_token, _handle_streaming_response,
+    _process_litellm_extra_body)
 from pr_agent.algo.utils import ReasoningEffort, get_version
 from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
-import json
 
 MODEL_RETRIES = 2
 DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
@@ -33,6 +40,9 @@ class LiteLLMAIHandler(BaseAiHandler):
         self.azure = False
         self.api_base = None
         self.repetition_penalty = None
+        self._aws_imds_mode = False
+        self._aws_static_creds = None
+        self._aws_imds_fell_back = False
 
         if get_settings().get("LITELLM.DISABLE_AIOHTTP", False):
             litellm.disable_aiohttp_transport = True
@@ -41,7 +51,37 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.openai_key = get_settings().openai.key
         elif 'OPENAI_API_KEY' not in os.environ:
             litellm.api_key = DUMMY_LITELLM_API_KEY
-        if get_settings().get("aws.AWS_ACCESS_KEY_ID"):
+        if os.environ.get("AWS_USE_IMDS", "").strip().lower() in ("1", "true", "yes"):
+            import boto3
+            session = boto3.Session()
+            creds = session.get_credentials()
+            if creds:
+                frozen = creds.get_frozen_credentials()
+                os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
+                os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+                if frozen.token:
+                    os.environ["AWS_SESSION_TOKEN"] = frozen.token
+                elif "AWS_SESSION_TOKEN" in os.environ:
+                    del os.environ["AWS_SESSION_TOKEN"]
+                self._aws_imds_mode = True
+                get_logger().info("Using ambient AWS credentials from IMDS/task-role/IRSA")
+            else:
+                get_logger().warning("AWS_USE_IMDS is set but boto3 found no credentials; falling through to static keys")
+            if not os.environ.get("AWS_REGION_NAME") and not get_settings().get("aws.AWS_REGION_NAME"):
+                region = session.region_name
+                if region:
+                    os.environ["AWS_REGION_NAME"] = region
+                    get_logger().info(f"AWS region resolved from environment: {region}")
+                else:
+                    get_logger().warning("AWS_USE_IMDS: could not determine AWS region; set AWS_REGION_NAME explicitly")
+            if get_settings().get("aws.AWS_ACCESS_KEY_ID"):
+                if get_settings().aws.AWS_SECRET_ACCESS_KEY and get_settings().aws.AWS_REGION_NAME:
+                    self._aws_static_creds = {
+                        "AWS_ACCESS_KEY_ID": get_settings().aws.AWS_ACCESS_KEY_ID,
+                        "AWS_SECRET_ACCESS_KEY": get_settings().aws.AWS_SECRET_ACCESS_KEY,
+                        "AWS_REGION_NAME": get_settings().aws.AWS_REGION_NAME,
+                    }
+        elif get_settings().get("aws.AWS_ACCESS_KEY_ID"):
             assert get_settings().aws.AWS_SECRET_ACCESS_KEY and get_settings().aws.AWS_REGION_NAME, "AWS credentials are incomplete"
             os.environ["AWS_ACCESS_KEY_ID"] = get_settings().aws.AWS_ACCESS_KEY_ID
             os.environ["AWS_SECRET_ACCESS_KEY"] = get_settings().aws.AWS_SECRET_ACCESS_KEY
@@ -108,7 +148,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         # Support mistral models
         if get_settings().get("MISTRAL.KEY", None):
             os.environ["MISTRAL_API_KEY"] = get_settings().get("MISTRAL.KEY")
-        
+
         # Support codestral models
         if get_settings().get("CODESTRAL.KEY", None):
             os.environ["CODESTRAL_API_KEY"] = get_settings().get("CODESTRAL.KEY")
@@ -120,7 +160,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             access_token = _get_azure_ad_token()
             litellm.api_key = access_token
             openai.api_key = access_token
-            
+
             # Set API base from settings
             self.api_base = get_settings().azure_ad.api_base
             litellm.api_base = self.api_base
@@ -152,6 +192,16 @@ class LiteLLMAIHandler(BaseAiHandler):
 
         # Models that require streaming
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
+
+    def _activate_static_aws_fallback(self):
+        """Swap process env to static credentials for Bedrock fallback after IMDS failure."""
+        os.environ["AWS_ACCESS_KEY_ID"] = self._aws_static_creds["AWS_ACCESS_KEY_ID"]
+        os.environ["AWS_SECRET_ACCESS_KEY"] = self._aws_static_creds["AWS_SECRET_ACCESS_KEY"]
+        os.environ["AWS_REGION_NAME"] = self._aws_static_creds["AWS_REGION_NAME"]
+        if "AWS_SESSION_TOKEN" in os.environ:
+            del os.environ["AWS_SESSION_TOKEN"]
+        self._aws_imds_fell_back = True
+        get_logger().warning("Bedrock call failed with ambient (IMDS) credentials; retrying with static credentials")
 
     def prepare_logs(self, response, system, user, resp, finish_reason):
         response_log = response.dict().copy()
@@ -419,6 +469,11 @@ class LiteLLMAIHandler(BaseAiHandler):
             get_logger().error(f"Rate limit error during LLM inference: {e}")
             raise
         except openai.APIError as e:
+            if (self._aws_imds_mode
+                    and not self._aws_imds_fell_back
+                    and self._aws_static_creds
+                    and 'bedrock/' in model):
+                self._activate_static_aws_fallback()
             get_logger().warning(f"Error during LLM inference: {e}")
             raise
         except Exception as e:
