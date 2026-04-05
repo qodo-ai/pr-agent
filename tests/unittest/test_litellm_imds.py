@@ -61,6 +61,24 @@ def _mock_acompletion_response():
     return mock
 
 
+def _static_aws_settings(session_token=None):
+    """Settings object with static AWS credentials configured."""
+    keys = {
+        "aws.AWS_ACCESS_KEY_ID": "STATICKEY",
+        "aws.AWS_SECRET_ACCESS_KEY": "STATICSECRET",
+        "aws.AWS_REGION_NAME": "us-east-1",
+    }
+    if session_token:
+        keys["aws.AWS_SESSION_TOKEN"] = session_token
+    settings = _base_settings(extra_get=lambda key: keys.get(key))
+    settings.aws = type("AWS", (), {
+        "AWS_ACCESS_KEY_ID": "STATICKEY",
+        "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
+        "AWS_REGION_NAME": "us-east-1",
+    })()
+    return settings
+
+
 def _frozen_creds(access_key="TESTFAKEACCESSKEYID00",
                   secret_key="TestFakeSecretKeyNotRealForTestingOnly00",
                   token=None):
@@ -199,17 +217,7 @@ class TestImdsInit:
         mock_session.get_credentials.return_value.get_frozen_credentials.return_value = frozen
         mock_session.region_name = None
 
-        static_settings = _base_settings(extra_get=lambda key: {
-            "aws.AWS_ACCESS_KEY_ID": "STATICKEY",
-            "aws.AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "aws.AWS_REGION_NAME": "us-east-1",
-        }.get(key))
-        static_settings.aws = type("AWS", (), {
-            "AWS_ACCESS_KEY_ID": "STATICKEY",
-            "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "AWS_REGION_NAME": "us-east-1",
-        })()
-        monkeypatch.setattr(litellm_handler, "get_settings", lambda: static_settings)
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: _static_aws_settings())
 
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
@@ -227,18 +235,10 @@ class TestImdsInit:
         mock_session.get_credentials.return_value.get_frozen_credentials.return_value = frozen
         mock_session.region_name = None
 
-        static_settings = _base_settings(extra_get=lambda key: {
-            "aws.AWS_ACCESS_KEY_ID": "STATICKEY",
-            "aws.AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "aws.AWS_REGION_NAME": "us-east-1",
-            "aws.AWS_SESSION_TOKEN": "STATIC-SESSION-TOKEN",
-        }.get(key))
-        static_settings.aws = type("AWS", (), {
-            "AWS_ACCESS_KEY_ID": "STATICKEY",
-            "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "AWS_REGION_NAME": "us-east-1",
-        })()
-        monkeypatch.setattr(litellm_handler, "get_settings", lambda: static_settings)
+        monkeypatch.setattr(
+            litellm_handler, "get_settings",
+            lambda: _static_aws_settings(session_token="STATIC-SESSION-TOKEN")
+        )
 
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
@@ -252,17 +252,7 @@ class TestImdsInit:
         mock_session.get_credentials.return_value = None
         mock_session.region_name = None
 
-        static_settings = _base_settings(extra_get=lambda key: {
-            "aws.AWS_ACCESS_KEY_ID": "STATICKEY",
-            "aws.AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "aws.AWS_REGION_NAME": "us-east-1",
-        }.get(key))
-        static_settings.aws = type("AWS", (), {
-            "AWS_ACCESS_KEY_ID": "STATICKEY",
-            "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "AWS_REGION_NAME": "us-east-1",
-        })()
-        monkeypatch.setattr(litellm_handler, "get_settings", lambda: static_settings)
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: _static_aws_settings())
 
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
@@ -279,17 +269,7 @@ class TestImdsInit:
         mock_session.get_credentials.side_effect = Exception("connection timeout")
         mock_session.region_name = None
 
-        static_settings = _base_settings(extra_get=lambda key: {
-            "aws.AWS_ACCESS_KEY_ID": "STATICKEY",
-            "aws.AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "aws.AWS_REGION_NAME": "us-east-1",
-        }.get(key))
-        static_settings.aws = type("AWS", (), {
-            "AWS_ACCESS_KEY_ID": "STATICKEY",
-            "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
-            "AWS_REGION_NAME": "us-east-1",
-        })()
-        monkeypatch.setattr(litellm_handler, "get_settings", lambda: static_settings)
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: _static_aws_settings())
 
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
@@ -351,7 +331,7 @@ class TestImdsCallBehavior:
     @pytest.mark.asyncio
     async def test_fallback_to_static_on_bedrock_failure(self, monkeypatch):
         """On Bedrock APIError, _activate_static_aws_fallback is called and the
-        second attempt (tenacity retry) uses static credentials."""
+        in-lock retry uses static credentials (second acompletion call)."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen = _frozen_creds()
         mock_session = MagicMock()

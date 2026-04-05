@@ -106,7 +106,9 @@ class LiteLLMAIHandler(BaseAiHandler):
                         # IMDS succeeded; stash static keys for runtime fallback only
                         self._aws_static_creds = static_creds
                     else:
-                        # IMDS failed; activate static credentials immediately
+                        # IMDS failed; activate static credentials immediately and stash
+                        # them so the runtime fallback path is also available if needed.
+                        self._aws_static_creds = static_creds
                         os.environ["AWS_ACCESS_KEY_ID"] = static_creds["AWS_ACCESS_KEY_ID"]
                         os.environ["AWS_SECRET_ACCESS_KEY"] = static_creds["AWS_SECRET_ACCESS_KEY"]
                         os.environ["AWS_REGION_NAME"] = static_creds["AWS_REGION_NAME"]
@@ -532,8 +534,14 @@ class LiteLLMAIHandler(BaseAiHandler):
             except openai.APIError as e:
                 if _bedrock_imds and not self._aws_imds_fell_back and self._aws_static_creds:
                     self._activate_static_aws_fallback()
-                get_logger().warning(f"Error during LLM inference: {e}")
-                raise
+                    # Retry immediately while still holding the lock so that the
+                    # env-var swap is fully visible to this call. Letting @retry
+                    # handle the retry would release the lock between attempts,
+                    # allowing a concurrent coroutine to overwrite os.environ.
+                    resp, finish_reason, response_obj = await self._get_completion(**kwargs)
+                else:
+                    get_logger().warning(f"Error during LLM inference: {e}")
+                    raise
             except Exception as e:
                 get_logger().warning(f"Unknown error during LLM inference: {e}")
                 raise openai.APIError from e
