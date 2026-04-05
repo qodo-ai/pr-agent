@@ -79,8 +79,8 @@ def _static_aws_settings(session_token=None):
     return settings
 
 
-def _frozen_creds(access_key="TESTFAKEACCESSKEYID00",
-                  secret_key="TestFakeSecretKeyNotRealForTestingOnly00",
+def _frozen_creds(access_key="FAKE-KEY",
+                  secret_key="FAKE-SECRET",
                   token=None):
     frozen = MagicMock()
     frozen.access_key = access_key
