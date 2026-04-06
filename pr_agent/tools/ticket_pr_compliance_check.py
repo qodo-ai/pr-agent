@@ -4,6 +4,7 @@ import traceback
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import GithubProvider
 from pr_agent.git_providers import AzureDevopsProvider
+from pr_agent.git_providers import GiteaProvider
 from pr_agent.log import get_logger
 
 # Compile the regex pattern once, outside the function
@@ -215,7 +216,38 @@ async def extract_tickets(git_provider):
                         artifact={"traceback": traceback.format_exc()},
                     )
             return tickets_content
+        elif isinstance(git_provider, GiteaProvider):
+            import re
+            user_description = git_provider.get_pr_description_full()
+            
+            ticket_numbers = list(set(re.findall(r'#(\d+)', user_description)))
+            tickets_content = []
 
+            for ticket_num_str in ticket_numbers:
+                try:
+                    ticket_num = int(ticket_num_str)
+                    issue = git_provider.repo_api.get_issue(git_provider.owner, git_provider.repo, ticket_num)
+
+                    if issue:
+                        issue_body_str = issue.body or ""
+                        if len(issue_body_str) > MAX_TICKET_CHARACTERS:
+                            issue_body_str = issue_body_str[:MAX_TICKET_CHARACTERS] + "..."
+
+                        labels = []
+                        if hasattr(issue, 'labels') and issue.labels:
+                            labels = [label.name for label in issue.labels]
+
+                        tickets_content.append({
+                            'ticket_id': ticket_num,
+                            'ticket_url': f"{git_provider.base_url}/{git_provider.owner}/{git_provider.repo}/issues/{ticket_num}",
+                            'title': issue.title if hasattr(issue, 'title') else "",
+                            'body': issue_body_str, 
+                            'labels': ", ".join(labels)
+                        })
+                except Exception as e:
+                    get_logger().warning(f"Failed to fetch Gitea issue {ticket_num_str}: {e}")
+                    
+            return tickets_content
     except Exception as e:
         get_logger().error(f"Error extracting tickets error= {e}",
                            artifact={"traceback": traceback.format_exc()})
