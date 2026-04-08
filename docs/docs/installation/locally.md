@@ -1,7 +1,7 @@
 To run PR-Agent locally, you first need to acquire two keys:
 
-1. An OpenAI API key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or another [language models](../usage-guide/changing_a_model.md), if you prefer).
-2. A personal access token from your Git platform (GitHub, GitLab, Bitbucket, Gitea) with repo scope. GitHub token. For example, you can create a GitHub token [here](https://github.com/settings/tokens){:target="_blank"}
+1. An OpenAI API key from [here](https://platform.openai.com/api-keys){:target="_blank"}, with access to GPT-4 and o4-mini (or other [language models](../usage-guide/changing_a_model.md), if you prefer).
+2. A personal access token from your Git platform (GitHub, GitLab, Bitbucket, Gitea) with repo scope. For example, you can create a GitHub token [here](https://github.com/settings/tokens){:target="_blank"}
 
 ## Using Docker image
 
