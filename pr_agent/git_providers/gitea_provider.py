@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
@@ -86,11 +87,16 @@ class GiteaProvider(GitProvider):
             self.sha = self.pr.head.sha if self.pr.head.sha else ""
             self.__add_file_content()
             self.__add_file_diff()
-            self.pr_commits = self.repo_api.list_all_commits(
+            pr_commits_data = self.repo_api.get_pr_commits(
                 owner=self.owner,
-                repo=self.repo
+                repo=self.repo,
+                pr_number=self.pr_number
             )
-            self.last_commit = self.pr_commits[-1]
+            self.pr_commits = pr_commits_data if pr_commits_data else []
+            if self.pr_commits:
+                self.last_commit = SimpleNamespace(**self.pr_commits[-1])
+            else:
+                self.last_commit = None
             self.last_commit_id = self.last_commit
             self.base_sha = self.pr.base.sha if self.pr.base.sha else ""
             self.base_ref = self.pr.base.ref if self.pr.base.ref else ""
