@@ -62,7 +62,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                 creds = session.get_credentials()
                 if creds:
                     self._aws_boto3_creds = creds  # store for refresh; avoids env-var re-read
-                    self._write_frozen_creds_to_env(creds.get_frozen_credentials())
+                    self._write_frozen_aws_creds_to_env(creds.get_frozen_credentials())
                     self._aws_imds_mode = True
                     get_logger().info("Using ambient AWS credentials from IMDS/task-role/IRSA")
                 else:
@@ -229,7 +229,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
 
     @staticmethod
-    def _write_frozen_creds_to_env(frozen) -> None:
+    def _write_frozen_aws_creds_to_env(frozen) -> None:
         """Write a botocore FrozenCredentials snapshot into os.environ for litellm/Bedrock."""
         os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
         os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
@@ -238,7 +238,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         elif "AWS_SESSION_TOKEN" in os.environ:
             del os.environ["AWS_SESSION_TOKEN"]
 
-    def _refresh_imds_credentials(self) -> bool:
+    def _refresh_aws_imds_credentials(self) -> bool:
         """Refresh ambient AWS credentials from boto3 provider chain. Called before each Bedrock call
         to avoid serving stale credentials from long-lived processes (EC2 roles rotate every ~6h).
 
@@ -250,7 +250,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             if self._aws_boto3_creds is None:
                 get_logger().warning("IMDS credential refresh: no boto3 credentials object stored")
                 return False
-            self._write_frozen_creds_to_env(self._aws_boto3_creds.get_frozen_credentials())
+            self._write_frozen_aws_creds_to_env(self._aws_boto3_creds.get_frozen_credentials())
             return True
         except Exception:
             get_logger().exception("IMDS credential refresh failed")
@@ -388,7 +388,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         _bedrock_imds = self._aws_imds_mode and 'bedrock/' in model
         async with (self._aws_bedrock_lock if _bedrock_imds else contextlib.nullcontext()):
             if _bedrock_imds and not self._aws_imds_fell_back:
-                if not self._refresh_imds_credentials() and self._aws_static_creds:
+                if not self._refresh_aws_imds_credentials() and self._aws_static_creds:
                     self._activate_static_aws_fallback()
                     self._aws_imds_fell_back = True
             try:

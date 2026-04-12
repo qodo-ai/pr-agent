@@ -8,7 +8,7 @@ Covers:
   - Static keys stashed for fallback (including session token)
   - boto3 failure falls through gracefully (no crash)
   - No boto3 call when AWS_USE_IMDS is absent
-  - _refresh_imds_credentials called before each Bedrock chat_completion
+  - _refresh_aws_imds_credentials called before each Bedrock chat_completion
   - Fallback to static keys on Bedrock API failure
   - _activate_static_aws_fallback correctly restores/clears session token
 """
@@ -318,7 +318,7 @@ class TestImdsCallBehavior:
 
     @pytest.mark.asyncio
     async def test_refresh_called_before_bedrock_call(self, monkeypatch):
-        """_refresh_imds_credentials is called before each Bedrock chat_completion."""
+        """_refresh_aws_imds_credentials is called before each Bedrock chat_completion."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen = _frozen_creds()
         mock_session = MagicMock()
@@ -328,7 +328,7 @@ class TestImdsCallBehavior:
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
 
-        with patch.object(handler, "_refresh_imds_credentials") as mock_refresh, \
+        with patch.object(handler, "_refresh_aws_imds_credentials") as mock_refresh, \
              patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
                    new_callable=AsyncMock) as mock_call:
             mock_call.return_value = _mock_acompletion_response()
@@ -340,7 +340,7 @@ class TestImdsCallBehavior:
         mock_refresh.assert_called_once()
 
     def test_refresh_uses_stored_creds_not_new_session(self, monkeypatch):
-        """_refresh_imds_credentials must call get_frozen_credentials on the stored object,
+        """_refresh_aws_imds_credentials must call get_frozen_credentials on the stored object,
         not create a new boto3.Session (which would re-read env vars and return stale creds)."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen1 = _frozen_creds(access_key="FIRST-KEY", secret_key="FIRST-SECRET")
@@ -356,21 +356,21 @@ class TestImdsCallBehavior:
 
         # boto3.Session should only be called once (in __init__), not during refresh
         with patch("boto3.Session") as mock_boto3_refresh:
-            handler._refresh_imds_credentials()
+            handler._refresh_aws_imds_credentials()
 
         mock_boto3_refresh.assert_not_called()
         assert os.environ["AWS_ACCESS_KEY_ID"] == "ROTATED-KEY"
         assert os.environ["AWS_SECRET_ACCESS_KEY"] == "ROTATED-SECRET"
 
     def test_refresh_returns_false_and_warns_when_no_stored_creds(self, monkeypatch):
-        """_refresh_imds_credentials returns False and logs a warning when _aws_boto3_creds is None."""
+        """_refresh_aws_imds_credentials returns False and logs a warning when _aws_boto3_creds is None."""
         handler = LiteLLMAIHandler()
         assert handler._aws_boto3_creds is None
-        result = handler._refresh_imds_credentials()
+        result = handler._refresh_aws_imds_credentials()
         assert result is False
 
     def test_refresh_returns_false_on_exception(self, monkeypatch):
-        """_refresh_imds_credentials returns False when get_frozen_credentials raises."""
+        """_refresh_aws_imds_credentials returns False when get_frozen_credentials raises."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen = _frozen_creds()
         mock_creds = MagicMock()
@@ -382,7 +382,7 @@ class TestImdsCallBehavior:
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
 
-        result = handler._refresh_imds_credentials()
+        result = handler._refresh_aws_imds_credentials()
         assert result is False
 
     @pytest.mark.asyncio
@@ -418,7 +418,7 @@ class TestImdsCallBehavior:
 
     @pytest.mark.asyncio
     async def test_refresh_not_called_for_non_bedrock_model(self, monkeypatch):
-        """_refresh_imds_credentials is NOT called when model is not a Bedrock model."""
+        """_refresh_aws_imds_credentials is NOT called when model is not a Bedrock model."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen = _frozen_creds()
         mock_session = MagicMock()
@@ -428,7 +428,7 @@ class TestImdsCallBehavior:
         with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
 
-        with patch.object(handler, "_refresh_imds_credentials") as mock_refresh, \
+        with patch.object(handler, "_refresh_aws_imds_credentials") as mock_refresh, \
              patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
                    new_callable=AsyncMock) as mock_call:
             mock_call.return_value = _mock_acompletion_response()
