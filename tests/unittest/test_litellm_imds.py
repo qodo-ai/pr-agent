@@ -233,6 +233,25 @@ class TestImdsInit:
 
         assert handler._aws_imds_mode is False
 
+    def test_static_session_token_exported_without_imds(self, monkeypatch):
+        """Non-IMDS static path exports AWS_SESSION_TOKEN when present in settings."""
+        settings = _static_aws_settings(session_token="STS-TOKEN-NOIMDS")
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: settings)
+
+        LiteLLMAIHandler()
+
+        assert os.environ["AWS_SESSION_TOKEN"] == "STS-TOKEN-NOIMDS"
+
+    def test_static_session_token_cleared_without_imds(self, monkeypatch):
+        """Non-IMDS static path clears stale AWS_SESSION_TOKEN when not in settings."""
+        monkeypatch.setenv("AWS_SESSION_TOKEN", "stale-token")
+        settings = _static_aws_settings()  # no session_token
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: settings)
+
+        LiteLLMAIHandler()
+
+        assert "AWS_SESSION_TOKEN" not in os.environ
+
     def test_no_imds_when_env_var_absent(self, monkeypatch):
         """boto3 must never be imported or called when AWS_USE_IMDS is not set."""
         with patch("boto3.Session") as mock_boto3:
