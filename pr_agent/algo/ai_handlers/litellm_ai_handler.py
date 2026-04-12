@@ -113,6 +113,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                         os.environ["AWS_REGION_NAME"] = static_creds["AWS_REGION_NAME"]
                         if static_token:
                             os.environ["AWS_SESSION_TOKEN"] = static_token
+                        elif "AWS_SESSION_TOKEN" in os.environ:
+                            del os.environ["AWS_SESSION_TOKEN"]
                         get_logger().info(
                             "AWS_USE_IMDS: IMDS resolution failed; using static credentials"
                         )

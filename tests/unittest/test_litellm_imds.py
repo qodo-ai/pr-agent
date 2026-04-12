@@ -71,11 +71,14 @@ def _static_aws_settings(session_token=None):
     if session_token:
         keys["aws.AWS_SESSION_TOKEN"] = session_token
     settings = _base_settings(extra_get=lambda key: keys.get(key))
-    settings.aws = type("AWS", (), {
+    aws_attrs = {
         "AWS_ACCESS_KEY_ID": "STATICKEY",
         "AWS_SECRET_ACCESS_KEY": "STATICSECRET",
         "AWS_REGION_NAME": "us-east-1",
-    })()
+    }
+    if session_token:
+        aws_attrs["AWS_SESSION_TOKEN"] = session_token
+    settings.aws = type("AWS", (), aws_attrs)()
     return settings
 
 
@@ -311,6 +314,21 @@ class TestImdsInit:
         assert os.environ["AWS_ACCESS_KEY_ID"] == "STATICKEY"
         assert os.environ["AWS_SECRET_ACCESS_KEY"] == "STATICSECRET"
         assert os.environ["AWS_REGION_NAME"] == "us-east-1"
+
+    def test_imds_failed_path_clears_stale_session_token(self, monkeypatch):
+        """When IMDS fails and static creds have no token, a stale AWS_SESSION_TOKEN is cleared."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        monkeypatch.setenv("AWS_SESSION_TOKEN", "stale-imds-token")
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value = None
+        mock_session.region_name = None
+
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: _static_aws_settings())
+
+        with patch("boto3.Session", return_value=mock_session):
+            LiteLLMAIHandler()
+
+        assert "AWS_SESSION_TOKEN" not in os.environ
 
     def test_static_keys_applied_when_boto3_raises(self, monkeypatch):
         """When AWS_USE_IMDS is set but boto3 throws, static keys are applied to env."""
