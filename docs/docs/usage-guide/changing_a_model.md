@@ -14,10 +14,11 @@ For models and environments not from OpenAI, you might need to provide additiona
 You can give parameters via a configuration file, or from environment variables.
 
 !!! note "Model-specific environment variables"
-    See [litellm documentation](https://litellm.vercel.app/docs/proxy/quick_start#supported-llms) for the environment variables needed per model, as they may vary and change over time. Our documentation per-model may not always be up-to-date with the latest changes.
-    Failing to set the needed keys of a specific model will usually result in litellm not identifying the model type, and failing to utilize it.
+See [litellm documentation](https://litellm.vercel.app/docs/proxy/quick_start#supported-llms) for the environment variables needed per model, as they may vary and change over time. Our documentation per-model may not always be up-to-date with the latest changes.
+Failing to set the needed keys of a specific model will usually result in litellm not identifying the model type, and failing to utilize it.
 
 ### OpenAI like API
+
 To use an OpenAI like API, set the following in your `.secrets.toml` file:
 
 ```toml
@@ -106,12 +107,12 @@ By default, Ollama uses a context window size of 2048 tokens. In most cases this
 Please note that the `custom_model_max_tokens` setting should be configured in accordance with the `OLLAMA_CONTEXT_LENGTH`. Failure to do so may result in unexpected model output.
 
 !!! note "Local models vs commercial models"
-    PR-Agent is compatible with almost any AI model, but analyzing complex code repositories and pull requests requires a model specifically optimized for code analysis.
+PR-Agent is compatible with almost any AI model, but analyzing complex code repositories and pull requests requires a model specifically optimized for code analysis.
 
     Commercial models such as GPT-5, Claude Sonnet, and Gemini have demonstrated robust capabilities in generating structured output for code analysis tasks with large input. In contrast, most open-source models currently available (as of January 2025) face challenges with these complex tasks.
 
     Based on our testing, local open-source models are suitable for experimentation and learning purposes (mainly for the `ask` command), but they are not suitable for production-level code analysis tasks.
-    
+
     Hence, for production workflows and real-world usage, we recommend using commercial models.
 
 ### Hugging Face
@@ -160,6 +161,20 @@ key = ... # your Groq api key
 ```
 
 (you can obtain a Groq key from [here](https://console.groq.com/keys))
+
+### SambaNova
+
+To use MiniMax-M2.5 model with SambaNova, for example, set:
+
+```toml
+[config] # in configuration.toml
+model = "sambanova/MiniMax-M2.5"
+fallback_models = ["sambanova/MiniMax-M2.5"]
+[sambanova] # in .secrets.toml
+key = ... # your SambaNova api key
+```
+
+(you can obtain a SambaNova key from [here](https://cloud.sambanova.ai/apis))
 
 ### xAI
 
@@ -339,7 +354,7 @@ key = "..." # your Codestral api key
 To use model from Openrouter, for example, set:
 
 ```toml
-[config] # in configuration.toml 
+[config] # in configuration.toml
 model="openrouter/anthropic/claude-3.7-sonnet"
 fallback_models=["openrouter/deepseek/deepseek-chat"]
 custom_model_max_tokens=20000
@@ -372,7 +387,7 @@ custom_model_max_tokens= ...
 3. Go to [litellm documentation](https://litellm.vercel.app/docs/proxy/quick_start#supported-llms), find the model you want to use, and set the relevant environment variables.
 
 4. Most reasoning models do not support chat-style inputs (`system` and `user` messages) or temperature settings.
-To bypass chat templates and temperature controls, set `config.custom_reasoning_model = true` in your configuration file.
+   To bypass chat templates and temperature controls, set `config.custom_reasoning_model = true` in your configuration file.
 
 ## Dedicated parameters
 
