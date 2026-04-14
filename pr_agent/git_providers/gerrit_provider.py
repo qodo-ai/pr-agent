@@ -344,9 +344,15 @@ class GerritProvider(GitProvider):
         msg = []
         repo_root = pathlib.Path(self.repo_path).resolve()
         for suggestion in code_suggestions:
+            # Validate suggestion structure before accessing keys
+            if not isinstance(suggestion, dict) or not isinstance(suggestion.get("relevant_file"), str):
+                get_logger().warning(f"Skipping malformed suggestion: missing or invalid 'relevant_file'")
+                continue
             # Sanitize file path to prevent directory traversal
-            target_path = (repo_root / suggestion["relevant_file"]).resolve()
-            if not str(target_path).startswith(str(repo_root)):
+            try:
+                target_path = (repo_root / suggestion["relevant_file"]).resolve()
+                target_path.relative_to(repo_root)
+            except ValueError:
                 get_logger().warning(f"Skipping suggestion with path traversal: {suggestion['relevant_file']}")
                 continue
             description, code = self.split_suggestion(suggestion['body'])
