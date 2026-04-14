@@ -214,11 +214,11 @@ def convert_to_markdown_v2(output_data: dict,
         elif 'contribution time cost estimate' in key_nice.lower():
             if gfm_supported:
                 markdown_text += f"<tr><td>{emoji}&nbsp;<strong>Contribution time estimate</strong> (best, average, worst case): "
-                markdown_text += f"{value['best_case'].replace('m', ' minutes')} | {value['average_case'].replace('m', ' minutes')} | {value['worst_case'].replace('m', ' minutes')}"
+                markdown_text += f"{re.sub(r'(\d+)m\b', r'\1 minutes', value['best_case'])} | {re.sub(r'(\d+)m\b', r'\1 minutes', value['average_case'])} | {re.sub(r'(\d+)m\b', r'\1 minutes', value['worst_case'])}"
                 markdown_text += f"</td></tr>\n"
             else:
                 markdown_text += f"### {emoji} Contribution time estimate (best, average, worst case): "
-                markdown_text += f"{value['best_case'].replace('m', ' minutes')} | {value['average_case'].replace('m', ' minutes')} | {value['worst_case'].replace('m', ' minutes')}\n\n"
+                markdown_text += f"{re.sub(r'(\d+)m\b', r'\1 minutes', value['best_case'])} | {re.sub(r'(\d+)m\b', r'\1 minutes', value['average_case'])} | {re.sub(r'(\d+)m\b', r'\1 minutes', value['worst_case'])}\n\n"
         elif 'security concerns' in key_nice.lower():
             if gfm_supported:
                 markdown_text += f"<tr><td>"
