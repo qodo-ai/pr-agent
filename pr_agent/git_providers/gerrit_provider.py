@@ -346,7 +346,7 @@ class GerritProvider(GitProvider):
         for suggestion in code_suggestions:
             # Validate suggestion structure before accessing keys
             if not isinstance(suggestion, dict) or not isinstance(suggestion.get("relevant_file"), str):
-                get_logger().warning(f"Skipping malformed suggestion: missing or invalid 'relevant_file'")
+                get_logger().warning("Skipping malformed suggestion: missing or invalid 'relevant_file'")
                 continue
             # Sanitize file path to prevent directory traversal
             try:
