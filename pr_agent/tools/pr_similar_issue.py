@@ -672,8 +672,20 @@ class PRSimilarIssue:
         get_logger().info('Upserting into Qdrant...')
         points = []
         for row in df.to_dict(orient="records"):
+            point_uuid = uuid.uuid5(
+                uuid.NAMESPACE_DNS,
+                f"{repo_name_for_index}:{row['id']}",
+            ).hex
             points.append(
-                PointStruct(id=uuid.uuid5(uuid.NAMESPACE_DNS, f"{repo_name_for_index}:{row['id']}").hex, vector=row["vector"], payload={"id": row["id"], "text": row["text"], "metadata": row["metadata"]})
+                PointStruct(
+                    id=point_uuid,
+                    vector=row["vector"],
+                    payload={
+                        "id": row["id"],
+                        "text": row["text"],
+                        "metadata": row["metadata"],
+                    },
+                )
             )
         self.qdrant.upsert(collection_name=self.index_name, points=points)
         get_logger().info('Done')
