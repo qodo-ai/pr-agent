@@ -71,7 +71,9 @@ class LiteLLMAIHandler(BaseAiHandler):
                         "AWS_USE_IMDS is set but boto3 found no credentials; "
                         "falling through to static keys"
                     )
-            except botocore.exceptions.BotoCoreError:
+            except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError):
+                # ClientError is intentionally not a BotoCoreError subclass in botocore's
+                # design; it is raised by STS-backed providers (AssumeRole, IRSA web-identity).
                 get_logger().exception(
                     "AWS_USE_IMDS: failed to resolve credentials via boto3; "
                     "falling through to static keys"
@@ -261,7 +263,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 return False
             self._write_frozen_aws_creds_to_env(self._aws_boto3_creds.get_frozen_credentials())
             return True
-        except botocore.exceptions.BotoCoreError:
+        except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError):
+            # ClientError (STS/AssumeRole failures) is not a BotoCoreError subclass.
             get_logger().exception("IMDS credential refresh failed")
             return False
 

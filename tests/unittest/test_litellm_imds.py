@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import openai
 import pytest
-from botocore.exceptions import CredentialRetrievalError
+from botocore.exceptions import ClientError, CredentialRetrievalError
 from tenacity import RetryError
 
 import pr_agent.algo.ai_handlers.litellm_ai_handler as litellm_handler
@@ -241,6 +241,22 @@ class TestImdsInit:
 
         assert handler._aws_imds_mode is False
 
+    def test_imds_sts_client_error_does_not_crash(self, monkeypatch):
+        """A ClientError from STS/AssumeRole (IRSA path) must not crash __init__.
+        ClientError is not a BotoCoreError subclass, so it needs an explicit catch."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        mock_session = MagicMock()
+        mock_session.get_credentials.side_effect = ClientError(
+            error_response={"Error": {"Code": "AccessDenied", "Message": "Not authorized to assume role"}},
+            operation_name="AssumeRole",
+        )
+        mock_session.region_name = None
+
+        with patch("boto3.Session", return_value=mock_session):
+            handler = LiteLLMAIHandler()  # must not raise
+
+        assert handler._aws_imds_mode is False
+
     def test_static_session_token_exported_without_imds(self, monkeypatch):
         """Non-IMDS static path exports AWS_SESSION_TOKEN when present in settings."""
         settings = _static_aws_settings(session_token="STS-TOKEN-NOIMDS")
@@ -421,6 +437,29 @@ class TestImdsCallBehavior:
         mock_creds.get_frozen_credentials.side_effect = [
             frozen,
             CredentialRetrievalError(provider="imds", error_msg="token expired"),
+        ]
+        mock_session = MagicMock()
+        mock_session.get_credentials.return_value = mock_creds
+        mock_session.region_name = "us-east-1"
+
+        with patch("boto3.Session", return_value=mock_session):
+            handler = LiteLLMAIHandler()
+
+        result = handler._refresh_aws_imds_credentials()
+        assert result is False
+
+    def test_refresh_returns_false_on_sts_client_error(self, monkeypatch):
+        """_refresh_aws_imds_credentials returns False on ClientError (STS/AssumeRole path).
+        ClientError is not a BotoCoreError subclass, so it needs an explicit catch."""
+        monkeypatch.setenv("AWS_USE_IMDS", "true")
+        frozen = _frozen_creds()
+        mock_creds = MagicMock()
+        mock_creds.get_frozen_credentials.side_effect = [
+            frozen,
+            ClientError(
+                error_response={"Error": {"Code": "AccessDenied", "Message": "Token expired"}},
+                operation_name="AssumeRoleWithWebIdentity",
+            ),
         ]
         mock_session = MagicMock()
         mock_session.get_credentials.return_value = mock_creds
