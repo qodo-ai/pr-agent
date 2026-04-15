@@ -354,8 +354,9 @@ __old hunk__
 
         if line.startswith('@@'):
             header_line = line
+            prev_match = match  # save previous match before overwriting
             match = RE_HUNK_HEADER.match(line)
-            if match and (new_content_lines or old_content_lines):  # found a new hunk, split the previous lines
+            if prev_match and (new_content_lines or old_content_lines):  # flush the previous hunk
                 if prev_header_line:
                     patch_with_lines_str += f'\n{prev_header_line}\n'
                 is_plus_lines = is_minus_lines = False
@@ -392,9 +393,11 @@ __old hunk__
             new_content_lines.append(line)
             old_content_lines.append(line)
 
-    # finishing last hunk
-    if match and new_content_lines:
-        patch_with_lines_str += f'\n{header_line}\n'
+    # finishing last hunk — use prev_header_line (not match/header_line) because
+    # match may have been set to None by a trailing malformed @@ line, and
+    # header_line may point to that malformed line instead of the last valid hunk
+    if prev_header_line and new_content_lines:
+        patch_with_lines_str += f'\n{prev_header_line}\n'
         is_plus_lines = is_minus_lines = False
         if new_content_lines:
             is_plus_lines = any([line.startswith('+') for line in new_content_lines])
