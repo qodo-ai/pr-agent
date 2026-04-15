@@ -57,6 +57,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             litellm.api_key = DUMMY_LITELLM_API_KEY
         if os.environ.get("AWS_USE_IMDS", "").strip().lower() in ("1", "true", "yes"):
             import boto3
+            import botocore.exceptions
             session = boto3.Session()
             try:
                 creds = session.get_credentials()
@@ -70,7 +71,7 @@ class LiteLLMAIHandler(BaseAiHandler):
                         "AWS_USE_IMDS is set but boto3 found no credentials; "
                         "falling through to static keys"
                     )
-            except Exception:
+            except botocore.exceptions.BotoCoreError:
                 get_logger().exception(
                     "AWS_USE_IMDS: failed to resolve credentials via boto3; "
                     "falling through to static keys"
@@ -253,13 +254,14 @@ class LiteLLMAIHandler(BaseAiHandler):
         which would read the already-set AWS_* env vars and return stale values.
 
         Returns True on success, False on failure (caller should trigger static fallback)."""
+        import botocore.exceptions
         try:
             if self._aws_boto3_creds is None:
                 get_logger().warning("IMDS credential refresh: no boto3 credentials object stored")
                 return False
             self._write_frozen_aws_creds_to_env(self._aws_boto3_creds.get_frozen_credentials())
             return True
-        except Exception:
+        except botocore.exceptions.BotoCoreError:
             get_logger().exception("IMDS credential refresh failed")
             return False
 

@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import openai
 import pytest
+from botocore.exceptions import CredentialRetrievalError
 from tenacity import RetryError
 
 import pr_agent.algo.ai_handlers.litellm_ai_handler as litellm_handler
@@ -82,9 +83,11 @@ def _static_aws_settings(session_token=None):
     return settings
 
 
-def _frozen_creds(access_key="FAKE-KEY",
-                  secret_key="FAKE-SECRET",
-                  token=None):
+def _frozen_creds(
+    access_key="FAKE-KEY",
+    secret_key="FAKE-SECRET",
+    token=None,
+):
     frozen = MagicMock()
     frozen.access_key = access_key
     frozen.secret_key = secret_key
@@ -228,7 +231,9 @@ class TestImdsInit:
         """A boto3 exception during credential resolution must not crash __init__."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         mock_session = MagicMock()
-        mock_session.get_credentials.side_effect = Exception("connection timeout")
+        mock_session.get_credentials.side_effect = CredentialRetrievalError(
+            provider="imds", error_msg="connection timeout"
+        )
         mock_session.region_name = None
 
         with patch("boto3.Session", return_value=mock_session):
@@ -334,7 +339,9 @@ class TestImdsInit:
         """When AWS_USE_IMDS is set but boto3 throws, static keys are applied to env."""
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         mock_session = MagicMock()
-        mock_session.get_credentials.side_effect = Exception("connection timeout")
+        mock_session.get_credentials.side_effect = CredentialRetrievalError(
+            provider="imds", error_msg="connection timeout"
+        )
         mock_session.region_name = None
 
         monkeypatch.setattr(litellm_handler, "get_settings", lambda: _static_aws_settings())
@@ -388,7 +395,7 @@ class TestImdsCallBehavior:
         mock_session.get_credentials.return_value = mock_creds
         mock_session.region_name = "us-east-1"
 
-        with patch("boto3.Session", return_value=mock_session) as mock_boto3:
+        with patch("boto3.Session", return_value=mock_session):
             handler = LiteLLMAIHandler()
 
         # boto3.Session should only be called once (in __init__), not during refresh
@@ -411,7 +418,10 @@ class TestImdsCallBehavior:
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen = _frozen_creds()
         mock_creds = MagicMock()
-        mock_creds.get_frozen_credentials.side_effect = [frozen, Exception("token expired")]
+        mock_creds.get_frozen_credentials.side_effect = [
+            frozen,
+            CredentialRetrievalError(provider="imds", error_msg="token expired"),
+        ]
         mock_session = MagicMock()
         mock_session.get_credentials.return_value = mock_creds
         mock_session.region_name = "us-east-1"
@@ -428,7 +438,10 @@ class TestImdsCallBehavior:
         monkeypatch.setenv("AWS_USE_IMDS", "true")
         frozen = _frozen_creds()
         mock_creds = MagicMock()
-        mock_creds.get_frozen_credentials.side_effect = [frozen, Exception("IMDS unreachable")]
+        mock_creds.get_frozen_credentials.side_effect = [
+            frozen,
+            CredentialRetrievalError(provider="imds", error_msg="IMDS unreachable"),
+        ]
         mock_session = MagicMock()
         mock_session.get_credentials.return_value = mock_creds
         mock_session.region_name = "us-east-1"
