@@ -393,7 +393,7 @@ class GerritProvider(GitProvider):
             try:
                 shutil.rmtree(self.repo_path, ignore_errors=True)
                 get_logger().info("Cleaned up temp repo at %s", self.repo_path)
-            except Exception as e:
+            except (OSError, PermissionError) as e:
                 get_logger().warning(
                     "Failed to clean up temp repo at %s: %s",
                     self.repo_path, e

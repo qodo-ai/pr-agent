@@ -59,15 +59,24 @@ async def handle_gerrit_request(action: Action, item: Item):
         # Clean up the cloned temp repo created by GerritProvider.
         # The provider is cached in the starlette context during
         # get_git_provider_with_context().
+        #
+        # We guard against two failure modes:
+        #   1. The starlette context is inaccessible (e.g. middleware not
+        #      active) — caught by the outer try/except.
+        #   2. The provider was never stored in the context (e.g. an error
+        #      occurred before get_git_provider_with_context ran) — the
+        #      dict will simply be empty, and the GerritProvider.__del__
+        #      safety net handles cleanup on garbage collection.
         try:
             git_providers = context.get("git_provider", {})
-            for provider in git_providers.values():
-                if isinstance(provider, GerritProvider):
-                    provider.cleanup()
-        except Exception:
+            if isinstance(git_providers, dict):
+                for provider in git_providers.values():
+                    if isinstance(provider, GerritProvider):
+                        provider.cleanup()
+        except (LookupError, RuntimeError):
             get_logger().debug(
                 "Could not retrieve GerritProvider for cleanup; "
-                "temp directory may persist"
+                "temp directory will be cleaned up by __del__"
             )
 
 
