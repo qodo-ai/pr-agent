@@ -117,3 +117,35 @@ class TestMalformedHunkHeader:
         result = decouple_and_convert_to_hunks_with_lines_numbers(patch, _FakeFile())
         assert "-removed_line" in result
         assert "__old hunk__" in result
+
+    def test_orphan_lines_after_malformed_not_joined_to_next_hunk(self):
+        """Orphan lines between a malformed @@ and the next valid @@ must be discarded.
+
+        Without clearing the buffers unconditionally on every @@ line, orphan
+        lines collected after a malformed @@ (where match=None) leak into the
+        next valid hunk because prev_match is None so the flush block is
+        skipped and the buffers are never reset.
+        """
+        patch = (
+            "@@ -1,3 +1,4 @@ first_section\n"
+            " ctx1\n"
+            "+add1\n"
+            " ctx2\n"
+            "@@ MALFORMED @@ not a real header\n"
+            "+orphan_line_should_be_discarded\n"
+            "-orphan_del_should_be_discarded\n"
+            "@@ -10,2 +11,3 @@ second_section\n"
+            " ctx3\n"
+            "+add2\n"
+        )
+        result = decouple_and_convert_to_hunks_with_lines_numbers(patch, _FakeFile())
+        # Valid hunk content must be present
+        assert "+add1" in result, "First hunk content was dropped"
+        assert "+add2" in result, "Second hunk content was dropped"
+        # Orphan lines must NOT appear in any hunk
+        assert "orphan_line_should_be_discarded" not in result, (
+            "Orphan line after malformed @@ leaked into the next hunk"
+        )
+        assert "orphan_del_should_be_discarded" not in result, (
+            "Orphan deletion after malformed @@ leaked into the next hunk"
+        )

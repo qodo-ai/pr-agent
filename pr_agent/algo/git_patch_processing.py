@@ -372,8 +372,11 @@ __old hunk__
                     patch_with_lines_str = patch_with_lines_str.rstrip() + '\n__old hunk__\n'
                     for line_old in old_content_lines:
                         patch_with_lines_str += f"{line_old}\n"
-                new_content_lines = []
-                old_content_lines = []
+            # Always reset buffers on any @@ line — whether prev_match flushed
+            # or not. This prevents orphan lines (collected after a malformed @@
+            # that set match=None) from leaking into the next valid hunk.
+            new_content_lines = []
+            old_content_lines = []
             if match:
                 prev_header_line = header_line
                 section_header, size1, size2, start1, start2 = extract_hunk_headers(match)
