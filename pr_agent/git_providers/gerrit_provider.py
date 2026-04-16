@@ -407,7 +407,11 @@ class GerritProvider(GitProvider):
             pass
 
     def remove_initial_comment(self):
-        self.cleanup()
+        # Do NOT call cleanup() here — this method is invoked during the
+        # request lifecycle while the cloned repo is still needed by
+        # subsequent commands.  Actual cleanup happens in the server's
+        # finally block and in __del__ as a safety net.
+        pass
 
     def remove_comment(self, comment):
         pass
