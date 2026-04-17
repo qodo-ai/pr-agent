@@ -60,7 +60,7 @@ SHARED_SECRET=$(python -c "import secrets; print(secrets.token_hex(10))")
 4. Clone this repository:
 
 ```bash
-git clone https://github.com/qodo-ai/pr-agent.git
+git clone https://github.com/the-pr-agent/pr-agent.git
 ```
 
 5. Prepare variables and secrets. Skip this step if you plan on setting these as environment variables when running the agent:
@@ -116,7 +116,7 @@ For example: `GITLAB.PERSONAL_ACCESS_TOKEN` --> `GITLAB__PERSONAL_ACCESS_TOKEN`
 
 4. Create a lambda function that uses the uploaded image. Set the lambda timeout to be at least 3m.
 5. Configure the lambda function to have a Function URL.
-6. In the environment variables of the Lambda function, specify `AZURE_DEVOPS_CACHE_DIR` to a writable location such as /tmp. (see [link](https://github.com/qodo-ai/pr-agent/pull/450#issuecomment-1840242269))
+6. In the environment variables of the Lambda function, specify `AZURE_DEVOPS_CACHE_DIR` to a writable location such as /tmp. (see [link](https://github.com/the-pr-agent/pr-agent/pull/450#issuecomment-1840242269))
 7. Go back to steps 8-9 of [Run a GitLab webhook server](#run-a-gitlab-webhook-server) with the function URL as your Webhook URL.
     The Webhook URL would look like `https://<LAMBDA_FUNCTION_URL>/webhook`
 

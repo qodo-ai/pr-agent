@@ -15,6 +15,7 @@ from pr_agent.log import get_logger
 import json
 
 MODEL_RETRIES = 2
+DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
 
 
 class LiteLLMAIHandler(BaseAiHandler):
@@ -39,7 +40,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             openai.api_key = get_settings().openai.key
             litellm.openai_key = get_settings().openai.key
         elif 'OPENAI_API_KEY' not in os.environ:
-            litellm.api_key = "dummy_key"
+            litellm.api_key = DUMMY_LITELLM_API_KEY
         if get_settings().get("aws.AWS_ACCESS_KEY_ID"):
             assert get_settings().aws.AWS_SECRET_ACCESS_KEY and get_settings().aws.AWS_REGION_NAME, "AWS credentials are incomplete"
             os.environ["AWS_ACCESS_KEY_ID"] = get_settings().aws.AWS_ACCESS_KEY_ID
@@ -406,7 +407,10 @@ class LiteLLMAIHandler(BaseAiHandler):
                 get_logger().info(f"\nSystem prompt:\n{system}")
                 get_logger().info(f"\nUser prompt:\n{user}")
 
-            kwargs["api_key"] = litellm.api_key
+            # Inject api_key to the call. This key is populated during init by providers
+            # like Groq, XAI, Azure AD, and OpenRouter. Skip if None or placeholder.
+            if litellm.api_key and litellm.api_key != DUMMY_LITELLM_API_KEY:
+                kwargs["api_key"] = litellm.api_key
 
             # Get completion with automatic streaming detection
             resp, finish_reason, response_obj = await self._get_completion(**kwargs)
