@@ -37,6 +37,7 @@ Test PR-Agent on any public GitHub repository by commenting `@CodiumAI-Agent /im
 #### 2. GitHub Action (Recommended)
 
 Add automated PR reviews to your repository with a simple workflow file:
+
 ```yaml
 # .github/workflows/pr-agent.yml
 name: PR Agent
