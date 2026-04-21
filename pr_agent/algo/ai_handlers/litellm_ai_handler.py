@@ -446,8 +446,9 @@ class LiteLLMAIHandler(BaseAiHandler):
         Wrapper that automatically handles streaming for required models.
         """
         model = kwargs["model"]
-        custom_llm_provider = kwargs.get("custom_llm_provider")
-        api_base = (kwargs.get("api_base") or "").lower()
+        custom_llm_provider = str(kwargs.get("custom_llm_provider") or "").strip().lower()
+        api_base_value = kwargs.get("api_base")
+        api_base = kwargs.get("api_base").strip().lower() if isinstance(api_base_value, str) else ""
         force_streaming = (
             custom_llm_provider == "openai"
             and "snowflakecomputing.com" in api_base
