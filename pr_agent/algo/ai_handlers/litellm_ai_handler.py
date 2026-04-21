@@ -446,9 +446,22 @@ class LiteLLMAIHandler(BaseAiHandler):
         Wrapper that automatically handles streaming for required models.
         """
         model = kwargs["model"]
-        if model in self.streaming_required_models:
+        custom_llm_provider = kwargs.get("custom_llm_provider")
+        api_base = (kwargs.get("api_base") or "").lower()
+        force_streaming = (
+            custom_llm_provider == "openai"
+            and "snowflakecomputing.com" in api_base
+        )
+
+        # Some OpenAI-compatible endpoints can return an empty-string
+        # finish_reason on non-streaming responses, which LiteLLM rejects during
+        # response normalization. Streaming avoids that conversion path.
+        if model in self.streaming_required_models or force_streaming:
             kwargs["stream"] = True
-            get_logger().info(f"Using streaming mode for model {model}")
+            if force_streaming and model not in self.streaming_required_models:
+                get_logger().info(f"Using streaming mode for model {model} due to OpenAI-compatible endpoint compatibility")
+            else:
+                get_logger().info(f"Using streaming mode for model {model}")
             response = await acompletion(**kwargs)
             resp, finish_reason = await _handle_streaming_response(response)
             # Create MockResponse for streaming since we don't have the full response object
