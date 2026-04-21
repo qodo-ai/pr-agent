@@ -6,14 +6,25 @@ import pr_agent.algo.ai_handlers.litellm_ai_handler as litellm_handler
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 
 
-def create_mock_settings(custom_llm_provider=None):
+def create_mock_settings(
+    custom_llm_provider=None,
+    force_streaming_custom_llm_provider="openai",
+    force_streaming_api_base_substrings=None,
+):
+    if force_streaming_api_base_substrings is None:
+        force_streaming_api_base_substrings = ["snowflakecomputing.com"]
+
     litellm_settings = type("", (), {"get": lambda self, key, default=None: default})()
     if custom_llm_provider is not None:
         litellm_settings.custom_llm_provider = custom_llm_provider
+    litellm_settings.force_streaming_custom_llm_provider = force_streaming_custom_llm_provider
+    litellm_settings.force_streaming_api_base_substrings = force_streaming_api_base_substrings
 
     def get_value(key, default=None):
         values = {
             "LITELLM.CUSTOM_LLM_PROVIDER": custom_llm_provider,
+            "LITELLM.FORCE_STREAMING_CUSTOM_LLM_PROVIDER": force_streaming_custom_llm_provider,
+            "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS": force_streaming_api_base_substrings,
         }
         return values.get(key, default)
 
@@ -168,6 +179,34 @@ async def test_openai_compatible_endpoint_ignores_non_string_api_base(monkeypatc
             messages=[],
             timeout=120,
             api_base=123,
+            custom_llm_provider="openai",
+        )
+
+        call_kwargs = mock_completion.call_args[1]
+        assert "stream" not in call_kwargs
+
+
+@pytest.mark.asyncio
+async def test_force_streaming_is_settings_driven(monkeypatch):
+    fake_settings = create_mock_settings(
+        "openai",
+        force_streaming_custom_llm_provider="openai",
+        force_streaming_api_base_substrings=["example-gateway.local"],
+    )
+    monkeypatch.setattr(litellm_handler, "get_settings", lambda: fake_settings)
+
+    with patch(
+        "pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+        new_callable=AsyncMock,
+    ) as mock_completion:
+        mock_completion.return_value = create_mock_acompletion_response()
+
+        handler = LiteLLMAIHandler()
+        await handler._get_completion(
+            model="claude-sonnet-4-5",
+            messages=[],
+            timeout=120,
+            api_base="https://example-account.snowflakecomputing.com/api/v2/cortex/v1",
             custom_llm_provider="openai",
         )
 
