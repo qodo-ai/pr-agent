@@ -449,9 +449,15 @@ class LiteLLMAIHandler(BaseAiHandler):
         custom_llm_provider = str(kwargs.get("custom_llm_provider") or "").strip().lower()
         api_base_value = kwargs.get("api_base")
         api_base = kwargs.get("api_base").strip().lower() if isinstance(api_base_value, str) else ""
+        force_streaming_provider = str(get_settings().get("LITELLM.FORCE_STREAMING_CUSTOM_LLM_PROVIDER", "") or "").strip().lower()
+        force_streaming_api_base_substrings = [
+            str(value).strip().lower()
+            for value in (get_settings().get("LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS", []) or [])
+            if str(value).strip()
+        ]
         force_streaming = (
-            custom_llm_provider == "openai"
-            and "snowflakecomputing.com" in api_base
+            custom_llm_provider == force_streaming_provider
+            and any(substring in api_base for substring in force_streaming_api_base_substrings)
         )
 
         # Some OpenAI-compatible endpoints can return an empty-string
