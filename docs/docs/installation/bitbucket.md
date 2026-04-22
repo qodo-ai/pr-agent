@@ -71,6 +71,8 @@ docker build . -t codiumai/pr-agent:bitbucket_server_webhook --target bitbucket_
 docker push codiumai/pr-agent:bitbucket_server_webhook  # Push to your Docker repository
 ```
 
+If you override `BASE_IMAGE`, ensure the base image includes `python` and `apt-get` (Debian/Ubuntu base).
+
 Navigate to `Projects` or `Repositories`, `Settings`, `Webhooks`, `Create Webhook`.
 Fill in the name and URL. For Authentication, select 'None'. Select the 'Pull Request Opened' checkbox to receive that event as a webhook.
 
