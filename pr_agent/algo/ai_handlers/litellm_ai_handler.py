@@ -395,7 +395,9 @@ class LiteLLMAIHandler(BaseAiHandler):
             # Support for custom OpenAI body fields (e.g., Flex Processing)
             kwargs = _process_litellm_extra_body(kwargs)
 
-            custom_llm_provider = get_settings().get("LITELLM.CUSTOM_LLM_PROVIDER", None)
+            custom_llm_provider = str(
+                get_settings().get("LITELLM.CUSTOM_LLM_PROVIDER", "") or ""
+            ).strip().lower()
             if custom_llm_provider:
                 kwargs["custom_llm_provider"] = custom_llm_provider
 
@@ -476,7 +478,10 @@ class LiteLLMAIHandler(BaseAiHandler):
         if model in self.streaming_required_models or force_streaming:
             kwargs["stream"] = True
             if force_streaming and model not in self.streaming_required_models:
-                get_logger().info(f"Using streaming mode for model {model} due to OpenAI-compatible endpoint compatibility")
+                get_logger().info(
+                    f"Using streaming mode for model {model} "
+                    "due to OpenAI-compatible endpoint compatibility"
+                )
             else:
                 get_logger().info(f"Using streaming mode for model {model}")
             response = await acompletion(**kwargs)
