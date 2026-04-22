@@ -396,7 +396,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             kwargs = _process_litellm_extra_body(kwargs)
 
             custom_llm_provider = str(
-                get_settings().get("litellm.custom_llm_provider", "") or ""
+                getattr(get_settings().litellm, "custom_llm_provider", "") or ""
             ).strip().lower()
             if custom_llm_provider:
                 kwargs["custom_llm_provider"] = custom_llm_provider
@@ -452,10 +452,10 @@ class LiteLLMAIHandler(BaseAiHandler):
         api_base_value = kwargs.get("api_base")
         api_base = kwargs.get("api_base").strip().lower() if isinstance(api_base_value, str) else ""
         force_streaming_provider = str(
-            get_settings().get("litellm.force_streaming_custom_llm_provider", "") or ""
+            getattr(get_settings().litellm, "force_streaming_custom_llm_provider", "") or ""
         ).strip().lower()
-        raw_force_streaming_api_base_substrings = get_settings().get(
-            "litellm.force_streaming_api_base_substrings", []
+        raw_force_streaming_api_base_substrings = getattr(
+            get_settings().litellm, "force_streaming_api_base_substrings", []
         )
         if isinstance(raw_force_streaming_api_base_substrings, (list, tuple, set)):
             force_streaming_api_base_substrings = [
