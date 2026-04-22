@@ -464,6 +464,11 @@ class LiteLLMAIHandler(BaseAiHandler):
                 if str(value).strip()
             ]
         else:
+            if raw_force_streaming_api_base_substrings:
+                get_logger().warning(
+                    "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS must be a list, tuple, or set."
+                    "Ignoring invalid value."
+                )
             force_streaming_api_base_substrings = []
         force_streaming = (
             bool(force_streaming_provider)
