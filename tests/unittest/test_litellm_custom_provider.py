@@ -49,19 +49,20 @@ def create_mock_settings(
 
 
 def create_mock_acompletion_response():
-    mock_response = MagicMock()
-    mock_response.__getitem__ = lambda self, key: {
-        "choices": [{"message": {"content": "test"}, "finish_reason": "stop"}]
-    }[key]
-    mock_response.dict.return_value = {
+    response_payload = {
         "choices": [{"message": {"content": "test"}, "finish_reason": "stop"}]
     }
-    return mock_response
+
+    class MockCompletionResponse(dict):
+        def dict(self):
+            return dict(self)
+
+    return MockCompletionResponse(response_payload)
 
 
 @pytest.mark.asyncio
 async def test_custom_llm_provider_is_forwarded_without_rewriting_model(monkeypatch):
-    fake_settings = create_mock_settings("openai")
+    fake_settings = create_mock_settings(" OpenAI ")
     monkeypatch.setattr(litellm_handler, "get_settings", lambda: fake_settings)
 
     with patch(
