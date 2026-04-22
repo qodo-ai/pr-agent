@@ -323,9 +323,6 @@ enable_callbacks = false
 success_callback = []
 failure_callback = []
 service_callback = []
-# custom_llm_provider = "" # Optional: Override LiteLLM provider inference for hosted OpenAI-compatible endpoints
-# force_streaming_custom_llm_provider = "openai" # Optional: provider value that enables forced streaming workaround
-# force_streaming_api_base_substrings = ["snowflakecomputing.com"] # Optional: api_base substrings that trigger forced streaming workaround
 # model_id = "" # Optional: Custom inference profile ID for Amazon Bedrock
 
 [pr_similar_issue]
