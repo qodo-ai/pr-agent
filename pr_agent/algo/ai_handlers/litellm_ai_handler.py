@@ -152,6 +152,25 @@ class LiteLLMAIHandler(BaseAiHandler):
 
         # Models that require streaming
         self.streaming_required_models = STREAMING_REQUIRED_MODELS
+        self.force_streaming_provider = str(
+            getattr(get_settings().litellm, "force_streaming_custom_llm_provider", "") or ""
+        ).strip().lower()
+        raw_force_streaming_api_base_substrings = getattr(
+            get_settings().litellm, "force_streaming_api_base_substrings", []
+        )
+        if isinstance(raw_force_streaming_api_base_substrings, (list, tuple, set)):
+            self.force_streaming_api_base_substrings = [
+                str(value).strip().lower()
+                for value in raw_force_streaming_api_base_substrings
+                if str(value).strip()
+            ]
+        else:
+            if raw_force_streaming_api_base_substrings:
+                get_logger().warning(
+                    "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS must be a list, tuple, or set. "
+                    "Ignoring invalid value."
+                )
+            self.force_streaming_api_base_substrings = []
 
     def prepare_logs(self, response, system, user, resp, finish_reason):
         response_log = response.dict().copy()
@@ -451,30 +470,11 @@ class LiteLLMAIHandler(BaseAiHandler):
         custom_llm_provider = str(kwargs.get("custom_llm_provider") or "").strip().lower()
         api_base_value = kwargs.get("api_base")
         api_base = kwargs.get("api_base").strip().lower() if isinstance(api_base_value, str) else ""
-        force_streaming_provider = str(
-            getattr(get_settings().litellm, "force_streaming_custom_llm_provider", "") or ""
-        ).strip().lower()
-        raw_force_streaming_api_base_substrings = getattr(
-            get_settings().litellm, "force_streaming_api_base_substrings", []
-        )
-        if isinstance(raw_force_streaming_api_base_substrings, (list, tuple, set)):
-            force_streaming_api_base_substrings = [
-                str(value).strip().lower()
-                for value in raw_force_streaming_api_base_substrings
-                if str(value).strip()
-            ]
-        else:
-            if raw_force_streaming_api_base_substrings:
-                get_logger().warning(
-                    "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS must be a list, tuple, or set. "
-                    "Ignoring invalid value."
-                )
-            force_streaming_api_base_substrings = []
         force_streaming = (
-            bool(force_streaming_provider)
-            and custom_llm_provider == force_streaming_provider
-            and bool(force_streaming_api_base_substrings)
-            and any(substring in api_base for substring in force_streaming_api_base_substrings)
+            bool(self.force_streaming_provider)
+            and custom_llm_provider == self.force_streaming_provider
+            and bool(self.force_streaming_api_base_substrings)
+            and any(substring in api_base for substring in self.force_streaming_api_base_substrings)
         )
 
         # Some OpenAI-compatible endpoints can return an empty-string
