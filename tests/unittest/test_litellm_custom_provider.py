@@ -212,3 +212,59 @@ async def test_force_streaming_is_settings_driven(monkeypatch):
 
         call_kwargs = mock_completion.call_args[1]
         assert "stream" not in call_kwargs
+
+
+@pytest.mark.asyncio
+async def test_force_streaming_requires_non_empty_provider_setting(monkeypatch):
+    fake_settings = create_mock_settings(
+        "openai",
+        force_streaming_custom_llm_provider="",
+        force_streaming_api_base_substrings=["snowflakecomputing.com"],
+    )
+    monkeypatch.setattr(litellm_handler, "get_settings", lambda: fake_settings)
+
+    with patch(
+        "pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+        new_callable=AsyncMock,
+    ) as mock_completion:
+        mock_completion.return_value = create_mock_acompletion_response()
+
+        handler = LiteLLMAIHandler()
+        await handler._get_completion(
+            model="claude-sonnet-4-5",
+            messages=[],
+            timeout=120,
+            api_base="https://example-account.snowflakecomputing.com/api/v2/cortex/v1",
+            custom_llm_provider="",
+        )
+
+        call_kwargs = mock_completion.call_args[1]
+        assert "stream" not in call_kwargs
+
+
+@pytest.mark.asyncio
+async def test_force_streaming_ignores_non_collection_substring_setting(monkeypatch):
+    fake_settings = create_mock_settings(
+        "openai",
+        force_streaming_custom_llm_provider="openai",
+        force_streaming_api_base_substrings="snowflakecomputing.com",
+    )
+    monkeypatch.setattr(litellm_handler, "get_settings", lambda: fake_settings)
+
+    with patch(
+        "pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
+        new_callable=AsyncMock,
+    ) as mock_completion:
+        mock_completion.return_value = create_mock_acompletion_response()
+
+        handler = LiteLLMAIHandler()
+        await handler._get_completion(
+            model="claude-sonnet-4-5",
+            messages=[],
+            timeout=120,
+            api_base="https://example-account.snowflakecomputing.com/api/v2/cortex/v1",
+            custom_llm_provider="openai",
+        )
+
+        call_kwargs = mock_completion.call_args[1]
+        assert "stream" not in call_kwargs
