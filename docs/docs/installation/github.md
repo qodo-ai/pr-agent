@@ -409,8 +409,8 @@ If you encounter rate limiting:
       env:
         OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Add fallback models for better reliability
-        config.fallback_models: '["gpt-4o", "gpt-3.5-turbo"]'
+        # Add a fallback model for better reliability
+        config.fallback_models: '["gpt-5.4-mini"]'
         # Increase timeout for slower models
         config.ai_timeout: "300"
         github_action_config.auto_review: "true"
