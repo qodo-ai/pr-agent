@@ -162,7 +162,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             self.force_streaming_api_base_substrings = [
                 str(value).strip().lower()
                 for value in raw_force_streaming_api_base_substrings
-                if str(value).strip()
+                if value is not None and str(value).strip()
             ]
         else:
             if raw_force_streaming_api_base_substrings:
@@ -469,7 +469,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         model = kwargs["model"]
         custom_llm_provider = str(kwargs.get("custom_llm_provider") or "").strip().lower()
         api_base_value = kwargs.get("api_base")
-        api_base = kwargs.get("api_base").strip().lower() if isinstance(api_base_value, str) else ""
+        api_base = api_base_value.strip().lower() if isinstance(api_base_value, str) else ""
         force_streaming = (
             bool(self.force_streaming_provider)
             and custom_llm_provider == self.force_streaming_provider
