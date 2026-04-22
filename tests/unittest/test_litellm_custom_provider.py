@@ -23,8 +23,11 @@ def create_mock_settings(
     def get_value(key, default=None):
         values = {
             "LITELLM.CUSTOM_LLM_PROVIDER": custom_llm_provider,
+            "litellm.custom_llm_provider": custom_llm_provider,
             "LITELLM.FORCE_STREAMING_CUSTOM_LLM_PROVIDER": force_streaming_custom_llm_provider,
+            "litellm.force_streaming_custom_llm_provider": force_streaming_custom_llm_provider,
             "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS": force_streaming_api_base_substrings,
+            "litellm.force_streaming_api_base_substrings": force_streaming_api_base_substrings,
         }
         return values.get(key, default)
 

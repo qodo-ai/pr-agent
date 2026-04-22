@@ -396,7 +396,7 @@ class LiteLLMAIHandler(BaseAiHandler):
             kwargs = _process_litellm_extra_body(kwargs)
 
             custom_llm_provider = str(
-                get_settings().get("LITELLM.CUSTOM_LLM_PROVIDER", "") or ""
+                get_settings().get("litellm.custom_llm_provider", "") or ""
             ).strip().lower()
             if custom_llm_provider:
                 kwargs["custom_llm_provider"] = custom_llm_provider
@@ -452,10 +452,10 @@ class LiteLLMAIHandler(BaseAiHandler):
         api_base_value = kwargs.get("api_base")
         api_base = kwargs.get("api_base").strip().lower() if isinstance(api_base_value, str) else ""
         force_streaming_provider = str(
-            get_settings().get("LITELLM.FORCE_STREAMING_CUSTOM_LLM_PROVIDER", "") or ""
+            get_settings().get("litellm.force_streaming_custom_llm_provider", "") or ""
         ).strip().lower()
         raw_force_streaming_api_base_substrings = get_settings().get(
-            "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS", []
+            "litellm.force_streaming_api_base_substrings", []
         )
         if isinstance(raw_force_streaming_api_base_substrings, (list, tuple, set)):
             force_streaming_api_base_substrings = [
@@ -466,7 +466,7 @@ class LiteLLMAIHandler(BaseAiHandler):
         else:
             if raw_force_streaming_api_base_substrings:
                 get_logger().warning(
-                    "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS must be a list, tuple, or set."
+                    "LITELLM.FORCE_STREAMING_API_BASE_SUBSTRINGS must be a list, tuple, or set. "
                     "Ignoring invalid value."
                 )
             force_streaming_api_base_substrings = []
