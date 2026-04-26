@@ -107,7 +107,7 @@ Use triple quotes to write multi-line instructions. Use bullet points or numbers
 
 ### Repository metadata
 
-PR-Agent can read repository guidance files from your project and inject them into the `/improve` and `/review` prompts. This provides the AI model with context about your project's coding standards, conventions, and best practices.
+PR-Agent can read repository guidance files from your project and inject them into the AI prompts. This provides the AI model with context about your project's coding standards, conventions, and best practices.
 
 To enable this feature, set:
 
@@ -119,6 +119,7 @@ add_repo_metadata = true
 By default, PR-Agent looks for the following files in your repository root:
 
 - [AGENTS.md](https://agents.md/)
+- [QODO.md](https://qodo.ai/)
 - [CLAUDE.md](https://www.anthropic.com/engineering/claude-code-best-practices)
 - GEMINI.md
 - `.github/copilot-instructions.md`

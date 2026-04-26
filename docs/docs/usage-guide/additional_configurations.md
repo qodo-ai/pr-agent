@@ -144,7 +144,7 @@ LANGSMITH_BASE_URL=<url>
 
 ## Bringing additional repository metadata to PR-Agent
 
-To provide PR-Agent tools with additional context about your project, you can enable repository metadata ingestion. When enabled, PR-Agent reads a configurable set of metadata files from the PR's **base branch** (not the head branch) and injects their content into `/review` and `/improve` prompts.
+To provide PR-Agent tools with additional context about your project, you can enable repository metadata ingestion. When enabled, PR-Agent reads a configurable set of metadata files from the PR's **base branch** (not the head branch) and injects their content into all tool prompts.
 
 ```toml
 [config]
@@ -154,6 +154,7 @@ add_repo_metadata = true
 By default, PR-Agent looks for the following files in the repository root:
 
 - [AGENTS.md](https://agents.md/)
+- [QODO.md](https://qodo.ai/)
 - [CLAUDE.md](https://www.anthropic.com/engineering/claude-code-best-practices)
 - GEMINI.md
 - `.github/copilot-instructions.md`
@@ -186,7 +187,7 @@ repo_metadata_max_total_chars = 20000
 
 ### Provider support
 
-Currently, base-branch metadata loading is supported on **GitLab**. On other providers (GitHub, Bitbucket, etc.), PR-Agent will gracefully skip metadata loading without affecting the review or improve flow.
+Currently, base-branch metadata loading is supported on **GitLab**. On other providers (GitHub, Bitbucket, etc.), PR-Agent will gracefully skip metadata loading without affecting the tool flow.
 
 ## Ignoring automatic commands in PRs
 
