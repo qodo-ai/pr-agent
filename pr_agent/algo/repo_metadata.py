@@ -85,25 +85,32 @@ def _truncate_at_newline(content: str, max_chars: int) -> str:
 
 
 def load_repo_metadata(git_provider: "GitProvider") -> str:
+    if hasattr(git_provider, "_repo_metadata"):
+        return git_provider._repo_metadata
+
     cfg = _get_config()
     if not cfg["enabled"]:
+        git_provider._repo_metadata = ""
         return ""
 
     if not hasattr(git_provider, "get_pr_base_branch_name"):
         get_logger().debug(
             "Git provider does not support get_pr_base_branch_name; skipping repo metadata"
         )
+        git_provider._repo_metadata = ""
         return ""
 
     base_branch = git_provider.get_pr_base_branch_name()
     if not base_branch:
         get_logger().debug("No base branch available; skipping repo metadata")
+        git_provider._repo_metadata = ""
         return ""
 
     if not hasattr(git_provider, "get_pr_file_content"):
         get_logger().debug(
             "Git provider does not support get_pr_file_content; skipping repo metadata"
         )
+        git_provider._repo_metadata = ""
         return ""
 
     file_list = cfg["file_list"]
@@ -143,6 +150,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
 
     if not parts:
         get_logger().debug("No repo metadata files found")
+        git_provider._repo_metadata = ""
         return ""
 
     result = "\n\n".join(parts)
@@ -153,6 +161,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
             f"Repo metadata truncated to {max_total_chars} total characters"
         )
 
+    git_provider._repo_metadata = result
     get_logger().info(
         f"Loaded repo metadata: {loaded_count} file(s), {len(result)} characters total"
     )

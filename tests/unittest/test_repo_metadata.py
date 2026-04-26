@@ -271,3 +271,67 @@ class TestPathValidation:
         result = load_repo_metadata(gp)
         assert calls == []
         assert result == ""
+
+
+class TestLoadRepoMetadataCache:
+    """Caching prevents redundant file reads across multiple tool calls."""
+
+    def test_subsequent_call_returns_cached(self, monkeypatch):
+        calls: list[str] = []
+
+        def spy(fp, br):
+            calls.append(fp)
+            return f"content of {fp}"
+
+        gp = type("MockGP", (), {})()
+        gp.get_pr_base_branch_name = lambda: "main"
+        gp.get_pr_file_content = spy
+
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["AGENTS.md", "CLAUDE.md"],
+        )
+
+        first = load_repo_metadata(gp)
+        first_calls = len(calls)
+        assert first_calls == 2
+
+        second = load_repo_metadata(gp)
+        assert second == first
+        assert len(calls) == first_calls  # no additional calls
+
+    def test_disabled_caches_empty(self, monkeypatch):
+        gp = type("MockGP", (), {})()
+        gp.get_pr_base_branch_name = lambda: "main"
+        gp.get_pr_file_content = lambda fp, br: "content"
+
+        # disabled by default
+        result = load_repo_metadata(gp)
+        assert result == ""
+        # second call should also return empty without file reads
+        assert load_repo_metadata(gp) == ""
+
+    def test_cache_is_on_provider_instance(self, monkeypatch):
+        """Two separate provider instances should have independent caches."""
+        gp1 = type("MockGP", (), {})()
+        gp1.get_pr_base_branch_name = lambda: "main"
+        gp1.get_pr_file_content = lambda fp, br: "content-a"
+
+        gp2 = type("MockGP", (), {})()
+        gp2.get_pr_base_branch_name = lambda: "main"
+        gp2.get_pr_file_content = lambda fp, br: "content-b"
+
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["AGENTS.md"],
+        )
+
+        r1 = load_repo_metadata(gp1)
+        r2 = load_repo_metadata(gp2)
+        assert "content-a" in r1
+        assert "content-b" in r2
+        assert r1 != r2
