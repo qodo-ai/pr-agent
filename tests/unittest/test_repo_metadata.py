@@ -3,6 +3,7 @@ from __future__ import annotations
 from pr_agent.algo.repo_metadata import (
     _DEFAULT_FILE_LIST,
     _get_config,
+    _is_safe_repo_file_path,
     _read_file,
     load_repo_metadata,
 )
@@ -214,4 +215,58 @@ class TestLoadRepoMetadata:
 
         gp.get_pr_file_content = faulty
         result = load_repo_metadata(gp)
+        assert result == ""
+
+
+class TestPathValidation:
+    def test_safe_paths_accepted(self):
+        assert _is_safe_repo_file_path("AGENTS.md") is True
+        assert _is_safe_repo_file_path("CLAUDE.md") is True
+        assert _is_safe_repo_file_path("docs/QODO.md") is True
+        assert _is_safe_repo_file_path(".github/copilot-instructions.md") is True
+        assert _is_safe_repo_file_path("some-file.txt") is True
+
+    def test_traversal_rejected(self):
+        assert _is_safe_repo_file_path("../etc/passwd") is False
+        assert _is_safe_repo_file_path("../../secrets.txt") is False
+        assert _is_safe_repo_file_path("foo/../../etc/shadow") is False
+
+    def test_absolute_paths_rejected(self):
+        assert _is_safe_repo_file_path("/etc/passwd") is False
+        assert _is_safe_repo_file_path("/absolute/path.md") is False
+        assert _is_safe_repo_file_path("C:\\Windows\\system32\\config") is False
+        assert _is_safe_repo_file_path("\\leading-backslash") is False
+
+    def test_percent_encoded_rejected(self):
+        assert _is_safe_repo_file_path("%2e%2e/etc/passwd") is False
+        assert _is_safe_repo_file_path("%2e%2e%2fetc%2fpasswd") is False
+        assert _is_safe_repo_file_path("foo/%2e%2e/%2e%2e/etc/shadow") is False
+        assert _is_safe_repo_file_path("%2F etc/passwd") is False
+        assert _is_safe_repo_file_path("%252e%252e/secrets") is False
+
+    def test_empty_and_whitespace_rejected(self):
+        assert _is_safe_repo_file_path("") is False
+        assert _is_safe_repo_file_path("   ") is False
+
+    def test_unsafe_path_not_loaded(self, monkeypatch):
+        """A traversal path in file list must not reach get_pr_file_content."""
+        calls: list[str] = []
+
+        def spy(fp, br):
+            calls.append(fp)
+            return "should not be used"
+
+        gp = type("MockGP", (), {})()
+        gp.get_pr_base_branch_name = lambda: "main"
+        gp.get_pr_file_content = spy
+
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["../secrets.txt", "/etc/passwd"],
+        )
+
+        result = load_repo_metadata(gp)
+        assert calls == []
         assert result == ""

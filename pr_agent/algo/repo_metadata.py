@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import posixpath
+import urllib.parse
 from typing import TYPE_CHECKING
 
 from pr_agent.config_loader import get_settings
@@ -16,6 +18,33 @@ _DEFAULT_FILE_LIST = [
     ".github/copilot-instructions.md",
     "best_practices.md",
 ]
+
+
+def _is_safe_repo_file_path(file_path: str) -> bool:
+    """Reject absolute paths, ``..`` traversal, backslashes, and percent-encoded bypasses."""
+    if not file_path or not file_path.strip():
+        return False
+
+    file_path = urllib.parse.unquote(file_path)
+    if "%" in file_path:
+        return False
+
+    if file_path.startswith(("/", "\\")) or posixpath.isabs(file_path):
+        return False
+    if len(file_path) >= 2 and file_path[1] == ":":
+        return False
+    if "\\" in file_path:
+        return False
+
+    segments = file_path.replace("\\", "/").split("/")
+    if ".." in segments:
+        return False
+
+    normalized = posixpath.normpath(file_path)
+    if normalized.startswith("..") or "/.." in normalized:
+        return False
+
+    return True
 
 
 def _get_config() -> dict:
@@ -88,6 +117,10 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
         if loaded_count >= max_files:
             get_logger().debug(f"Reached max_files limit ({max_files}); stopping metadata loading")
             break
+
+        if not _is_safe_repo_file_path(file_path):
+            get_logger().warning(f"Skipping unsafe metadata file path: '{file_path}'")
+            continue
 
         try:
             content = _read_file(git_provider, file_path, base_branch)
