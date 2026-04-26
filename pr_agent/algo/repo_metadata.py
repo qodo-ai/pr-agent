@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_FILE_LIST = [
     "AGENTS.md",
+    "QODO.md",
     "CLAUDE.md",
     "GEMINI.md",
     ".github/copilot-instructions.md",

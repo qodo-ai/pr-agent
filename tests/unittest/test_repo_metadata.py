@@ -14,6 +14,7 @@ class TestGetConfig:
     def test_default_file_list(self):
         assert _DEFAULT_FILE_LIST == [
             "AGENTS.md",
+            "QODO.md",
             "CLAUDE.md",
             "GEMINI.md",
             ".github/copilot-instructions.md",
