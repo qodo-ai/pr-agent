@@ -1,0 +1,27 @@
+services:
+  pr-agent:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: gitlab_webhook
+    container_name: pr-agent-gitlab
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      CONFIG__GIT_PROVIDER: gitlab
+      GITLAB__URL: ${GITLAB__URL}
+      GITLAB__PERSONAL_ACCESS_TOKEN: ${GITLAB__PERSONAL_ACCESS_TOKEN}
+      GITLAB__SHARED_SECRET: ${GITLAB__SHARED_SECRET}
+      GITLAB__AUTH_TYPE: ${GITLAB__AUTH_TYPE:-oauth_token}
+      GITLAB__SSL_VERIFY: ${GITLAB__SSL_VERIFY:-true}
+
+      OPENAI__API_BASE: ${OPENAI__API_BASE}
+      OPENAI__KEY: ${OPENAI__KEY:-dummy}
+
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./.pr_agent.toml:/app/.pr_agent.toml:ro
