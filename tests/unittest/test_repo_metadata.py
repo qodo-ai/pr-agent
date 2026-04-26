@@ -29,6 +29,11 @@ class TestGetConfig:
         cfg = _get_config()
         assert cfg["enabled"] is True
 
+    def test_null_file_list_fallback(self, monkeypatch):
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata_file_list", None)
+        cfg = _get_config()
+        assert cfg["file_list"] == _DEFAULT_FILE_LIST
+
     def test_custom_file_list(self, monkeypatch):
         custom = ["CUSTOM.md"]
         monkeypatch.setattr(global_settings.config, "add_repo_metadata_file_list", custom)
@@ -130,6 +135,21 @@ class TestLoadRepoMetadata:
         content_chunk = result.split("```markdown\n")[1].split("\n```")[0]
         assert len(content_chunk) == 10
 
+    def test_per_file_truncation_at_newline(self, monkeypatch):
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["AGENTS.md"],
+        )
+        monkeypatch.setattr(global_settings.config, "repo_metadata_max_chars_per_file", 10)
+        gp = self._make_mock_provider({"AGENTS.md": "line one\nline two\nline three"})
+        result = load_repo_metadata(gp)
+        content_chunk = result.split("```markdown\n")[1].split("\n```")[0]
+        assert content_chunk == "line one"
+        assert "\n" not in content_chunk
+        assert len(content_chunk) <= 10
+
     def test_max_files_limit(self, monkeypatch):
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
         monkeypatch.setattr(
@@ -162,6 +182,19 @@ class TestLoadRepoMetadata:
         })
         result = load_repo_metadata(gp)
         assert len(result) <= 50
+
+    def test_total_chars_truncation_at_newline(self, monkeypatch):
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["AGENTS.md"],
+        )
+        monkeypatch.setattr(global_settings.config, "repo_metadata_max_total_chars", 30)
+        gp = self._make_mock_provider({"AGENTS.md": "first line\nsecond line\nthird line"})
+        result = load_repo_metadata(gp)
+        assert len(result) <= 30
+        assert result.endswith("\n")
 
     def test_one_bad_file_doesnt_break_others(self, monkeypatch):
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)

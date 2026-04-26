@@ -21,7 +21,7 @@ _DEFAULT_FILE_LIST = [
 def _get_config() -> dict:
     cfg = get_settings().config
     enabled = cfg.get("add_repo_metadata", False)
-    file_list = cfg.get("add_repo_metadata_file_list", _DEFAULT_FILE_LIST)
+    file_list = cfg.get("add_repo_metadata_file_list", _DEFAULT_FILE_LIST) or _DEFAULT_FILE_LIST
     max_chars_per_file = int(cfg.get("repo_metadata_max_chars_per_file", 4000))
     max_files = int(cfg.get("repo_metadata_max_files", 20))
     max_total_chars = int(cfg.get("repo_metadata_max_total_chars", 20000))
@@ -44,6 +44,14 @@ def _read_file(git_provider: "GitProvider", file_path: str, branch: str) -> str 
             artifact={"error": str(e)},
         )
         return None
+
+
+def _truncate_at_newline(content: str, max_chars: int) -> str:
+    if len(content) <= max_chars:
+        return content
+    truncated = content[:max_chars]
+    last_newline = truncated.rfind("\n")
+    return truncated[:last_newline] if last_newline != -1 else truncated
 
 
 def load_repo_metadata(git_provider: "GitProvider") -> str:
@@ -94,7 +102,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
             continue
 
         if len(content) > max_chars_per_file:
-            content = content[:max_chars_per_file]
+            content = _truncate_at_newline(content, max_chars_per_file)
 
         loaded_count += 1
         parts.append(f"### File: `{file_path}`\n\n```markdown\n{content}\n```")
@@ -106,7 +114,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
     result = "\n\n".join(parts)
 
     if len(result) > max_total_chars:
-        result = result[:max_total_chars]
+        result = _truncate_at_newline(result, max_total_chars)
         get_logger().debug(
             f"Repo metadata truncated to {max_total_chars} total characters"
         )
