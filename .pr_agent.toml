@@ -6,15 +6,11 @@ enable_auto_approval = true
 pr_commands = [
     "/describe --pr_description.publish_description_as_comment=true",
     "/improve",
-    "/agentic_review"
+    "/review"
 ]
 
 handle_push_trigger = true
 push_commands = [
     "/improve",
-    "/agentic_review"
+    "/review"
 ]
-
-[review_agent]
-enabled = true
-publish_output = true
