@@ -62,13 +62,19 @@ Constructing comments:
 
 {%- if extra_instructions %}
 
-
 Extra instructions from the user:
 ======
 {{ extra_instructions }}
 ======
-{% endif %}
+{%- endif %}
 
+{%- if repo_metadata %}
+
+Repository Guidance:
+======
+{{ repo_metadata }}
+======
+{%- endif %}
 
 The output must be a YAML object equivalent to type $PRReview, according to the following Pydantic definitions:
 =====

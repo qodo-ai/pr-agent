@@ -35,14 +35,14 @@ ___
         - Only if the `Category` header is relevant, the user should move to the summarized suggestion description.
         - Only if the summarized suggestion description is relevant, the user should click on the collapsible, to read the full suggestion description with a code preview example.
 
-    - In addition, we recommend to use the [`extra_instructions`](../tools/improve.md#extra-instructions-and-best-practices) field to guide the model to suggestions that are more relevant to the specific needs of the project.
+    - In addition, we recommend to use the [`extra_instructions`](../tools/improve.md#extra-instructions-and-repository-metadata) field to guide the model to suggestions that are more relevant to the specific needs of the project.
 
 ___
 
 ??? note "Q: How can I get more tailored suggestions?"
     #### Answer:<span style="display:none;">3</span>
 
-    See [here](../tools/improve.md#extra-instructions-and-best-practices) for more information on how to use the `extra_instructions` and `best_practices` configuration options, to guide the model to more tailored suggestions.
+    See [here](../tools/improve.md#extra-instructions-and-repository-metadata) for more information on how to use `extra_instructions` and repository metadata, to guide the model to more tailored suggestions.
 
 ___
 

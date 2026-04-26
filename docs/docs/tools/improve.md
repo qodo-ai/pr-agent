@@ -82,9 +82,9 @@ Teams with specific preferences can enable committable code comments mode in the
 > `Note - due to platform limitations, Bitbucket cloud and server supports only committable code comments mode.`
 
 
-## `Extra instructions` and `best practices`
+## `Extra instructions` and repository metadata
 
-The `improve` tool can be further customized by providing additional instructions and best practices to the AI model.
+The `improve` tool can be further customized by providing additional instructions and repository context to the AI model.
 
 ### Extra instructions
 
@@ -105,29 +105,53 @@ extra_instructions="""\
 
 Use triple quotes to write multi-line instructions. Use bullet points or numbers to make the instructions more readable.
 
-### Best practices
+### Repository metadata
 
-`Platforms supported: GitHub, GitLab, Bitbucket`
+PR-Agent can read repository guidance files from your project and inject them into the `/improve` and `/review` prompts. This provides the AI model with context about your project's coding standards, conventions, and best practices.
 
-PR-Agent supports both simple and hierarchical best practices configurations to provide guidance to the AI model for generating relevant code suggestions.
+To enable this feature, set:
 
-???- tip "Writing effective best practices files"
-    
-    The following guidelines apply to all best practices files:
-    
+```toml
+[config]
+add_repo_metadata = true
+```
+
+By default, PR-Agent looks for the following files in your repository root:
+
+- [AGENTS.md](https://agents.md/)
+- [CLAUDE.md](https://www.anthropic.com/engineering/claude-code-best-practices)
+- GEMINI.md
+- `.github/copilot-instructions.md`
+- `best_practices.md`
+
+You can customize which files to read:
+
+```toml
+[config]
+add_repo_metadata_file_list = ["AGENTS.md", "best_practices.md", "CONTRIBUTING.md"]
+```
+
+To control token usage, configure character limits:
+
+```toml
+[config]
+repo_metadata_max_chars_per_file = 4000
+repo_metadata_max_files = 20
+repo_metadata_max_total_chars = 20000
+```
+
+???- tip "Writing effective metadata files"
+
     - Write clearly and concisely
     - Include brief code examples when helpful with before/after patterns
-    - Focus on project-specific guidelines that will result in relevant suggestions you actually want to get
-    - Keep each file relatively short, under 800 lines, since:
-        - AI models may not process effectively very long documents
-        - Long files tend to contain generic guidelines already known to AI
-        - Maximum multiple file accumulated content is limited to 2000 lines.
+    - Focus on project-specific guidelines that will result in relevant suggestions
+    - Keep each file relatively short, since AI models may not process very long documents effectively
     - Use pattern-based structure rather than simple bullet points for better clarity
 
 ???- tip "Example of a best practices file"
- 
+
     Pattern 1: Add proper error handling with try-except blocks around external function calls.
-    
+
     Example code before:
 
     ```python
@@ -146,7 +170,7 @@ PR-Agent supports both simple and hierarchical best practices configurations to 
     ```
 
     Pattern 2: Add defensive null/empty checks before accessing object properties or performing operations on potentially null variables to prevent runtime errors.
-    
+
     Example code before:
 
     ```python
@@ -167,19 +191,13 @@ PR-Agent supports both simple and hierarchical best practices configurations to 
         return ""
     ```
 
-#### Local best practices
+### Combining 'extra instructions' and repository metadata
 
-For basic usage, create a `best_practices.md` file in your repository's root directory containing a list of best practices, coding standards, and guidelines specific to your repository.
+The `extra instructions` configuration is more related to the tool prompt. It can be used, for example, to avoid specific suggestions ("Don't suggest to add try-except block", "Ignore changes in toml files", ...) or to emphasize specific aspects or formats ("Answer in Japanese", "Give only short suggestions", ...).
 
-The AI model will use this `best_practices.md` file as a reference, and in case the PR code violates any of the guidelines, it will create additional suggestions, with a dedicated label: `Organization best practice`.
+In contrast, repository metadata files provide general guidelines for how code should be written in the repo.
 
-### Combining 'extra instructions' and 'best practices'
-
-The `extra instructions` configuration is more related to the `improve` tool prompt. It can be used, for example, to avoid specific suggestions ("Don't suggest to add try-except block", "Ignore changes in toml files", ...) or to emphasize specific aspects or formats ("Answer in Japanese", "Give only short suggestions", ...)
-
-In contrast, the `best_practices.md` file is a general guideline for the way code should be written in the repo.
-
-Using a combination of both can help the AI model to provide relevant and tailored suggestions.
+Using a combination of both can help the AI model provide relevant and tailored suggestions.
 
 ## Usage Tips
 
@@ -342,5 +360,5 @@ Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 line
     - **Self-reflection:** The suggestions aim to enable developers to _self-reflect_ and improve their pull requests. This process can help to identify blind spots, uncover missed edge cases, and enhance code readability and coherency. Even when a specific code suggestion isn't suitable, the underlying issue it highlights often reveals something important that might deserve attention.
     - **Bug detection:** The suggestions also alert on any _critical bugs_ that may have been identified during the analysis. This provides an additional safety net to catch potential issues before they make it into production. It's perfectly acceptable to implement only the suggestions you find valuable for your specific context.
 - **Hierarchy:** Presenting the suggestions in a structured hierarchical table enables the user to _quickly_ understand them, and to decide which ones are relevant and which are not.
-- **Customization:** To guide the model to suggestions that are more relevant to the specific needs of your project, we recommend using the [`extra_instructions`](./improve.md#extra-instructions-and-best-practices) and [`best practices`](./improve.md#best-practices) fields.
+- **Customization:** To guide the model to suggestions that are more relevant to the specific needs of your project, we recommend using the [`extra_instructions`](./improve.md#extra-instructions-and-repository-metadata) and [`repository metadata`](./improve.md#repository-metadata) features.
 - **Model Selection:** For specific programming languages or use cases, some models may perform better than others.

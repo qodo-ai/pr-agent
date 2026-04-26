@@ -75,13 +75,19 @@ Specific guidelines for generating code suggestions:
 
 {%- if extra_instructions %}
 
-
 Extra user-provided instructions (should be addressed with high priority):
 ======
 {{ extra_instructions }}
 ======
 {%- endif %}
 
+{%- if relevant_best_practices %}
+
+Repository Guidance:
+======
+{{ relevant_best_practices }}
+======
+{%- endif %}
 
 The output must be a YAML object equivalent to type $PRCodeSuggestions, according to the following Pydantic definitions:
 =====

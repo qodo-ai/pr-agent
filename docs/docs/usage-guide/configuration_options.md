@@ -91,7 +91,7 @@ Create a dedicated project to hold a global configuration file that affects all 
 1. Create a new project with both the name and key: PR_AGENT_SETTINGS.
 2. Inside the PR_AGENT_SETTINGS project, create a repository named pr-agent-settings.
 3. In this repository, add a `.pr_agent.toml` configuration file—structured similarly to the global configuration file described above.
-4. Optionally, you can add organizational-level [global best practices](../tools/improve.md#global-hierarchical-best-practices).
+4. Optionally, you can enable [repository metadata](../tools/improve.md#repository-metadata) by setting `add_repo_metadata = true` under `[config]`.
 
 Repositories across your entire Bitbucket organization will inherit the configuration from this file.
 

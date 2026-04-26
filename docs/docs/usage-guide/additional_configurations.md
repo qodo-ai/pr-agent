@@ -144,24 +144,49 @@ LANGSMITH_BASE_URL=<url>
 
 ## Bringing additional repository metadata to PR-Agent
 
-To provide PR-Agent tools with additional context about your project, you can enable automatic repository metadata detection. 
-
-If you set:
+To provide PR-Agent tools with additional context about your project, you can enable repository metadata ingestion. When enabled, PR-Agent reads a configurable set of metadata files from the PR's **base branch** (not the head branch) and injects their content into `/review` and `/improve` prompts.
 
 ```toml
 [config]
 add_repo_metadata = true
 ```
 
-PR-Agent automatically searches for repository metadata files in your PR's head branch root directory. By default, it looks for:
-[AGENTS.MD](https://agents.md/), [QODO.MD](https://docs.codium.ai/qodo-documentation/qodo-command/getting-started/setup-and-quickstart), [CLAUDE.MD](https://www.anthropic.com/engineering/claude-code-best-practices).
+By default, PR-Agent looks for the following files in the repository root:
 
-You can also specify custom filenames to search for:
+- [AGENTS.md](https://agents.md/)
+- [CLAUDE.md](https://www.anthropic.com/engineering/claude-code-best-practices)
+- GEMINI.md
+- `.github/copilot-instructions.md`
+- `best_practices.md`
+
+### Customizing the file list
+
+You can specify custom filenames to search for:
 
 ```toml
 [config]
-add_repo_metadata_file_list= ["file1.md", "file2.md", ...]
+add_repo_metadata_file_list = ["file1.md", "file2.md", ...]
 ```
+
+### Controlling token usage
+
+To prevent large files from consuming the entire context window, PR-Agent enforces per-file and total character limits:
+
+```toml
+[config]
+# Maximum characters read per file (default: 4000)
+repo_metadata_max_chars_per_file = 4000
+
+# Maximum number of files to load (default: 20)
+repo_metadata_max_files = 20
+
+# Maximum total characters across all files (default: 20000)
+repo_metadata_max_total_chars = 20000
+```
+
+### Provider support
+
+Currently, base-branch metadata loading is supported on **GitLab**. On other providers (GitHub, Bitbucket, etc.), PR-Agent will gracefully skip metadata loading without affecting the review or improve flow.
 
 ## Ignoring automatic commands in PRs
 

@@ -12,7 +12,7 @@ PR-Agent initially retrieves for each PR the following data:
 - The entire content of the files that were modified in the PR
 
 !!! tip "Tip: Organization-level metadata"
-    In addition to the inputs above, PR-Agent can incorporate supplementary preferences provided by the user, like [`extra_instructions` and `organization best practices`](../tools/improve.md#extra-instructions-and-best-practices). This information can be used to enhance the PR analysis.
+    In addition to the inputs above, PR-Agent can incorporate supplementary preferences provided by the user, like [`extra_instructions` and repository metadata](../tools/improve.md#extra-instructions-and-repository-metadata). This information can be used to enhance the PR analysis.
 
 2\.
 By default, the first command that PR-Agent executes is [`describe`](../tools/describe.md), which generates three types of outputs:

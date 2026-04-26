@@ -70,6 +70,22 @@ extract_issue_from_branch = true
 # followed by hyphen or end (e.g. feature/1-test, 123-fix). GitHub only; other providers planned for later.
 branch_issue_regex = ""
 
+# Repository guidance / context file ingestion.  When enabled, PR-Agent reads
+# a configurable set of metadata files (AGENTS.md, CLAUDE.md, best_practices.md,
+# …) from the PR base branch and injects their compact content into both /review
+# and /improve prompts.
+add_repo_metadata = false
+add_repo_metadata_file_list = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".github/copilot-instructions.md",
+    "best_practices.md",
+]
+repo_metadata_max_chars_per_file = 4000
+repo_metadata_max_files = 20
+repo_metadata_max_total_chars = 20000
+
 
 [pr_reviewer] # /review #
 # enable/disable features
@@ -351,19 +367,6 @@ uri = "./lancedb"
 # fill and place credentials in .secrets.toml
 # url = "https://YOUR-QDRANT-URL"
 # api_key = "..."
-
-[best_practices]
-content = ""
-organization_name = ""
-max_lines_allowed = 800
-enable_global_best_practices = false
-
-[auto_best_practices]
-enable_auto_best_practices = true # public - general flag to disable all auto best practices usage
-utilize_auto_best_practices = true # public - disable usage of auto best practices in the 'improve' tool
-extra_instructions = "" # public - extra instructions to the auto best practices generation prompt
-content = ""
-max_patterns = 5 # max number of patterns to be detected
 
 [azure_devops]
 default_comment_status = "closed"
