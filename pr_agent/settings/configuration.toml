@@ -71,12 +71,13 @@ extract_issue_from_branch = true
 branch_issue_regex = ""
 
 # Repository guidance / context file ingestion.  When enabled, PR-Agent reads
-# a configurable set of metadata files (AGENTS.md, CLAUDE.md, best_practices.md,
+# a configurable set of metadata files (AGENTS.md, QODO.md, CLAUDE.md, best_practices.md,
 # …) from the PR base branch and injects their compact content into both /review
 # and /improve prompts.
 add_repo_metadata = false
 add_repo_metadata_file_list = [
     "AGENTS.md",
+    "QODO.md",
     "CLAUDE.md",
     "GEMINI.md",
     ".github/copilot-instructions.md",
