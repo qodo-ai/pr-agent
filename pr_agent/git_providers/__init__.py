@@ -48,20 +48,20 @@ def get_git_provider_with_context(pr_url) -> GitProvider:
     except Exception:
         pass  # we are not in a context environment (CLI)
 
-    # check if context["git_provider"]["pr_url"] exists
-    if is_context_env and context.get("git_provider", {}).get("pr_url", {}):
-        git_provider = context["git_provider"]["pr_url"]
-        # possibly check if the git_provider is still valid, or if some reset is needed
-        # ...
+    if is_context_env:
+        git_providers = context.get("git_provider", {})
+        if pr_url in git_providers:
+            return git_providers[pr_url]
+
+    try:
+        provider_id = get_settings().config.git_provider
+        if provider_id not in _GIT_PROVIDERS:
+            raise ValueError(f"Unknown git provider: {provider_id}")
+        git_provider = _GIT_PROVIDERS[provider_id](pr_url)
+        if is_context_env:
+            git_providers = context.get("git_provider") or {}
+            git_providers[pr_url] = git_provider
+            context["git_provider"] = git_providers
         return git_provider
-    else:
-        try:
-            provider_id = get_settings().config.git_provider
-            if provider_id not in _GIT_PROVIDERS:
-                raise ValueError(f"Unknown git provider: {provider_id}")
-            git_provider = _GIT_PROVIDERS[provider_id](pr_url)
-            if is_context_env:
-                context["git_provider"] = {pr_url: git_provider}
-            return git_provider
-        except Exception as e:
-            raise ValueError(f"Failed to get git provider for {pr_url}") from e
+    except Exception as e:
+        raise ValueError(f"Failed to get git provider for {pr_url}") from e

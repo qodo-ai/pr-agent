@@ -85,12 +85,17 @@ def _truncate_at_newline(content: str, max_chars: int) -> str:
 
 
 def load_repo_metadata(git_provider: "GitProvider") -> str:
-    if hasattr(git_provider, "_repo_metadata"):
-        return git_provider._repo_metadata
+    cached = getattr(git_provider, "_repo_metadata", None)
+    cached_pr_url = getattr(git_provider, "_repo_metadata_pr_url", None)
+    current_pr_url = git_provider.get_pr_url()
+
+    if cached is not None and cached_pr_url == current_pr_url:
+        return cached
 
     cfg = _get_config()
     if not cfg["enabled"]:
         git_provider._repo_metadata = ""
+        git_provider._repo_metadata_pr_url = current_pr_url
         return ""
 
     if not hasattr(git_provider, "get_pr_base_branch_name"):
@@ -98,12 +103,14 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
             "Git provider does not support get_pr_base_branch_name; skipping repo metadata"
         )
         git_provider._repo_metadata = ""
+        git_provider._repo_metadata_pr_url = current_pr_url
         return ""
 
     base_branch = git_provider.get_pr_base_branch_name()
     if not base_branch:
         get_logger().debug("No base branch available; skipping repo metadata")
         git_provider._repo_metadata = ""
+        git_provider._repo_metadata_pr_url = current_pr_url
         return ""
 
     if not hasattr(git_provider, "get_pr_file_content"):
@@ -111,6 +118,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
             "Git provider does not support get_pr_file_content; skipping repo metadata"
         )
         git_provider._repo_metadata = ""
+        git_provider._repo_metadata_pr_url = current_pr_url
         return ""
 
     file_list = cfg["file_list"]
@@ -151,6 +159,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
     if not parts:
         get_logger().debug("No repo metadata files found")
         git_provider._repo_metadata = ""
+        git_provider._repo_metadata_pr_url = current_pr_url
         return ""
 
     result = "\n\n".join(parts)
@@ -162,6 +171,7 @@ def load_repo_metadata(git_provider: "GitProvider") -> str:
         )
 
     git_provider._repo_metadata = result
+    git_provider._repo_metadata_pr_url = current_pr_url
     get_logger().info(
         f"Loaded repo metadata: {loaded_count} file(s), {len(result)} characters total"
     )

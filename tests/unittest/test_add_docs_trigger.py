@@ -38,6 +38,7 @@ async def test_add_docs_trigger(monkeypatch, action, draft, state, should_run):
             self.publish_code_suggestions = lambda suggestions: True
             self.diff_files = []
             self.get_repo_settings = lambda: {}
+            self.get_pr_url = lambda: pr_url
 
     # Patch Git provider lookups
     monkeypatch.setattr(

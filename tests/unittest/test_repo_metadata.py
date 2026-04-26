@@ -67,10 +67,11 @@ class TestReadFile:
 
 
 class TestLoadRepoMetadata:
-    def _make_mock_provider(self, files: dict[str, str]) -> object:
+    def _make_mock_provider(self, files: dict[str, str], pr_url: str = "https://github.com/org/repo/pull/1") -> object:
         mp = type("MockGP", (), {})()
         mp.get_pr_base_branch_name = lambda: "main"
         mp.get_pr_file_content = lambda fp, br: files.get(fp, "")
+        mp.get_pr_url = lambda: pr_url
         return mp
 
     def test_disabled_returns_empty(self, monkeypatch):
@@ -82,12 +83,14 @@ class TestLoadRepoMetadata:
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
         mock_gp = type("MockGP", (), {})()
         mock_gp.get_pr_base_branch_name = lambda: ""
+        mock_gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
         assert load_repo_metadata(mock_gp) == ""
 
     def test_missing_provider_method_returns_empty(self, monkeypatch):
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
         mock_gp = type("MockGP", (), {})()
         mock_gp.get_pr_base_branch_name = lambda: "main"
+        mock_gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
         assert load_repo_metadata(mock_gp) == ""
 
     def test_no_files_found(self, monkeypatch):
@@ -260,6 +263,7 @@ class TestPathValidation:
         gp = type("MockGP", (), {})()
         gp.get_pr_base_branch_name = lambda: "main"
         gp.get_pr_file_content = spy
+        gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
 
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
         monkeypatch.setattr(
@@ -286,6 +290,7 @@ class TestLoadRepoMetadataCache:
         gp = type("MockGP", (), {})()
         gp.get_pr_base_branch_name = lambda: "main"
         gp.get_pr_file_content = spy
+        gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
 
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
         monkeypatch.setattr(
@@ -306,6 +311,7 @@ class TestLoadRepoMetadataCache:
         gp = type("MockGP", (), {})()
         gp.get_pr_base_branch_name = lambda: "main"
         gp.get_pr_file_content = lambda fp, br: "content"
+        gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
 
         # disabled by default
         result = load_repo_metadata(gp)
@@ -318,10 +324,12 @@ class TestLoadRepoMetadataCache:
         gp1 = type("MockGP", (), {})()
         gp1.get_pr_base_branch_name = lambda: "main"
         gp1.get_pr_file_content = lambda fp, br: "content-a"
+        gp1.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
 
         gp2 = type("MockGP", (), {})()
         gp2.get_pr_base_branch_name = lambda: "main"
         gp2.get_pr_file_content = lambda fp, br: "content-b"
+        gp2.get_pr_url = lambda: "https://github.com/org/repo/pull/2"
 
         monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
         monkeypatch.setattr(
@@ -335,3 +343,60 @@ class TestLoadRepoMetadataCache:
         assert "content-a" in r1
         assert "content-b" in r2
         assert r1 != r2
+
+    def test_same_pr_cache_hit(self, monkeypatch):
+        """Metadata cache hits when PR URL is unchanged."""
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["AGENTS.md"],
+        )
+
+        calls: list[str] = []
+
+        def spy(fp, br):
+            calls.append(fp)
+            return f"content for {fp}"
+
+        gp = type("MockGP", (), {})()
+        gp.get_pr_base_branch_name = lambda: "main"
+        gp.get_pr_file_content = spy
+        gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
+
+        first = load_repo_metadata(gp)
+        assert len(calls) == 1
+
+        second = load_repo_metadata(gp)
+        assert second == first
+        assert len(calls) == 1  # no additional reads
+
+    def test_cross_pr_cache_invalidated(self, monkeypatch):
+        """Metadata cache invalidates when PR URL changes on same provider instance."""
+        monkeypatch.setattr(global_settings.config, "add_repo_metadata", True)
+        monkeypatch.setattr(
+            global_settings.config,
+            "add_repo_metadata_file_list",
+            ["AGENTS.md"],
+        )
+
+        calls: list[str] = []
+
+        def spy(fp, br):
+            calls.append(fp)
+            return f"content for {fp}"
+
+        gp = type("MockGP", (), {})()
+        gp.get_pr_base_branch_name = lambda: "main"
+        gp.get_pr_file_content = spy
+        gp.get_pr_url = lambda: "https://github.com/org/repo/pull/1"
+
+        first = load_repo_metadata(gp)
+        assert len(calls) == 1
+        assert "content for AGENTS.md" in first
+
+        # Simulate provider reused for different PR
+        gp.get_pr_url = lambda: "https://github.com/org/repo/pull/2"
+        second = load_repo_metadata(gp)
+        assert len(calls) == 2  # reloaded
+        assert second == first  # same file content, but re-read
