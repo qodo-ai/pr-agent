@@ -9,6 +9,7 @@ from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.algo.git_patch_processing import (
     decouple_and_convert_to_hunks_with_lines_numbers, extract_hunk_lines_from_patch)
 from pr_agent.algo.pr_processing import get_pr_diff, retry_with_fallback_models
+from pr_agent.algo.repo_metadata import load_repo_metadata
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import ModelType
 from pr_agent.config_loader import get_settings
@@ -35,7 +36,8 @@ class PR_LineQuestions:
             "question": self.question_str,
             "full_hunk": "",
             "selected_lines": "",
-            "conversation_history": "",  
+            "conversation_history": "",
+            "repo_metadata": load_repo_metadata(self.git_provider),
         }
         self.token_handler = TokenHandler(self.git_provider.pr,
                                           self.vars,

@@ -17,6 +17,14 @@ Extra instructions from the user:
 {{ extra_instructions|trim }}
 ======
 {%- endif %}
+
+{%- if repo_metadata %}
+
+Repository Guidance:
+======
+{{ repo_metadata }}
+======
+{%- endif %}
 """
 
 user="""PR Info:

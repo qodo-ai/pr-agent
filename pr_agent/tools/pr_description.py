@@ -14,6 +14,7 @@ from pr_agent.algo.pr_processing import (OUTPUT_BUFFER_TOKENS_HARD_THRESHOLD,
                                          get_pr_diff,
                                          get_pr_diff_multiple_patchs,
                                          retry_with_fallback_models)
+from pr_agent.algo.repo_metadata import load_repo_metadata
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (ModelType, PRDescriptionHeader, clip_tokens,
                                  get_max_tokens, get_user_labels, load_yaml,
@@ -75,6 +76,7 @@ class PRDescription:
             "include_file_summary_changes": len(self.git_provider.get_diff_files()) <= self.COLLAPSIBLE_FILE_LIST_THRESHOLD,
             "duplicate_prompt_examples": get_settings().config.get("duplicate_prompt_examples", False),
             "enable_pr_diagram": enable_pr_diagram,
+            "repo_metadata": load_repo_metadata(self.git_provider),
         }
 
         self.user_description = self.git_provider.get_user_description()

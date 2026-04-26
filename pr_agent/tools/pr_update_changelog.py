@@ -9,6 +9,7 @@ from jinja2 import Environment, StrictUndefined
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.algo.pr_processing import get_pr_diff, retry_with_fallback_models
+from pr_agent.algo.repo_metadata import load_repo_metadata
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import ModelType, show_relevant_configurations
 from pr_agent.config_loader import get_settings
@@ -46,6 +47,7 @@ class PRUpdateChangelog:
             "today": date.today(),
             "extra_instructions": get_settings().pr_update_changelog.extra_instructions,
             "commit_messages_str": self.git_provider.get_commit_messages(),
+            "repo_metadata": load_repo_metadata(self.git_provider),
         }
         self.token_handler = TokenHandler(self.git_provider.pr,
                                           self.vars,

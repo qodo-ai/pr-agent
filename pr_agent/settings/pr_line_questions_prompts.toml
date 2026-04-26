@@ -10,6 +10,14 @@ Additional guidelines:
 - If relevant, use bullet points.
 - Be short and to the point.
 
+{%- if repo_metadata %}
+
+Repository Guidance:
+======
+{{ repo_metadata }}
+======
+{%- endif %}
+
 Example Hunk Structure:
 ======
 ## File: 'src/file1.py'
