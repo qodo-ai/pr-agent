@@ -28,6 +28,7 @@ from pr_agent.algo.utils import (
     get_max_tokens,
     get_user_labels,
     load_yaml,
+    push_outputs,
     set_custom_labels,
     show_relevant_configurations,
     show_run_details,
@@ -177,6 +178,9 @@ class PRDescription:
                 pr_body += show_run_details(self.git_provider.is_supported("gfm_markdown"))
 
             if get_settings().config.publish_output:
+                # Emit to the optional external sinks before touching the provider, so a sink
+                # still receives the description if publishing it to the PR fails.
+                push_outputs("describe", payload=self.data or {}, markdown=pr_body)
 
                 # publish labels
                 if get_settings().pr_description.publish_labels and pr_labels and self.git_provider.is_supported("get_labels"):

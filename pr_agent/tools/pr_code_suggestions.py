@@ -37,6 +37,7 @@ from pr_agent.algo.utils import (
     get_max_tokens,
     get_model,
     load_yaml,
+    push_outputs,
     replace_code_tags,
     show_relevant_configurations,
     show_run_details,
@@ -69,6 +70,40 @@ def get_suggestions_score_threshold() -> int:
 
 def get_dual_publishing_score_threshold() -> int:
     return _as_threshold("pr_code_suggestions.dual_publishing_score_threshold", 0, 0)
+
+
+def render_suggestions_markdown(data: dict) -> str:
+    """Render the suggestions as plain markdown, for a sink that is not a git provider.
+
+    `generate_summarized_suggestions` builds a GFM table wrapped in <table>/<details> HTML and is
+    only produced for providers that support gfm_markdown. Slack and Telegram render neither, so
+    the sinks get this instead: a flat list that survives being read as plain text.
+    """
+    suggestions = data.get("code_suggestions") or []
+    lines = []
+    for suggestion in suggestions:
+        if not isinstance(suggestion, dict):
+            continue
+        location = str(suggestion.get("relevant_file") or "").strip() or "(file not reported)"
+        start = suggestion.get("relevant_lines_start")
+        end = suggestion.get("relevant_lines_end")
+        if start and end:
+            location += f":{start}-{end}" if start != end else f":{start}"
+        header = f"**{location}**"
+        label = str(suggestion.get("label") or "").strip()
+        if label:
+            header += f" — {label}"
+        score = suggestion.get("score")
+        if score not in (None, ""):
+            header += f" (score {score})"
+        lines.append(header)
+        summary = str(suggestion.get("one_sentence_summary") or suggestion.get("suggestion_content") or "").strip()
+        if summary:
+            lines.append(summary)
+        lines.append("")
+    if not lines:
+        return "## PR Code Suggestions\n\nNo suggestions to report."
+    return "## PR Code Suggestions\n\n" + "\n".join(lines).strip()
 
 
 def _supports_code_suggestion_state(git_provider) -> bool:
@@ -272,6 +307,9 @@ class PRCodeSuggestions:
 
             # publish the suggestions
             if get_settings().config.publish_output:
+                # Emit to the optional external sinks before touching the provider, so a sink
+                # still receives the suggestions if publishing them to the PR fails.
+                push_outputs("improve", payload=data, markdown=render_suggestions_markdown(data))
                 # If a temporary comment was published, remove it
                 self.git_provider.remove_initial_comment()
 
