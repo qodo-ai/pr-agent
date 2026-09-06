@@ -972,7 +972,10 @@ def _fix_key_value(key: str, value: str):
     try:
         value = yaml.safe_load(value)
     except Exception as e:
-        get_logger().debug(f"Failed to parse YAML for config override {key}={value}", exc_info=e)
+        # The message stays literal: loguru formats it whenever a payload is passed, and an
+        # override value is free text that routinely contains braces.
+        get_logger().debug("Failed to parse a config override as YAML; keeping the raw string",
+                           artifact={"key": key, "error": str(e)})
     return key, value
 
 
