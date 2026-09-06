@@ -105,7 +105,6 @@ class GiteaProvider(GitProvider):
             )
 
             self.sha = self.pr.head.sha if self.pr.head.sha else ""
-            self.__add_file_content()
             self.__add_file_diff()
             self._set_pr_commits()
             self.base_sha = self.pr.base.sha if self.pr.base.sha else ""
@@ -582,6 +581,7 @@ class GiteaProvider(GitProvider):
         # those settings exist). This matches the other providers, which filter
         # lazily inside their diff fetch. See #2620.
         self.git_files = filter_ignored(self.git_files, platform="gitea")
+        self.__add_file_content()
 
         invalid_files_names = []
         counter_valid = 0
