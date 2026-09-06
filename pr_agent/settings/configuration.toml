@@ -66,6 +66,10 @@ ignore_pr_target_branches = [] # a list of regular expressions of target branche
 ignore_pr_source_branches = [] # a list of regular expressions of source branches to ignore from PR agent when an PR is created
 ignore_pr_labels = [] # labels to ignore from PR agent when an PR is created
 ignore_pr_authors = [] # authors to ignore from PR agent when an PR is created
+# Mark the PR head commit as soon as an automatic command starts, so the author sees that
+# PR-Agent picked the pull request up before any output exists. Off by default.
+publish_run_status = false
+run_status_context = "pr-agent" # the status name shown on the commit
 ignore_repositories = [] # a list of regular expressions of repository full names (e.g. "org/repo") to ignore from PR agent processing
 ignore_language_framework = [] # a list of code-generation languages or frameworks (e.g. 'protobuf', 'go_gen') whose auto-generated source files will be excluded from analysis
 # Substring indicators used to skip bot users on webhook events. Currently consumed by

@@ -1225,6 +1225,24 @@ class GithubProvider(GitProvider):
     def get_workspace_name(self):
         return self.repo.split('/')[0]
 
+    # GitHub truncates a commit-status description at 140 characters.
+    MAX_STATUS_DESCRIPTION = 140
+
+    def publish_run_status(self, state: str, description: str) -> bool:
+        if not getattr(self, "last_commit_id", None):
+            get_logger().warning("Cannot publish a run status without a commit SHA")
+            return False
+        try:
+            self._get_repo().get_commit(self.last_commit_id.sha).create_status(
+                state=state,
+                description=description[:self.MAX_STATUS_DESCRIPTION],
+                context=get_settings().get("config.run_status_context", "pr-agent"),
+            )
+            return True
+        except Exception as e:
+            get_logger().warning(f"Failed to publish the {state} run status: {e}")
+            return False
+
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
         if disable_eyes:
             return None
