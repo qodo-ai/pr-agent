@@ -134,8 +134,12 @@ async def handle_comments_on_pr(body: Dict[str, Any],
     with get_logger().contextualize(**log_context):
         if get_identity_provider().verify_eligibility("github", sender_id, api_url) is not Eligibility.NOT_ELIGIBLE:
             get_logger().info(f"Processing comment on PR {api_url=}, comment_body={comment_body}")
-            await agent.handle_request(api_url, comment_body,
-                        notify=lambda: provider.add_eyes_reaction(comment_id, disable_eyes=disable_eyes))
+            succeeded = await agent.handle_request(
+                api_url, comment_body,
+                notify=lambda: provider.add_eyes_reaction(comment_id, disable_eyes=disable_eyes))
+            # Optional, and disabled by default: tell the author how the command ended without
+            # adding another comment to the thread.
+            provider.react_to_outcome(comment_id, bool(succeeded))
         else:
             get_logger().info(f"User {sender=} is not eligible to process comment on PR {api_url=}")
 
