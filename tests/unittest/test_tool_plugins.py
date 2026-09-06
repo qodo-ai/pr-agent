@@ -8,7 +8,6 @@ from types import SimpleNamespace
 
 import pytest
 
-import pr_agent.algo.tool_plugins as plugins
 from pr_agent.algo.tool_plugins import allowed_distributions, load_tool_plugins, plugins_enabled
 from pr_agent.algo.tool_registry import Tool, get_tool_registry
 from pr_agent.config_loader import get_settings
@@ -47,7 +46,7 @@ def plugin_config(monkeypatch):
 @pytest.fixture
 def discovered(monkeypatch):
     def _set(*entry_points):
-        monkeypatch.setattr(plugins, "entry_points", lambda group=None: list(entry_points))
+        monkeypatch.setattr("pr_agent.algo.tool_plugins.entry_points", lambda group=None: list(entry_points))
     return _set
 
 
@@ -125,7 +124,7 @@ def test_unreadable_entry_points_are_not_fatal(monkeypatch, plugin_config):
     def explode(group=None):
         raise RuntimeError("metadata is corrupt")
 
-    monkeypatch.setattr(plugins, "entry_points", explode)
+    monkeypatch.setattr("pr_agent.algo.tool_plugins.entry_points", explode)
 
     assert load_tool_plugins() == []
 
