@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import pr_agent.tools.pr_update_changelog as changelog_module
 from pr_agent.config_loader import get_settings
 from pr_agent.tools.pr_update_changelog import PRUpdateChangelog, strip_wrapping_code_fence
 
@@ -55,6 +54,10 @@ def test_the_existing_changelog_is_kept_below_the_new_entry():
     ("```\n- Handle `None`\n```", "- Handle `None`"),
     ("```markdown\n- Handle `None`\n```", "- Handle `None`"),
     ("  ```md\n- one\n- two\n```  ", "- one\n- two"),
+    # The prompt ends with a dangling open "```markdown", so this is what the model usually
+    # sends: a closing fence and no opening one. It is still the wrapper.
+    ("- Added foo\n- Fixed `bar()`\n```", "- Added foo\n- Fixed `bar()`"),
+    ("## 2026-09-06\n- Handle `None`\n```", "## 2026-09-06\n- Handle `None`"),
 ])
 def test_a_wrapping_fence_is_removed(fenced, expected):
     assert strip_wrapping_code_fence(fenced) == expected
@@ -83,7 +86,7 @@ def test_the_commit_hint_is_appended_when_not_committing():
 @pytest.fixture
 def committing_tool(monkeypatch):
     """The real push path, with only the provider and the 5s settle sleep replaced."""
-    monkeypatch.setattr(changelog_module, "sleep", lambda seconds: None)
+    monkeypatch.setattr("pr_agent.tools.pr_update_changelog.sleep", lambda seconds: None)
     monkeypatch.setattr(get_settings().config, "git_provider", "local", raising=False)
     provider = MagicMock()
     provider.get_pr_branch.return_value = "feature/retry"

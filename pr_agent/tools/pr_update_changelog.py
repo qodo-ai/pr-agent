@@ -18,8 +18,10 @@ from pr_agent.git_providers.git_provider import get_main_pr_language
 from pr_agent.log import get_logger
 
 CHANGELOG_LINES = 50
-# A whole answer wrapped in one fenced block, e.g. "```markdown\n...\n```".
-_WRAPPING_CODE_FENCE_RE = re.compile(r"\A\s*```[^\n]*\n(?P<body>.*?)\n?```\s*\Z", re.DOTALL)
+# A whole answer wrapped in one fenced block, e.g. "```markdown\n...\n```". The opening fence
+# is optional: the prompt ends with a dangling open "```markdown", which primes the model to
+# answer with a closing fence and no opening one.
+_WRAPPING_CODE_FENCE_RE = re.compile(r"\A\s*(?:```[^\n]*\n)?(?P<body>.*?)\n?```\s*\Z", re.DOTALL)
 
 
 def strip_wrapping_code_fence(text: str) -> str:
