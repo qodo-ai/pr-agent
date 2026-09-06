@@ -1,6 +1,6 @@
 ## Overview
 
-The `review` tool scans the PR code changes, and generates feedback about the PR, aiming to aid the reviewing process.
+Generate a PR review with feedback on possible issues, security concerns, tests and review effort.
 <br>
 The tool can be triggered automatically every time a new PR is [opened](../usage-guide/automations_and_usage.md#github-app-automatic-tools-when-a-new-pr-is-opened), or can be invoked manually by commenting on any PR:
 

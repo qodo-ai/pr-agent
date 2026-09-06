@@ -1,6 +1,6 @@
 ## Overview
 
-The `describe` tool scans the PR code changes, and generates a description for the PR - title, type, summary, walkthrough and labels.
+Generate a PR title, type, summary, code walkthrough and labels.
 
 The tool can be triggered automatically every time a new PR is [opened](../usage-guide/automations_and_usage.md#github-app-automatic-tools-when-a-new-pr-is-opened), or it can be invoked manually by commenting on any PR:
 
