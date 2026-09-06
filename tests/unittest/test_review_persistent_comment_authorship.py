@@ -19,7 +19,6 @@ from unittest.mock import MagicMock
 import pytest
 from github import GithubException
 
-import pr_agent.tools.pr_reviewer as reviewer_module
 from pr_agent.algo.review_finding_state import append_review_state, reconcile_review_findings
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 from pr_agent.algo.utils import PRReviewHeader, PRReviewIdentity, add_pr_review_identity
@@ -164,9 +163,9 @@ def _github_provider(monkeypatch, deployment_type, comments, bot_login, user_log
 
 
 def _wire_reviewer(monkeypatch, provider):
-    monkeypatch.setattr(reviewer_module, "get_git_provider_with_context", lambda url: provider)
-    monkeypatch.setattr(reviewer_module, "build_repo_context", lambda git_provider: "")
-    monkeypatch.setattr(reviewer_module, "get_skills_context", lambda: "")
+    monkeypatch.setattr("pr_agent.tools.pr_reviewer.get_git_provider_with_context", lambda url: provider)
+    monkeypatch.setattr("pr_agent.tools.pr_reviewer.build_repo_context", lambda git_provider: "")
+    monkeypatch.setattr("pr_agent.tools.pr_reviewer.get_skills_context", lambda: "")
 
     async def no_tickets(git_provider, vars):
         return None
@@ -174,9 +173,9 @@ def _wire_reviewer(monkeypatch, provider):
     async def direct_model(f, model_type=None):
         return await f("gpt-4o")
 
-    monkeypatch.setattr(reviewer_module, "extract_and_cache_pr_tickets", no_tickets)
-    monkeypatch.setattr(reviewer_module, "get_pr_diff", lambda *args, **kwargs: (DIFF, []))
-    monkeypatch.setattr(reviewer_module, "retry_with_fallback_models", direct_model)
+    monkeypatch.setattr("pr_agent.tools.pr_reviewer.extract_and_cache_pr_tickets", no_tickets)
+    monkeypatch.setattr("pr_agent.tools.pr_reviewer.get_pr_diff", lambda *args, **kwargs: (DIFF, []))
+    monkeypatch.setattr("pr_agent.tools.pr_reviewer.retry_with_fallback_models", direct_model)
 
 
 @pytest.fixture
@@ -352,3 +351,66 @@ def test_unusable_key_issues_are_dropped_without_discarding_the_rest():
 def test_missing_key_issue_collection_still_fails_closed():
     assert PRReviewer._review_findings_from_data({"review": {}}) is None
     assert PRReviewer._review_findings_from_data({"review": {"key_issues_to_review": {"a": 1}}}) is None
+
+
+# --------------------------------------------------------------------------------------
+# A failed app-login resolution must not poison the rest of the request.
+#
+# `github_app` runs several commands against one provider instance. Caching the empty result
+# of a timed-out `GET /app` would demote every command after the first, which is the exact
+# behaviour this change exists to remove.
+# --------------------------------------------------------------------------------------
+def test_a_transient_app_login_failure_is_retried(monkeypatch):
+    monkeypatch.setattr(GithubProvider, "_get_github_client", lambda self: MagicMock())
+    provider = GithubProvider(pr_url=None)
+    provider.deployment_type = "app"
+    monkeypatch.setattr(get_settings(), "github", SimpleNamespace(
+        app_id="1", private_key="key", deployment_type="app"), raising=False)
+    attempts = []
+
+    def integration(**kwargs):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("connection reset")
+        return SimpleNamespace(get_app=lambda: SimpleNamespace(slug="pr-agent"))
+
+    monkeypatch.setattr("pr_agent.git_providers.github_provider.GithubIntegration", integration)
+
+    assert provider._resolve_app_login() == ""
+    assert provider._resolve_app_login() == "pr-agent[bot]"
+    assert len(attempts) == 2
+
+
+def test_a_resolved_app_login_is_cached(monkeypatch):
+    """Control: the successful answer is still resolved once per provider instance."""
+    monkeypatch.setattr(GithubProvider, "_get_github_client", lambda self: MagicMock())
+    provider = GithubProvider(pr_url=None)
+    provider.deployment_type = "app"
+    monkeypatch.setattr(get_settings(), "github", SimpleNamespace(
+        app_id="1", private_key="key", deployment_type="app"), raising=False)
+    attempts = []
+
+    def integration(**kwargs):
+        attempts.append(1)
+        return SimpleNamespace(get_app=lambda: SimpleNamespace(slug="pr-agent"))
+
+    monkeypatch.setattr("pr_agent.git_providers.github_provider.GithubIntegration", integration)
+
+    assert provider._resolve_app_login() == "pr-agent[bot]"
+    assert provider._resolve_app_login() == "pr-agent[bot]"
+    assert len(attempts) == 1
+
+
+def test_an_app_that_never_resolves_stays_unproven(monkeypatch):
+    """Control: the conservative outcome is unchanged when the JWT route is unavailable."""
+    monkeypatch.setattr(GithubProvider, "_get_github_client", lambda self: MagicMock())
+    provider = GithubProvider(pr_url=None)
+    provider.deployment_type = "app"
+    monkeypatch.setattr(get_settings(), "github", SimpleNamespace(
+        app_id="1", private_key="key", deployment_type="app"), raising=False)
+    monkeypatch.setattr("pr_agent.git_providers.github_provider.GithubIntegration",
+                        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("no private key")))
+
+    assert provider._agent_login() == ""
+    with pytest.raises(RuntimeError):
+        provider.is_comment_authored_by_pr_agent(SimpleNamespace(user=SimpleNamespace(login="someone")))

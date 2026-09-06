@@ -456,9 +456,8 @@ class GithubProvider(GitProvider):
         not depend on PR-Agent having already commented on the pull request.
         """
         cached = getattr(self, "_app_login", None)
-        if isinstance(cached, str):
+        if isinstance(cached, str) and cached:
             return cached
-        self._app_login = ""
         try:
             integration = GithubIntegration(
                 integration_id=str(get_settings().github.app_id),
@@ -467,16 +466,30 @@ class GithubProvider(GitProvider):
             )
             slug = (getattr(integration.get_app(), "slug", "") or "").strip()
             if slug:
+                # Only a success is cached. Caching the failure too would let one timed-out
+                # `GET /app` demote every later command in the same request, which is the
+                # behaviour this change exists to remove.
                 self._app_login = f"{slug}[bot]"
+                return self._app_login
         except Exception as e:
             get_logger().warning(f"Could not resolve the GitHub App login: {e}")
-        return self._app_login
+        return ""
 
     def _resolve_user_login(self) -> str:
         """Return the authenticated login, falling back to the Actions bot identity.
 
-        The workflow token cannot call `GET /user`, but every comment it posts is
-        authored by `github-actions[bot]`.
+        The workflow token cannot call `GET /user`, but every comment it posts is authored by
+        `github-actions[bot]`.
+
+        This fallback is a deliberate widening, and the one place where the identity is assumed
+        rather than read: inside a GitHub Actions run the workflow token is the only credential
+        PR-Agent has, so a comment marked as PR-Agent's and authored by `github-actions[bot]`
+        will be edited. Anything else in the same workflow that posts under the workflow token -
+        another action, another step - shares that identity. The exposure is bounded by the
+        identity marker (the comment must already carry PR-Agent's own marker) and by the fact
+        that GitHub reserves the `[bot]` suffix, so no human account can hold this login. It
+        applies only when `GITHUB_ACTIONS=true` and `GET /user` failed; a deployment that can
+        resolve its real login never reaches it.
         """
         try:
             login = self.get_user_id()
