@@ -20,22 +20,9 @@ GITHUB_TICKET_PATTERN = re.compile(
 # Option A: issue number at start of branch or after /, followed by - or end (e.g. feature/1-test-issue, 123-fix)
 BRANCH_ISSUE_PATTERN = re.compile(r"(?:^|/)(\d{1,6})(?=-|$)")
 # A bare "#12345" is as likely to be an error code as an issue, so a shorthand reference is
-# only followed up to this many digits. Repositories whose issue numbers have outgrown the
-# default raise `config.max_shorthand_issue_digits`.
-DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS = 4
-
-
-def get_max_shorthand_issue_digits() -> int:
-    """Read the shorthand-reference bound, falling back to the default when unusable."""
-    value = get_settings().get("config.max_shorthand_issue_digits", DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS)
-    try:
-        digits = int(value)
-    except (TypeError, ValueError):
-        get_logger().warning(
-            f"config.max_shorthand_issue_digits is not a number ({value!r}); "
-            f"using {DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS}")
-        return DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS
-    return digits if digits > 0 else DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS
+# only followed up to this many digits. The bound matches BRANCH_ISSUE_PATTERN above: the same
+# number written in a branch name and in the description should resolve the same way.
+MAX_SHORTHAND_ISSUE_DIGITS = 6
 
 
 def find_jira_tickets(text):
@@ -354,7 +341,7 @@ def extract_ticket_links_from_pr_description(pr_description, repo_path, base_url
             else:  # #123 format
                 issue_number = match[5][1:]  # remove #
                 if (issue_number.isdigit() and repo_path
-                        and len(issue_number) <= get_max_shorthand_issue_digits()):
+                        and len(issue_number) <= MAX_SHORTHAND_ISSUE_DIGITS):
                     _add(f"{base_url_html.strip('/')}/{repo_path}/issues/{issue_number}")
 
         if len(github_tickets) > MAX_GITHUB_TICKETS:

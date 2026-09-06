@@ -1,16 +1,14 @@
-"""How far a bare `#123` reference is followed is a per-repository decision.
+"""A bare `#123` reference is followed to the same depth as one in a branch name.
 
-A bare number is as likely to be an error code as an issue, so the default bound stays at
-four digits. Repositories whose issue numbers have outgrown that raise the bound instead of
-losing ticket compliance for every `Fixes #12345`.
+`BRANCH_ISSUE_PATTERN` already accepts up to six digits, so `123456-fix` as a branch resolves
+while `#123456` in the description did not. The two now agree.
 """
 import pytest
 
-from pr_agent.config_loader import get_settings
 from pr_agent.tools.ticket_pr_compliance_check import (
-    DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS,
+    BRANCH_ISSUE_PATTERN,
+    MAX_SHORTHAND_ISSUE_DIGITS,
     extract_ticket_links_from_pr_description,
-    get_max_shorthand_issue_digits,
 )
 
 REPO = "org/repo"
@@ -21,52 +19,39 @@ def _links(description):
     return extract_ticket_links_from_pr_description(description, REPO, BASE)
 
 
-@pytest.fixture
-def max_digits(monkeypatch):
-    def _set(value):
-        monkeypatch.setattr(get_settings().config, "max_shorthand_issue_digits", value, raising=False)
-    return _set
-
-
-@pytest.mark.parametrize("number", ["1", "42", "999", "1234"])
-def test_a_short_reference_is_extracted_by_default(number):
+@pytest.mark.parametrize("number", ["1", "42", "999", "1234", "12345", "123456"])
+def test_a_shorthand_reference_is_extracted(number):
     assert _links(f"Fixes #{number}") == [f"{BASE}/{REPO}/issues/{number}"]
 
 
-@pytest.mark.parametrize("number", ["12345", "123456"])
-def test_a_long_reference_is_ignored_by_default(number):
-    """Control: the shipped bound is unchanged, so nothing new is followed."""
-    assert _links(f"Fixes #{number}") == []
+@pytest.mark.parametrize("number", ["1234567", "12345678", "20260906"])
+def test_a_number_too_long_to_be_an_issue_is_ignored(number):
+    """Control: the guard against mistaking an error code for an issue is still there."""
+    assert _links(f"Related to #{number}") == []
 
 
-@pytest.mark.parametrize("number", ["12345", "123456", "1234567"])
-def test_a_long_reference_is_extracted_once_the_bound_is_raised(max_digits, number):
-    max_digits(7)
-
+@pytest.mark.parametrize("number", ["1", "1234", "123456"])
+def test_the_bound_agrees_with_the_branch_name_pattern(number):
+    """The inconsistency this fixes: the same number, written two ways, resolving differently."""
+    assert BRANCH_ISSUE_PATTERN.search(f"feature/{number}-fix") is not None
     assert _links(f"Fixes #{number}") == [f"{BASE}/{REPO}/issues/{number}"]
 
 
-def test_the_bound_still_applies_once_raised(max_digits):
-    max_digits(5)
-
-    assert _links("Fixes #12345") == [f"{BASE}/{REPO}/issues/12345"]
-    assert _links("Fixes #123456") == []
+def test_the_bound_matches_the_branch_pattern_by_construction():
+    assert MAX_SHORTHAND_ISSUE_DIGITS == 6
+    assert BRANCH_ISSUE_PATTERN.search("feature/1234567-fix") is None
 
 
-@pytest.mark.parametrize("value", ["not a number", None, "", 0, -3])
-def test_an_unusable_bound_falls_back_to_the_default(max_digits, value):
-    max_digits(value)
+def test_several_references_keep_their_order():
+    links = _links("Fixes #12345, closes #7 and #98765")
 
-    assert get_max_shorthand_issue_digits() == DEFAULT_MAX_SHORTHAND_ISSUE_DIGITS
-    assert _links("Fixes #1234") == [f"{BASE}/{REPO}/issues/1234"]
-    assert _links("Fixes #12345") == []
+    assert links == [f"{BASE}/{REPO}/issues/12345",
+                     f"{BASE}/{REPO}/issues/7",
+                     f"{BASE}/{REPO}/issues/98765"]
 
 
-def test_a_numeric_string_bound_is_accepted(max_digits):
-    """Environment overrides arrive as strings."""
-    max_digits("6")
-
-    assert _links("Fixes #123456") == [f"{BASE}/{REPO}/issues/123456"]
+def test_a_repeated_reference_is_listed_once():
+    assert _links("Fixes #12345 and again #12345") == [f"{BASE}/{REPO}/issues/12345"]
 
 
 def test_a_full_url_is_not_bounded():
