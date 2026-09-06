@@ -161,6 +161,11 @@ async def handle_new_pr_opened(body: Dict[str, Any],
             get_logger().info(f"User {sender=} is not eligible to process PR {api_url=}")
 
 
+def publish_run_status() -> bool:
+    """Whether the operator asked for a commit status while automatic commands run."""
+    return bool(get_settings().get("config.publish_run_status", False))
+
+
 def _normalise_setting_list(value):
     if value is None:
         return []
@@ -530,13 +535,24 @@ async def _perform_auto_commands_github(commands_conf: str, agent: PRAgent, body
         get_logger().info(f"No {commands_conf} configured, skipping auto commands")
         return
     get_settings().set("config.is_auto_command", True)
+    provider = get_git_provider_with_context(pr_url=api_url) if publish_run_status() else None
+    if provider is not None:
+        # The first thing the author sees: the pull request was picked up, before the model answered.
+        provider.publish_run_status("pending", f"PR-Agent is running {len(commands)} command(s)")
+    succeeded = True
     for command in commands:
         try:
             new_command = prepare_command(command)
             get_logger().info(f"{commands_conf}. Performing auto command '{new_command}', for {api_url=}")
-            await agent.handle_request(api_url, new_command)
+            if not await agent.handle_request(api_url, new_command):
+                succeeded = False
         except Exception as e:
+            succeeded = False
             get_logger().error(f"Failed to perform command {command}: {e}")
+    if provider is not None:
+        provider.publish_run_status(
+            "success" if succeeded else "failure",
+            "PR-Agent finished" if succeeded else "PR-Agent could not finish every command")
 
 
 @router.get("/")
