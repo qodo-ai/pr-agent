@@ -16,11 +16,16 @@
 # reach internal endpoints (SSRF), or append to arbitrary host files. The whole section is
 # therefore host-only (empty allowlist -> every key dropped).
 #
+# tools: decides which host-side functions a model may call, and a tool reaches the network or
+# the host filesystem. Letting a repository enable one, or widen the allowlist, would turn PR
+# content into a way to reach the host, so the whole section is host-only.
+#
 # prompt_fragments: contains Jinja source rendered by the host before it is inserted into tool
 # prompts. Keep the whole section host-only so repository settings and comment arguments cannot
 # supply executable template expressions.
 REPO_OVERRIDABLE_KEYS_BY_HOST_SECTION = {
     "skills": frozenset({"enabled", "max_skills_tokens"}),
+    "tools": frozenset(),
     "push_outputs": frozenset(),
     "prompt_fragments": frozenset(),
 }
