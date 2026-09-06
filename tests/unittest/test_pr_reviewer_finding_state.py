@@ -732,7 +732,7 @@ async def test_run_publishes_state_transition_even_when_review_has_no_suggestion
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr("pr_agent.tools.pr_reviewer.extract_and_cache_pr_tickets", fake_extract_tickets)
@@ -768,7 +768,7 @@ async def test_invalid_history_updates_persistent_comment_without_fallback(monke
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr("pr_agent.tools.pr_reviewer.extract_and_cache_pr_tickets", fake_extract_tickets)
@@ -803,7 +803,7 @@ async def test_non_marker_state_block_publishes_without_overwriting_state(monkey
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr("pr_agent.tools.pr_reviewer.extract_and_cache_pr_tickets", fake_extract_tickets)
@@ -1019,7 +1019,7 @@ async def test_review_publish_uses_shared_full_signature_for_authorship(monkeypa
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr(
@@ -1229,7 +1229,7 @@ def _patch_run_dependencies(monkeypatch, reviewer):
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr(

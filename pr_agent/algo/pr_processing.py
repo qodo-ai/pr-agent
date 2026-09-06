@@ -11,6 +11,7 @@ from pr_agent.algo.git_patch_processing import (
     handle_patch_deletions,
 )
 from pr_agent.algo.language_handler import sort_files_by_main_languages
+from pr_agent.algo.model_routing import route_primary_model
 from pr_agent.algo.run_details import record_model_used
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.types import EDIT_TYPE
@@ -331,9 +332,14 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
     return total_tokens, patches, remaining_files_list_new, files_in_patch_list
 
 
-async def retry_with_fallback_models(f: Callable, model_type: ModelType = ModelType.REGULAR):
+async def retry_with_fallback_models(f: Callable, model_type: ModelType = ModelType.REGULAR,
+                                     git_provider: GitProvider | None = None):
     all_models = _get_all_models(model_type)
     all_deployments = _get_all_deployments(all_models)
+    routed = route_primary_model(model_type, git_provider)
+    if routed:
+        # A cheaper primary for a small pull request; config.fallback_models still follow it.
+        all_models[0], all_deployments[0] = routed
     original_deployment_id = get_settings().get("openai.deployment_id", None)
     try:
         # try each (model, deployment_id) pair until one is successful, otherwise raise exception

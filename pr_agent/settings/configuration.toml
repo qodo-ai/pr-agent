@@ -449,6 +449,16 @@ reasoning_effort = ""
 reasoning_max_tokens = 0
 max_tokens = 0 # hard cap on completion tokens for the request; 0 = unset
 
+[model_routing] # send a small pull request to a cheaper primary model (disabled by default)
+# Rules are checked in order; the first one whose limits the pull request fits selects the primary model for the
+# call, and config.fallback_models still apply after it. A pull request that fits no rule uses config.model.
+# Size is measured after the [ignore] rules by diff hunks (max_hunks) and changed files (max_files), which every
+# git provider reports and which do not depend on any model's tokenizer. Only calls that ask for the regular model
+# are routed (/review, /improve, /generate_labels, /add_docs); tools that use model_weak are left alone.
+# With Azure (openai.deployment_id set) a rule also needs its own deployment_id, or it is skipped.
+enable = false
+rules = [] # e.g. [{ max_hunks = 3, model = "gpt-5.6-luna" }, { max_hunks = 15, max_files = 6, model = "gpt-5.6-terra" }]
+
 [otel]
 # Keys map to settings.get("OTEL.*") via section-key dot notation.
 is_enabled = false # disabled by default; set to true to enable telemetry

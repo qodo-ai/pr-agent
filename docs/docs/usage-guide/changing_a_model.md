@@ -11,6 +11,7 @@ fallback_models = ["..."]
 ```
 
 To see which of these models actually handled a given PR, enable `config.output_run_details` (see [Additional configurations](./additional_configurations.md#showing-the-agent-run-details)).
+To send small pull requests to a cheaper model, see [Routing small pull requests to a cheaper model](#routing-small-pull-requests-to-a-cheaper-model).
 
 For models and environments not from OpenAI, you might need to provide additional keys and other parameters.
 You can give parameters via a configuration file, or from environment variables.
@@ -711,3 +712,36 @@ When Claude extended thinking is enabled, `extended_thinking_max_output_tokens` 
 For models with small context windows, keep in mind that prompt and completion tokens share the
 model's context window: size `config.max_model_tokens` so the packed prompt leaves room for the
 configured output limit.
+
+## Routing small pull requests to a cheaper model
+
+`config.model` handles every pull request, however small. With model routing enabled, a pull request under a
+configured size goes to a cheaper model instead, and `config.fallback_models` still apply after it:
+
+```toml
+[model_routing]
+enable = true
+
+[[model_routing.rules]]
+max_hunks = 3
+model = "gpt-5.6-luna"
+
+[[model_routing.rules]]
+max_hunks = 15
+max_files = 6
+model = "gpt-5.6-terra"
+```
+
+Rules are checked in order, and the first one whose limits the pull request fits selects the primary model for
+the call. A pull request that fits no rule uses `config.model`. Size is measured by the number of diff hunks
+(`max_hunks`) and changed files (`max_files`) left after the `[ignore]` rules. Every git provider reports both,
+and neither depends on a model's tokenizer, so a threshold means the same thing whichever model it selects.
+
+Routing applies only to calls that ask for the regular model: `/review`, `/improve`, `/generate_labels` and
+`/add_docs`. Tools that already use `config.model_weak` (`/describe`, `/ask`, `/update_changelog`) are left
+alone, and a dedicated `config.model_reasoning` is still used for self-reflection. With `config.output_run_details`
+enabled, the run details show which model a routed pull request ended up on.
+
+!!! note "Azure deployments"
+    An Azure deployment is tied to one model, so when `openai.deployment_id` is set each rule also needs its own
+    `deployment_id`. A rule without one is skipped with a warning and the configured primary model is used.
