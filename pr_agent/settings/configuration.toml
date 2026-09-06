@@ -66,6 +66,9 @@ ignore_pr_target_branches = [] # a list of regular expressions of target branche
 ignore_pr_source_branches = [] # a list of regular expressions of source branches to ignore from PR agent when an PR is created
 ignore_pr_labels = [] # labels to ignore from PR agent when an PR is created
 ignore_pr_authors = [] # authors to ignore from PR agent when an PR is created
+# A bare "#123" in a description is only followed as an issue reference up to this many
+# digits; raise it for repositories whose issue numbers have outgrown the default.
+max_shorthand_issue_digits = 4
 ignore_repositories = [] # a list of regular expressions of repository full names (e.g. "org/repo") to ignore from PR agent processing
 ignore_language_framework = [] # a list of code-generation languages or frameworks (e.g. 'protobuf', 'go_gen') whose auto-generated source files will be excluded from analysis
 # Substring indicators used to skip bot users on webhook events. Currently consumed by
