@@ -325,6 +325,11 @@ class PRReviewer:
                     persistent_write_failed = not self._persistent_publish_succeeded(result)
                     if persistent_write_failed:
                         review_failed = True
+                elif self._persistent_review_comment_exists() is False:
+                    # There is no review comment to replace, so creating one cannot overwrite
+                    # a comment PR-Agent did not author. An identity this deployment cannot
+                    # resolve is not a reason to demote the canonical review.
+                    self.git_provider.publish_persistent_comment(pr_review, **persistent_args)
                 else:
                     # An unverified provider identity must never update a canonical review.
                     self.git_provider.publish_comment(
@@ -448,6 +453,27 @@ class PRReviewer:
             and implementation is not GitProvider.supports_review_finding_state
         )
 
+    def _persistent_review_comment_exists(self) -> Optional[bool]:
+        """Whether a comment already carries the full-review identity.
+
+        Returns None when the provider's comments could not be read at all, so a caller
+        that must not overwrite an existing review can stay conservative.
+        """
+        provider = getattr(self, "git_provider", None)
+        if provider is None:
+            return None
+        try:
+            for _comment, _body in GitProvider._iter_persistent_comments(
+                provider,
+                get_pr_review_comment_identifiers(full=True, incremental=False),
+                identity_marker=PRReviewIdentity.REGULAR.value,
+            ):
+                return True
+            return False
+        except Exception as error:
+            get_logger().warning(f"Could not read the existing review comments: {error}")
+            return None
+
     def _review_comment_authorship_available(self) -> bool:
         provider = getattr(self, "git_provider", None)
         if provider is None:
@@ -538,7 +564,12 @@ class PRReviewer:
         for issue in issues:
             finding = cls._review_finding_from_issue(issue)
             if finding is None:
-                return None
+                # A key issue without a file or a body cannot be tracked across runs, but the
+                # review summary still renders it; dropping the entry keeps the lifecycle state
+                # of every other finding instead of discarding the whole review.
+                get_logger().debug("Skipping a key issue that carries no trackable location",
+                                   artifact={"issue": issue})
+                continue
             findings.append(finding)
         return findings
 
@@ -611,12 +642,19 @@ class PRReviewer:
             max_findings = int(get_settings().pr_reviewer.num_max_findings)
         except (TypeError, ValueError):
             max_findings = 0
+        reported_issues = data["review"].get("key_issues_to_review")
+        dropped_findings = (
+            isinstance(reported_issues, list)
+            and len(current_findings) < len(reported_issues)
+        )
         allow_resolution = (
             bool(self.prediction)
             and not bool(getattr(self.incremental, "is_incremental", False))
             and not bool(self.remaining_files_list)
             and parsed.valid
             and current_findings is not None
+            # a dropped finding is not an absent one, so this run cannot resolve anything
+            and not dropped_findings
             and len(current_findings) < max_findings
         )
         result = reconcile_review_findings(
