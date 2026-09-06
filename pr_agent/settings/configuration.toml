@@ -142,6 +142,33 @@ enable_review_coverage_footer=true
 enable_large_pr_chunking=false
 max_number_of_calls=3 # maximum number of chunk review calls, used only when enable_large_pr_chunking is true
 
+[pr_agentic_reviewer] # /agentic_review #
+# The agentic review calls a model API directly (not through litellm), because the loop
+# needs tool calls, prompt caching and per-round accounting the single-shot handler does
+# not expose. It reads the PR through tools instead of being handed one diff, and
+# dispatches one reviewer per aspect before verifying their findings.
+# Which API to run on: "anthropic" (Claude Messages) or "openai" (OpenAI Responses).
+# Each needs its own key -- anthropic.key/ANTHROPIC_API_KEY or openai.key/OPENAI_API_KEY --
+# and its own `model`. Everything below applies to both.
+# Both SDKs honor ANTHROPIC_BASE_URL / OPENAI_BASE_URL, so either provider can be pointed at
+# a local server; see docs/docs/tools/agentic_review.md for what a local run does and does not prove.
+provider = 'anthropic'
+model = 'claude-opus-5'
+pass_model = 'claude-sonnet-5' # model for the per-aspect passes; empty means `model`
+aspects = ['correctness', 'security', 'tests'] # 'correctness', 'security', 'performance', 'tests', 'maintainability'; an unknown name is dropped with a warning.
+max_findings_per_pass = 6
+max_delegate_calls = 6 # cap on run_review_pass calls in one review
+max_tokens = 16000
+max_tool_iterations = 20 # orchestrator rounds before it must answer without tools
+max_tool_calls = 120
+pass_max_tool_iterations = 12
+pass_max_tool_calls = 60
+max_fenced_chars = 60000 # ceiling on one fenced tool result (a file diff is the largest)
+request_timeout_s = 600
+effort = 'medium' # low | medium | high | xhigh | max
+force_first_read = true
+compact_history_above_tokens = 0
+
 [pr_description] # /describe #
 publish_labels=false
 add_original_user_description=true

@@ -6,6 +6,10 @@ import pr_agent.agent.pr_agent as pr_agent_module
 from pr_agent.algo.cli_args import CliArgs
 
 FORBIDDEN_ARGS = [
+    # Both provider keys are read in preference to their environment variable, so a
+    # comment that sets one redirects the whole review to an account the commenter owns.
+    "--anthropic.key=sk-ant-attacker",
+    "--anthropic__key=sk-ant-attacker",
     # section-qualified key forms
     "--openai.key=secret",
     "--OPENAI.KEY=secret",
@@ -69,6 +73,8 @@ ALLOWED_ARGS_SINGLE = [
     "--pr_reviewer.require_tests_review=true",
     "--skills.enabled=true",
     "--skills.max_skills_tokens=1000",
+    "--pr_agentic_reviewer.aspects=[security]",
+    "--pr_agentic_reviewer.max_findings_per_pass=3",
     "--config.response_language=zh-tw",
     "--pr_description.publish_labels=false",
     # non-flag arguments are not validated against the forbidden list
@@ -87,6 +93,15 @@ HOST_ONLY_ARGS = [
     "--prompt_fragments.diff_hunk_format={{ cycler.__init__.__globals__ }}",
     "--prompt_fragments__diff_hunk_format=unsafe",
     '--prompt_fragments={"diff_hunk_format": "unsafe"}',
+    # This section's budgets multiply the number of model calls the host pays for, and
+    # provider/model choose which of the host's API keys is spent.
+    "--pr_agentic_reviewer.max_delegate_calls=500",
+    "--pr_agentic_reviewer.max_tool_iterations=500",
+    "--pr_agentic_reviewer.pass_max_tool_calls=5000",
+    "--pr_agentic_reviewer.provider=openai",
+    "--pr_agentic_reviewer.model=gpt-5.6",
+    "--pr_agentic_reviewer.request_timeout_s=86400",
+    "--pr_agentic_reviewer__max_delegate_calls=500",
 ]
 
 

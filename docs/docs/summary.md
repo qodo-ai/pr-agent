@@ -33,6 +33,7 @@
 * [Tools](tools/index.md)
 * [Describe](tools/describe.md)
 * [Review](tools/review.md)
+* [Agentic Review](tools/agentic_review.md)
 * [Improve](tools/improve.md)
 * [Ask](tools/ask.md)
 * [Add Docs](tools/add_docs.md)

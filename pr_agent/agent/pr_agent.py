@@ -16,6 +16,7 @@ from pr_agent.telemetry.meter import get_commands_counter
 from pr_agent.telemetry.shutdown import flush_telemetry
 from pr_agent.telemetry.tracer import get_tracer
 from pr_agent.tools.pr_add_docs import PRAddDocs
+from pr_agent.tools.pr_agentic_reviewer import PRAgenticReviewer
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 from pr_agent.tools.pr_config import PRConfig
 from pr_agent.tools.pr_description import PRDescription
@@ -32,6 +33,7 @@ command2class = {
     "answer": PRReviewer,
     "review": PRReviewer,
     "review_pr": PRReviewer,
+    "agentic_review": PRAgenticReviewer,
     "describe": PRDescription,
     "describe_pr": PRDescription,
     "improve": PRCodeSuggestions,

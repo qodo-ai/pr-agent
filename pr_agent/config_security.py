@@ -19,8 +19,17 @@
 # prompt_fragments: contains Jinja source rendered by the host before it is inserted into tool
 # prompts. Keep the whole section host-only so repository settings and comment arguments cannot
 # supply executable template expressions.
+#
+# pr_agentic_reviewer: unlike every other tool section, its keys multiply the *number* of model
+# calls the host pays for rather than the size of one call -- `max_delegate_calls` times
+# `pass_max_tool_iterations` is a nested loop, and `provider`/`model` choose which of the host's
+# API keys is spent. A commenter who could set those could bill the host for an unbounded run.
+# Only the two keys that shape what a review looks at, not how much of it there is, are
+# overridable: `aspects` (bounded to the aspects the code defines) and `max_findings_per_pass`
+# (bounded by the pass's own output budget).
 REPO_OVERRIDABLE_KEYS_BY_HOST_SECTION = {
     "skills": frozenset({"enabled", "max_skills_tokens"}),
     "push_outputs": frozenset(),
     "prompt_fragments": frozenset(),
+    "pr_agentic_reviewer": frozenset({"aspects", "max_findings_per_pass"}),
 }

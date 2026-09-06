@@ -35,12 +35,18 @@ class CliArgs:
             # operator-chosen sink. Both the dotted form (--push_outputs.webhook_url=...)
             # and the whole-section form (--push_outputs={...}) are blocked, so a PR
             # comment cannot redirect review output to an attacker-controlled host.
+            # NOTE: anthropic.key sits beside openai.key for the same reason. Both are read
+            # in preference to the environment variable -- openai.key by the litellm
+            # handler, anthropic.key by review_loop.model_client.api_key -- so a comment
+            # that sets either sends the PR's diff and context to an account the commenter
+            # controls and whose logs they can read.
             _encoded_args = (
                 'c2hhcmVkX3NlY3JldA==:dXNlcg==:c3lzdGVt'
                 ':ZW5hYmxlX2NvbW1lbnRfYXBwcm92YWw=:ZW5hYmxlX21hbnVhbF9hcHByb3ZhbA=='
                 ':ZW5hYmxlX2F1dG9fYXBwcm92YWw=:YXBwcm92ZV9wcl9vbl9zZWxmX3Jldmlldw=='
                 ':YmFzZV91cmw=:dXJs:YXBwX25hbWU=:c2VjcmV0X3Byb3ZpZGVy'
-                ':Z2l0X3Byb3ZpZGVy:c2tpcF9rZXlz:b3BlbmFpLmtleQ==:QU5BTFlUSUNTX0ZPTERFUg=='
+                ':Z2l0X3Byb3ZpZGVy:c2tpcF9rZXlz:b3BlbmFpLmtleQ==:YW50aHJvcGljLmtleQ=='
+                ':QU5BTFlUSUNTX0ZPTERFUg=='
                 ':dXJp:YXBwX2lk:d2ViaG9va19zZWNyZXQ=:YmVhcmVyX3Rva2Vu'
                 ':UEVSU09OQUxfQUNDRVNTX1RPS0VO:b3ZlcnJpZGVfZGVwbG95bWVudF90eXBl'
                 ':cHJpdmF0ZV9rZXk=:bG9jYWxfY2FjaGVfcGF0aA==:ZW5hYmxlX2xvY2FsX2NhY2hl'

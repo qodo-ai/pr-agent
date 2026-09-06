@@ -204,7 +204,7 @@ class PRReviewer:
             if get_settings().config.publish_output and not get_settings().config.get('is_auto_command', False):
                 progress_response = self.git_provider.publish_comment("Preparing review...", is_temporary=True)
 
-            await retry_with_fallback_models(self._prepare_prediction, model_type=ModelType.REGULAR)
+            await self._generate_prediction()
             if not self.prediction:
                 return None
 
@@ -264,6 +264,15 @@ class PRReviewer:
 
     def _should_publish_review_no_suggestions(self, pr_review: str) -> bool:
         return get_settings().pr_reviewer.get('publish_output_no_suggestions', True) or "No major issues detected" not in pr_review
+
+    async def _generate_prediction(self) -> None:
+        """Fill ``self.prediction`` with the review YAML.
+
+        The seam a different reviewing runtime overrides: everything around it — the
+        gates in ``run``, the YAML parsing, the markdown rendering, inline comments,
+        labels, publishing — is shared, so a runtime only has to produce the same YAML.
+        """
+        await retry_with_fallback_models(self._prepare_prediction, model_type=ModelType.REGULAR)
 
     async def _prepare_prediction(self, model: str) -> None:
         output = get_pr_diff(self.git_provider,

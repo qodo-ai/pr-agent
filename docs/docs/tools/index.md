@@ -6,6 +6,7 @@ Here is a list of PR-Agent tools, each with a dedicated page that explains how t
 |------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
 | **[PR Description (`/describe`)](./describe.md)**                                        | Automatically generating PR description - title, type, summary, code walkthrough and labels                                                 |
 | **[PR Review (`/review`)](./review.md)**                                                 | Adjustable feedback about the PR, possible issues, security concerns, review effort and more                                                |
+| **[Agentic Review (`/agentic_review`)](./agentic_review.md)**                            | The same review, gathered by a model that reads the PR through tools and delegates one reviewer per aspect                                   |
 | **[Code Suggestions (`/improve`)](./improve.md)**                                        | Code suggestions for improving the PR                                                                                                       |
 | **[Question Answering (`/ask ...`)](./ask.md)**                                          | Answering free-text questions about the PR, or on specific code lines                                                                       |
 | **[Add Documentation (`/add_docs`)](./add_docs.md)**                                     | Generate documentation for code components that are missing it                                                                              |
@@ -28,6 +29,7 @@ Both accept the same tool arguments and [configuration overrides](../usage-guide
 |------------------------------------------|----------------------------------|----------------------------------------------------------------|
 | [Describe](./describe.md)                | `/describe`                      | `python -m pr_agent.cli --pr_url=<PR_URL> describe`             |
 | [Review](./review.md)                    | `/review`                        | `python -m pr_agent.cli --pr_url=<PR_URL> review`              |
+| [Agentic Review](./agentic_review.md)    | `/agentic_review`                | `python -m pr_agent.cli --pr_url=<PR_URL> agentic_review`      |
 | [Improve](./improve.md)                  | `/improve`                       | `python -m pr_agent.cli --pr_url=<PR_URL> improve`             |
 | [Ask](./ask.md)                          | `/ask "How does X work?"`        | `python -m pr_agent.cli --pr_url=<PR_URL> ask "How does X work?"` |
 | [Add Docs](./add_docs.md)                | `/add_docs`                      | `python -m pr_agent.cli --pr_url=<PR_URL> add_docs`           |
