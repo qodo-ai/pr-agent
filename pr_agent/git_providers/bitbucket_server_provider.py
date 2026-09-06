@@ -560,7 +560,7 @@ class BitbucketServerProvider(GitProvider):
                 version=version,
                 user=SimpleNamespace(login=author.get("name") or author.get("slug") or ""),
             ))
-        return comments
+        return sorted(comments, key=lambda comment: comment.id)
 
     def get_issue_comments_newest_first(self):
         # The activities feed has no documented ordering, so order by comment id,
