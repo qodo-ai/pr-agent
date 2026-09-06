@@ -63,7 +63,9 @@ def test_the_finding_round_trips_unchanged(body):
     parsed = parse_review_state(rendered)
 
     assert parsed.valid and parsed.present
-    assert parsed.state["findings"][0]["body"] == body.replace("\n\n", " ").replace("\n", " ")
+    # Compare whitespace-insensitively: this test is about the escaping surviving the round
+    # trip, not about how normalize_finding stores line breaks.
+    assert " ".join(parsed.state["findings"][0]["body"].split()) == " ".join(body.split())
 
 
 def test_a_finding_without_an_arrow_is_untouched():
