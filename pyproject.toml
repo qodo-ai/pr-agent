@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pr-agent"
-version = "0.43.0"
+version = "0.45.0"
 
 authors = [
   { name = "QodoAI", email = "ofir.f@qodo.ai" },
@@ -61,7 +61,7 @@ dependencies = [
   "tiktoken==0.12.0",
   "ujson>=5.13.0,<6",
   "unidiff==0.7.5",
-  "uvicorn==0.22.0",
+  "uvicorn>=0.31.1,<1",
   "tenacity==8.2.3",
   "a2a-sdk[http-server]==1.0.3",
   "langfuse==3.14.5",
@@ -120,7 +120,7 @@ similar-issue = [
   "pandas",  # imported directly by the qdrant indexing path
   "pinecone-client",
   "pinecone-datasets @ git+https://github.com/mrT23/pinecone-datasets.git@main",
-  "lancedb==0.5.1",
+  "lancedb==0.38.0",
   "qdrant-client==1.15.1",
 ]
 dev = [
@@ -139,8 +139,7 @@ lint.select = [
   "E",    # Pyflakes
   "F",    # Pyflakes
   "B",    # flake8-bugbear
-  "I001", # isort basic checks
-  "I002", # isort missing-required-import
+  "I",    # isort
 ]
 
 lint.fixable = [
@@ -163,23 +162,16 @@ lint.ignore = [
   "E402", # import not at top of file
   "E501", # line too long
   "E711", # comparison to None
-  "E713", # test for membership with `not ... in`
-  "E714", # test for object identity with `not ... is`
-  "E721", # type comparison with `==`
   "E722", # bare `except`
   "F811", # redefinition of unused name
   "F841", # unused local variable
-  "B005", # strip() with multi-character string
   "B006", # mutable argument default
   "B007", # unused loop control variable
-  "B009", # getattr with constant attribute
   "B011", # `assert False`
-  "B012", # break/continue/return inside finally
   "B017", # assertRaises(Exception)
   "B023", # function definition uses loop variable
   "B027", # empty method without @abstractmethod
   "B904", # raise without `from` inside `except`
-  "B905", # zip() without explicit strict=
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -192,9 +184,9 @@ tests = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests/unittest"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--color=yes"
+addopts = "--color=yes --import-mode=importlib"
 console_output_style = "progress"

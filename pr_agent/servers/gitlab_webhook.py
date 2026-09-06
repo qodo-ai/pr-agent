@@ -22,6 +22,7 @@ from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.secret_providers import get_secret_provider, validate_secret_provider_setting
+from pr_agent.servers.utils import get_pr_commands
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
@@ -71,7 +72,11 @@ async def _perform_commands_gitlab(commands_conf: str, agent: PRAgent, api_url: 
         return
     if not should_process_pr_logic(data): # Here we already updated the configurations
         return
-    commands = get_settings().get(f"gitlab.{commands_conf}", {})
+    commands = (
+        get_pr_commands("gitlab")
+        if commands_conf == "pr_commands"
+        else get_settings().get(f"gitlab.{commands_conf}", {})
+    )
     get_settings().set("config.is_auto_command", True)
     for command in commands:
         try:
@@ -85,7 +90,7 @@ async def _perform_commands_gitlab(commands_conf: str, agent: PRAgent, api_url: 
 
 def is_bot_user(data) -> bool:
     try:
-        # logic to ignore bot users (unlike Github, no direct flag for bot users in gitlab)
+        # logic to ignore bot users (unlike GitHub, no direct flag for bot users in gitlab)
         sender_name = data.get("user", {}).get("name", "unknown").lower()
         # Indicators are sourced from config.bot_user_indicators in configuration.toml so the
         # default list has a single source of truth and can be reused by other providers in

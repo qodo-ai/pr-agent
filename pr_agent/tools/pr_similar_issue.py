@@ -53,6 +53,20 @@ def _embed_with_fallback(texts: List[str]) -> List[List[float]]:
         return embeds
 
 
+def _qdrant_collection_name(base_name: str) -> str:
+    """Derive the qdrant collection name from the shared index name.
+
+    Point ids were re-seeded with the repository name in #2323, so points written by an earlier
+    version live under ids that are never rewritten and never deleted. Writing the new ids into a
+    separate collection keeps those stale points out of every query without deleting anything: the
+    pre-#2323 collection is left untouched and can be dropped by hand once it is no longer wanted.
+
+    Only the qdrant backend uses this; ``self.index_name`` is shared with pinecone and lancedb and
+    is deliberately left alone.
+    """
+    return f"{base_name}-v2"
+
+
 class PRSimilarIssue:
     def __init__(self, issue_url: str, ai_handler, args: list = None):
         self.issue_url = issue_url
@@ -98,7 +112,7 @@ class PRSimilarIssue:
 
             upsert = True
             pinecone.init(api_key=api_key, environment=environment)
-            if not index_name in pinecone.list_indexes():
+            if index_name not in pinecone.list_indexes():
                 run_from_scratch = True
                 upsert = False
             else:
@@ -218,6 +232,9 @@ class PRSimilarIssue:
             except Exception:
                 raise Exception("Please install qdrant-client to use qdrant as vectordb")
 
+            # Scoped to qdrant only: pinecone and lancedb keep using self.index_name unchanged.
+            self.qdrant_collection_name = _qdrant_collection_name(index_name)
+
             api_key = None
             url = None
             try:
@@ -235,11 +252,11 @@ class PRSimilarIssue:
             run_from_scratch = False
             ingest = True
 
-            if not self.qdrant.collection_exists(collection_name=self.index_name):
+            if not self.qdrant.collection_exists(collection_name=self.qdrant_collection_name):
                 run_from_scratch = True
                 ingest = False
                 self.qdrant.create_collection(
-                    collection_name=self.index_name,
+                    collection_name=self.qdrant_collection_name,
                     vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
                 )
             else:
@@ -247,7 +264,7 @@ class PRSimilarIssue:
                     ingest = True
                 else:
                     response = self.qdrant.count(
-                        collection_name=self.index_name,
+                        collection_name=self.qdrant_collection_name,
                         count_filter=Filter(must=[
                             FieldCondition(key="metadata.repo", match=MatchValue(value=repo_name_for_index)),
                             FieldCondition(key="id", match=MatchValue(value=f"example_issue_{repo_name_for_index}")),
@@ -272,7 +289,7 @@ class PRSimilarIssue:
                     issue_key = f"issue_{number}"
                     point_id = issue_key + "." + "issue"
                     response = self.qdrant.count(
-                        collection_name=self.index_name,
+                        collection_name=self.qdrant_collection_name,
                         count_filter=Filter(must=[
                             FieldCondition(key="id", match=MatchValue(value=point_id)),
                             FieldCondition(key="metadata.repo", match=MatchValue(value=repo_name_for_index)),
@@ -379,7 +396,7 @@ class PRSimilarIssue:
         elif get_settings().pr_similar_issue.vectordb == "qdrant":
             from qdrant_client.models import FieldCondition, Filter, MatchValue
             res = self.qdrant.search(
-                collection_name=self.index_name,
+                collection_name=self.qdrant_collection_name,
                 query_vector=embeds[0],
                 limit=5,
                 query_filter=Filter(must=[FieldCondition(key="metadata.repo", match=MatchValue(value=self.repo_name_for_index))]),
@@ -691,7 +708,7 @@ class PRSimilarIssue:
                     },
                 )
             )
-        self.qdrant.upsert(collection_name=self.index_name, points=points)
+        self.qdrant.upsert(collection_name=self.qdrant_collection_name, points=points)
         get_logger().info('Done')
 
 

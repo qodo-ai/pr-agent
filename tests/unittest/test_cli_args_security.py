@@ -24,6 +24,9 @@ FORBIDDEN_ARGS = [
     "--litellm.api_type=azure",
     "--litellm.api_version=2024-01-01",
     "--jira.jira_base_url=https://evil.example",
+    # gitea.web_url is resolved on first use, so a comment could otherwise redirect published links
+    "--gitea.web_url=https://evil.example",
+    "--gitea__web_url=https://evil.example",
     "--config.url=https://evil.example",
     "--config.uri=https://evil.example",
     # provider / auth selection and skip lists
@@ -88,6 +91,9 @@ HOST_ONLY_ARGS = [
     "--skills__paths=/etc",
     "--skills.unknown=value",
     "--skills={paths:[/etc]}",
+    "--prompt_fragments.diff_hunk_format={{ cycler.__init__.__globals__ }}",
+    "--prompt_fragments__diff_hunk_format=unsafe",
+    '--prompt_fragments={"diff_hunk_format": "unsafe"}',
 ]
 
 

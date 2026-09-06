@@ -37,6 +37,14 @@ For example, you can present suggestions with verified replacement ranges as com
 
 Suggestions whose replacement ranges cannot be verified remain regular comments without an apply action.
 
+If batch publication fails, `/improve` retries each suggestion individually. If every retry fails,
+it reports a failure instead of silently removing the progress comment. With
+`config.propagate_tool_errors=true`, the publication error is also raised to the caller.
+Regular fallback comments and coverage notices are published before the error is reported.
+When this fallback output succeeds, it is retained without an additional failure banner;
+error propagation still follows `config.propagate_tool_errors`.
+If any individual retry succeeds, the existing partial-recovery behavior is preserved.
+
 ![improve](https://codium.ai/images/pr_agent/improve.png){width=512}
 
 ### Automatic triggering
@@ -312,6 +320,9 @@ PR-Agent uses a dynamic strategy to generate code suggestions based on the size 
 #### 2. Generating suggestions
 
 - For each chunk, PR-Agent generates up to `pr_code_suggestions.num_code_suggestions_per_chunk` suggestions (default: 3).
+- To bound output from large or chunked PRs, set `pr_code_suggestions.max_suggestions_per_file` to a positive integer.
+  After all chunks are merged, the highest-scored suggestions are retained per file; ties keep their original order.
+  The default value `0` disables this cap.
 
 This approach has two main benefits:
 
@@ -321,6 +332,10 @@ This approach has two main benefits:
 Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 lines of code), PR-Agent will be able to process the entire code in a single call.
 
 ## Configuration options
+
+The descriptions below explain each option's behavior. See the relevant sections in
+[`configuration.toml`](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/configuration.toml)
+for the authoritative default values.
 
 ???+ example "General options"
 
@@ -337,48 +352,47 @@ Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 line
           <code>## Guideline Improvement Suggestions ✨</code>. On GitHub, GitLab, and Azure DevOps,
           changing this value updates the same persistent suggestions comment; it does not create a separate
           suggestions channel. LocalGit uses the same visible heading in <code>improve.md</code>, without a
-          hidden identity marker. The setting does not affect committable inline suggestions. Default is
-          <code>PR Code Suggestions</code>.
+          hidden identity marker. The setting does not affect committable inline suggestions.
         </td>
       </tr>
       <tr>
         <td><b>commitable_code_suggestions</b></td>
-        <td>If set to true, the tool will display the suggestions as committable code comments. Default is false.</td>
+        <td>If set to true, the tool will display the suggestions as committable code comments.</td>
       </tr>
       <tr>
         <td><b>dual_publishing_score_threshold</b></td>
-        <td>Minimum score threshold for suggestions to be presented as committable PR comments in addition to the table. Default is -1 (disabled).</td>
+        <td>Minimum score threshold for suggestions to be presented as committable PR comments in addition to the table.</td>
       </tr>
       <tr>
         <td><b>focus_only_on_problems</b></td>
         <td>If set to true, suggestions will focus primarily on identifying and fixing code problems, and less on
-        style considerations like best practices, maintainability, or readability. Default is true.</td>
+        style considerations like best practices, maintainability, or readability.</td>
       </tr>
       <tr>
         <td><b>persistent_comment</b></td>
-        <td>If set to true, the improve comment will be persistent, meaning that every new improve request will edit the previous one. Default is true.</td>
+        <td>If set to true, the improve comment will be persistent, meaning that every new improve request will edit the previous one.</td>
       </tr>
       <tr>
         <td><b>suggestions_score_threshold</b></td>
-        <td> Any suggestion with importance score less than this threshold will be removed. Default is 0. Highly recommend not to set this value above 7-8, since above it may clip relevant suggestions that can be useful. </td>
+        <td>Any suggestion with importance score less than this threshold will be removed. Values above 7-8 may clip relevant suggestions.</td>
       </tr>
       <tr>
         <td><b>enable_help_text</b></td>
-        <td>If set to true, the tool will display a help text in the comment. Default is false.</td>
+        <td>If set to true, the tool will display a help text in the comment.</td>
       </tr>
       <tr>
         <td><b>enable_chat_text</b></td>
-        <td>If set to true, the tool will display a reference to the PR chat in the comment. Default is false.</td>
+        <td>If set to true, the tool will display a reference to the PR chat in the comment.</td>
       </tr>
       <tr>
         <td><b>publish_output_no_suggestions</b></td>
-        <td>If set to true, the tool will publish a comment even if no suggestions were found. Default is true.</td>
+        <td>If set to true, the tool will publish a comment even if no suggestions were found.</td>
       </tr>
       <tr>
         <td><b>enable_suggestions_coverage_footer</b></td>
         <td>
           If set to true, the tool will display a coverage notice when failed analysis chunks make the
-          suggestions incomplete. Default is true.
+          suggestions incomplete.
         </td>
       </tr>
     </table>
@@ -388,11 +402,18 @@ Note: Chunking is primarily relevant for large PRs. For most PRs (up to 600 line
     <table>
       <tr>
         <td><b>num_code_suggestions_per_chunk</b></td>
-        <td>Number of code suggestions provided by the 'improve' tool, per chunk. Default is 3.</td>
+        <td>Number of code suggestions provided by the 'improve' tool, per chunk.</td>
+      </tr>
+      <tr>
+        <td><b>max_suggestions_per_file</b></td>
+        <td>
+          Maximum number of suggestions retained for each file after chunk results are combined. The highest-scored
+          suggestions are retained. Set to <code>0</code> to preserve the uncapped behavior.
+        </td>
       </tr>
       <tr>
         <td><b>max_number_of_calls</b></td>
-        <td>Maximum number of chunks. Default is 3.</td>
+        <td>Maximum number of chunks.</td>
       </tr>
     </table>
 

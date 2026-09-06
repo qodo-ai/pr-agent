@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import Optional, Tuple
 
 from pr_agent.algo.types import FilePatchInfo
@@ -243,8 +244,7 @@ class GitProvider(ABC):
             get_logger().error("Clone failed: Could not clone url.",
                 artifact={"error": redact_credentials(e), "url": redact_credentials(clone_url),
                           "dest_folder": dest_folder})
-        finally:
-            return returned_obj
+        return returned_obj
 
     @abstractmethod
     def get_files(self) -> list:
@@ -312,7 +312,7 @@ class GitProvider(ABC):
             return description
 
     def get_user_description(self) -> str:
-        if hasattr(self, 'user_description') and not (self.user_description is None):
+        if hasattr(self, "user_description") and (self.user_description is not None):
             return self.user_description
 
         description = (self.get_pr_description_full() or "").strip()
@@ -435,6 +435,14 @@ class GitProvider(ABC):
     def supports_review_comment_identity(self) -> bool:
         return False
 
+    def supports_review_finding_state(self) -> bool:
+        """Return whether this provider can verify PR-Agent-authored review comments."""
+        return False
+
+    def is_comment_authored_by_pr_agent(self, comment) -> bool:
+        """Return whether a provider comment was authored by this PR-Agent identity."""
+        return False
+
     def unresolve_comment_thread(self, comment):  # noqa: B027 - intentional no-op
         pass
 
@@ -458,6 +466,39 @@ class GitProvider(ABC):
                                    legacy_initial_header: str | None = None):
         return self.publish_comment(pr_comment, **({'as_thread': True} if as_thread else {}))
 
+    @staticmethod
+    def _get_comment_body(comment) -> str:
+        """Return a comment body for object- and mapping-shaped provider payloads."""
+        if isinstance(comment, dict):
+            return comment.get("body", "")
+        return getattr(comment, "body", "")
+
+    def get_issue_comments_newest_first(self):
+        """Return issue comments newest first; providers override known API ordering."""
+        return list(reversed(list(self.get_issue_comments())))
+
+    def _iter_persistent_comments(
+        self,
+        identifiers,
+        *,
+        identity_marker: str | None = None,
+        require_agent_authorship: bool = False,
+    ):
+        """Yield matching comments in identity-priority and newest-first order."""
+        comments = self.get_issue_comments_newest_first()
+        for identifier in identifiers:
+            if not identifier:
+                continue
+            for comment in comments:
+                body = GitProvider._get_comment_body(comment)
+                if not comment_matches_identity(body, identifier):
+                    continue
+                if comment_carries_other_identity(body, identity_marker):
+                    continue
+                if require_agent_authorship and not self.is_comment_authored_by_pr_agent(comment):
+                    continue
+                yield comment, body
+
     def publish_persistent_comment_full(self, pr_comment: str,
                                    initial_header: str,
                                    update_header: bool = True,
@@ -465,26 +506,25 @@ class GitProvider(ABC):
                                    final_update_message=True,
                                    as_thread: bool = False,
                                    identity_marker: str | None = None,
-                                   legacy_initial_header: str | None = None):
+                                   legacy_initial_header: str | None = None,
+                                   require_agent_authorship: bool = False,
+                                   fallback_on_error: bool = True):
         try:
             pr_comment = add_pr_review_identity(pr_comment, identity_marker)
-            prev_comments = list(self.get_issue_comments())
             identifiers = (
                 [identity_marker, legacy_initial_header]
                 if identity_marker
                 else [initial_header]
             )
-            comment_to_update = next(
-                (
-                    comment
-                    for identifier in identifiers
-                    if identifier
-                    for comment in prev_comments
-                    if comment_matches_identity(comment.body, identifier)
-                    and not comment_carries_other_identity(comment.body, identity_marker)
-                ),
-                None,
-            )
+            comment_to_update = None
+            for comment, _body in GitProvider._iter_persistent_comments(
+                self,
+                identifiers,
+                identity_marker=identity_marker,
+                require_agent_authorship=require_agent_authorship,
+            ):
+                comment_to_update = comment
+                break
             if comment_to_update is not None:
                 comment = comment_to_update
                 latest_commit_url = self.get_latest_commit_url()
@@ -497,31 +537,33 @@ class GitProvider(ABC):
                 else:
                     pr_comment_updated = pr_comment
                 get_logger().info(f"Persistent mode - updating comment {comment_url} to latest {name} message")
-                # response = self.mr.notes.update(comment.id, {'body': pr_comment_updated})
                 if self.edit_comment(comment, pr_comment_updated) is False:
                     raise RuntimeError("Failed to update persistent comment")
                 if as_thread:
                     try:
-                        # Reopen the thread if it was resolved, so the developer revisits the updated review.
                         self.unresolve_comment_thread(comment)
                     except Exception as e:
-                        # The review was already updated in place; a reopen failure must not reach the
-                        # outer except, whose fallback publish would duplicate the review.
                         get_logger().warning(f"Failed to reopen review thread: {e}")
                 if final_update_message:
                     try:
-                        return self.publish_comment(
+                        status_comment = self.publish_comment(
                             f"**[Persistent {name}]({comment_url})** updated to latest commit {latest_commit_url}")
+                        if status_comment is None or status_comment is False:
+                            get_logger().warning(
+                                "Persistent review update message was not published; "
+                                "review was already updated"
+                            )
+                            return comment
+                        return status_comment
                     except Exception:
-                        # The review was already updated in place; a notification failure must not reach
-                        # the outer except, whose fallback publish would duplicate the review.
                         get_logger().opt(exception=True).warning(
                             "Failed to publish persistent review update message; review was already updated")
                         return comment
                 return comment
         except Exception as e:
             get_logger().exception(f"Failed to update persistent review, error: {e}")
-            pass
+            if not fallback_on_error:
+                return None
         return self.publish_comment(pr_comment, **({'as_thread': True} if as_thread else {}))
 
     @abstractmethod
@@ -545,7 +587,8 @@ class GitProvider(ABC):
         pass
 
     @abstractmethod
-    def get_issue_comments(self):
+    def get_issue_comments(self) -> Iterable:
+        """Comments on the PR; every item exposes the comment text as `.body`."""
         pass
 
     def get_comment_url(self, comment) -> str:
@@ -576,7 +619,7 @@ class GitProvider(ABC):
 
     #### commits operations ####
     @abstractmethod
-    def get_commit_messages(self):
+    def get_commit_messages(self) -> str:
         pass
 
     def get_pr_url(self) -> str:

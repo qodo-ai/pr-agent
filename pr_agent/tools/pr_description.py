@@ -39,6 +39,7 @@ from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
 from pr_agent.tools.ticket_pr_compliance_check import (
     extract_and_cache_pr_tickets,
+    fit_related_tickets_to_prompt_budget,
 )
 
 
@@ -121,6 +122,7 @@ class PRDescription:
 
             # ticket extraction if exists
             await extract_and_cache_pr_tickets(self.git_provider, self.vars)
+            self._raw_prompt_vars = copy.deepcopy(self.vars)
 
             await retry_with_fallback_models(self._prepare_prediction, ModelType.WEAK)
 
@@ -248,6 +250,15 @@ class PRDescription:
             get_logger().info("Markers were enabled, but user description does not contain markers. Skipping AI prediction")
             return None
 
+        raw_prompt_vars = getattr(self, "_raw_prompt_vars", getattr(self, "vars", None))
+        if raw_prompt_vars is not None:
+            self.vars, self.token_handler = fit_related_tickets_to_prompt_budget(
+                self.git_provider.pr,
+                raw_prompt_vars,
+                get_settings().pr_description_prompt.system,
+                get_settings().pr_description_prompt.user,
+                model,
+            )
         large_pr_handling = get_settings().pr_description.get("enable_large_pr_handling", True) and "pr_description_only_files_prompts" in get_settings()
         output = get_pr_diff(self.git_provider, self.token_handler, model, large_pr_handling=large_pr_handling, return_remaining_files=True)
         if isinstance(output, tuple):
@@ -273,11 +284,12 @@ class PRDescription:
         else:
             # get the diff in multiple patches, with the token handler only for the files prompt
             get_logger().debug('large_pr_handling for describe')
-            token_handler_only_files_prompt = TokenHandler(
+            self.vars, token_handler_only_files_prompt = fit_related_tickets_to_prompt_budget(
                 self.git_provider.pr,
-                self.vars,
+                raw_prompt_vars if raw_prompt_vars is not None else self.vars,
                 get_settings().pr_description_only_files_prompts.system,
                 get_settings().pr_description_only_files_prompts.user,
+                model,
             )
             (patches_compressed_list, total_tokens_list, deleted_files_list, remaining_files_list, file_dict,
              files_in_patches_list) = get_pr_diff_multiple_patchs(
@@ -313,11 +325,12 @@ class PRDescription:
                     get_logger().debug(f"failed to generate predictions in iteration {i + 1} for describe files")
 
             # generate files_walkthrough string, with proper token handling
-            token_handler_only_description_prompt = TokenHandler(
+            self.vars, token_handler_only_description_prompt = fit_related_tickets_to_prompt_budget(
                 self.git_provider.pr,
-                self.vars,
+                raw_prompt_vars if raw_prompt_vars is not None else self.vars,
                 get_settings().pr_description_only_description_prompts.system,
-                get_settings().pr_description_only_description_prompts.user)
+                get_settings().pr_description_only_description_prompts.user,
+                model)
             files_walkthrough = "\n".join(file_description_str_list)
             files_walkthrough_prompt = copy.deepcopy(files_walkthrough)
             MAX_EXTRA_FILES_TO_PROMPT = 50
@@ -519,16 +532,16 @@ class PRDescription:
         pr_labels = []
 
         # If the 'PR Type' key is present in the dictionary, split its value by comma and assign it to 'pr_types'
-        if 'labels' in self.data and self.data['labels']:
-            if type(self.data['labels']) == list:
-                pr_labels = self.data['labels']
-            elif type(self.data['labels']) == str:
-                pr_labels = self.data['labels'].split(',')
-        elif 'type' in self.data and self.data['type'] and get_settings().pr_description.publish_labels:
-            if type(self.data['type']) == list:
-                pr_labels = self.data['type']
-            elif type(self.data['type']) == str:
-                pr_labels = self.data['type'].split(',')
+        if "labels" in self.data and self.data["labels"]:
+            if isinstance(self.data["labels"], list):
+                pr_labels = self.data["labels"]
+            elif isinstance(self.data["labels"], str):
+                pr_labels = self.data["labels"].split(",")
+        elif "type" in self.data and self.data["type"] and get_settings().pr_description.publish_labels:
+            if isinstance(self.data["type"], list):
+                pr_labels = self.data["type"]
+            elif isinstance(self.data["type"], str):
+                pr_labels = self.data["type"].split(",")
         pr_labels = [label.strip() for label in pr_labels]
 
         # convert lowercase labels to original case
@@ -620,7 +633,7 @@ class PRDescription:
 
         # Remove the 'PR Title' key from the dictionary
         ai_title = self.data.pop('title', self.vars["title"])
-        if (not get_settings().pr_description.generate_ai_title):
+        if not get_settings().pr_description.generate_ai_title:
             # Assign the original PR title to the 'title' variable
             title = self.vars["title"]
         else:
