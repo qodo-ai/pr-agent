@@ -110,6 +110,11 @@ branch_issue_regex = ""
 enabled = false
 allowed = []        # empty: every registered tool. Otherwise an allowlist of tool names
 max_iterations = 3  # rounds of tool calls one answer may take before a final answer is required
+# Tools contributed by other installed packages through a "pr_agent.tools" entry point. Loading
+# one imports third-party code, so it is off by default and limited to the distributions named
+# here; an empty allowlist loads nothing even when plugins_enabled is true.
+plugins_enabled = false
+plugin_allowlist = []
 
 [pr_reviewer] # /review #
 # enable/disable features
