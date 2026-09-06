@@ -67,8 +67,9 @@ def normalize_finding(finding: Mapping[str, Any]) -> dict[str, Any] | None:
     if not path or not body:
         return None
 
-    body = _WHITESPACE_RE.sub(" ", body)
-    finding_id = key_issue_fingerprint(path, body.lower())
+    # The fingerprint ignores whitespace so re-wrapped prose stays the same finding, but the
+    # body is what the resolved section renders, so it keeps the line breaks the reviewer used.
+    finding_id = key_issue_fingerprint(path, _WHITESPACE_RE.sub(" ", body).lower())
     start = _as_line(
         finding.get("line_start")
         or finding.get("relevant_lines_start")
