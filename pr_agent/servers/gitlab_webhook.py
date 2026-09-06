@@ -90,7 +90,7 @@ async def _perform_commands_gitlab(commands_conf: str, agent: PRAgent, api_url: 
 
 def is_bot_user(data) -> bool:
     try:
-        # logic to ignore bot users (unlike Github, no direct flag for bot users in gitlab)
+        # logic to ignore bot users (unlike GitHub, no direct flag for bot users in gitlab)
         sender_name = data.get("user", {}).get("name", "unknown").lower()
         # Indicators are sourced from config.bot_user_indicators in configuration.toml so the
         # default list has a single source of truth and can be reused by other providers in

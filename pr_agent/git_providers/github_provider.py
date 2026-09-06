@@ -1572,7 +1572,7 @@ class GithubProvider(GitProvider):
                 return sub_issues
 
             nodes = sub_issues_data.get("nodes") or []
-            get_logger().info(f"Github Sub-issues fetched: {len(nodes)}", artifact={"nodes": nodes})
+            get_logger().info(f"GitHub Sub-issues fetched: {len(nodes)}", artifact={"nodes": nodes})
 
             for sub_issue in nodes:
                 if not sub_issue:

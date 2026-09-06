@@ -2,7 +2,7 @@ In this page we will cover how to install and run PR-Agent as a GitHub Action or
 
 ## Run as a GitHub Action
 
-You can use our pre-built Github Action Docker image to run PR-Agent as a Github Action.
+You can use our pre-built GitHub Action Docker image to run PR-Agent as a GitHub Action.
 
 1) Add the following file to your repository under `.github/workflows/pr_agent.yml`:
 
@@ -649,7 +649,7 @@ For more detailed configuration options, see:
 
 Allowing you to automate the review process on your private or public repositories.
 
-1) Create a GitHub App from the [Github Developer Portal](https://docs.github.com/en/developers/apps/creating-a-github-app).
+1) Create a GitHub App from the [GitHub Developer Portal](https://docs.github.com/en/developers/apps/creating-a-github-app).
 
    - Set the following permissions:
      - Pull requests: Read & write
