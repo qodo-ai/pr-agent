@@ -697,7 +697,7 @@ class BitbucketProvider(GitProvider):
         payload = json.dumps(payload_dict)
 
         response = requests.request("PUT", self.bitbucket_pull_request_api_url, headers=self.headers, data=payload)
-        if response.status_code != 200:
+        if not 200 <= response.status_code < 300:
             message = f"Failed to update description, error code: {response.status_code}"
             get_logger().error(message)
             raise RuntimeError(message)
