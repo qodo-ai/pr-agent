@@ -16,6 +16,8 @@
 # reach internal endpoints (SSRF), or append to arbitrary host files. The whole section is
 # therefore host-only (empty allowlist -> every key dropped).
 #
+# web_search: holds the API key of a third-party search provider and the endpoint it is sent to.
+#
 # tools: decides which host-side functions a model may call, and a tool reaches the network or
 # the host filesystem. Letting a repository enable one, or widen the allowlist, would turn PR
 # content into a way to reach the host, so the whole section is host-only.
@@ -26,6 +28,7 @@
 REPO_OVERRIDABLE_KEYS_BY_HOST_SECTION = {
     "skills": frozenset({"enabled", "max_skills_tokens"}),
     "tools": frozenset(),
+    "web_search": frozenset(),
     "push_outputs": frozenset(),
     "prompt_fragments": frozenset(),
 }

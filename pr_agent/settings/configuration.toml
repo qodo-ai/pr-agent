@@ -111,6 +111,13 @@ enabled = false
 allowed = []        # empty: every registered tool. Otherwise an allowlist of tool names
 max_iterations = 3  # rounds of tool calls one answer may take before a final answer is required
 
+[web_search] # the web_search tool, offered only when [tools] is on #
+# Host-only, like [tools]: the key reaches a third party, so a repository cannot set it.
+provider = ""    # "exa" or "tavily"; empty means the tool is not registered at all
+api_key = ""     # keep this in .secrets.toml, not here
+result_count = 3
+timeout = 10
+
 [pr_reviewer] # /review #
 # enable/disable features
 require_score_review=false
