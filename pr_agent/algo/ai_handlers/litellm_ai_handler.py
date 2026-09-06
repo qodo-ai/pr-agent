@@ -814,7 +814,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 model_base = model
                 while model_base.startswith(('openai/', 'azure/')):
                     model_base = model_base.removeprefix('openai/').removeprefix('azure/')
-                if model_base.startswith('gpt-5'):
+                is_gpt6_astra = model_base.removesuffix('_thinking') == 'gpt-6-astra'
+                if model_base.startswith('gpt-5') or is_gpt6_astra:
                     # Use configured reasoning_effort or default to MEDIUM
                     config_effort = get_settings().config.reasoning_effort
                     try:
@@ -828,11 +829,16 @@ class LiteLLMAIHandler(BaseAiHandler):
                                 f"Using default '{effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
                             )
 
+                    if is_gpt6_astra and effort in (ReasoningEffort.NONE.value, ReasoningEffort.MINIMAL.value):
+                        get_logger().info(f"GPT-6 Astra does not support reasoning_effort='{effort}'; using 'low'")
+                        effort = ReasoningEffort.LOW.value
+
                     thinking_kwargs_gpt5 = {
                         "reasoning_effort": effort,
                         "allowed_openai_params": ["reasoning_effort"],
                     }
-                    get_logger().info(f"Using reasoning_effort='{effort}' for GPT-5 model")
+                    model_family = "GPT-6 Astra" if is_gpt6_astra else "GPT-5"
+                    get_logger().info(f"Using reasoning_effort='{effort}' for {model_family} model")
                     # Routing priority: Azure mode > explicit provider prefix in user config > openai/
                     # default. This preserves an explicit "azure/" the user wrote in config even when
                     # self.azure is false, and avoids stacking when self.azure already added "azure/".
@@ -965,7 +971,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 except (TypeError, ValueError):
                     max_output_tokens = 0
                 if max_output_tokens > 0:
-                    kwargs.setdefault("max_tokens", max_output_tokens)
+                    output_limit_param = "max_completion_tokens" if is_gpt6_astra else "max_tokens"
+                    kwargs.setdefault(output_limit_param, max_output_tokens)
 
                 if get_settings().litellm.get("enable_callbacks", False):
                     kwargs = self.add_litellm_callbacks(kwargs)

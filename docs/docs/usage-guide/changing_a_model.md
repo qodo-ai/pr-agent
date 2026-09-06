@@ -649,6 +649,18 @@ reasoning_effort = "medium" # "none", "minimal", "low", "medium", "high", "xhigh
 
 With the OpenAI models that support reasoning effort (eg: gpt-5.6-terra), you can specify its reasoning effort via `config` section. The default value is `medium`. You can change it to any supported value based on your usage. Available values depend on the model and provider.
 
+To use [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra):
+
+```toml
+[config]
+model = "gpt-6-astra"
+reasoning_effort = "medium" # "low", "medium", "high", "xhigh", "max"
+```
+
+PR-Agent omits temperature for GPT-6 Astra and maps `none` or `minimal` reasoning effort to `low`.
+Its 1,050,000-token context window remains subject to `config.max_model_tokens`.
+The existing Chat Completions path is used; access depends on your OpenAI account.
+
 ### Anthropic models
 
 ```toml
@@ -687,13 +699,15 @@ built-in defaults.
 max_output_tokens = 0 # 0 = unset (default)
 ```
 
-By default PR-Agent does not send an output token limit (`max_tokens`) on model calls, so the
+By default PR-Agent does not send an output token limit on model calls, so the
 provider's own default applies. On some providers that default is low — for example, AWS Bedrock
 (Converse API) can cap Claude reasoning models at 4096 output tokens, and since reasoning tokens
 count against that budget, the visible answer can come back empty or truncated. Set
-`config.max_output_tokens` to a positive value (e.g. `16000`) to send it as `max_tokens` on every
-completion call. When Claude extended thinking is enabled, `extended_thinking_max_output_tokens`
-takes precedence.
+`config.max_output_tokens` to a positive value (e.g. `16000`) to send it to LiteLLM as
+`max_completion_tokens` for GPT-6 Astra or `max_tokens` for other models. Use a value supported by
+the selected model; GPT-6 Astra supports at most 128,000 output tokens, including reasoning tokens.
+PR-Agent does not automatically clamp this setting to the model's output limit.
+When Claude extended thinking is enabled, `extended_thinking_max_output_tokens` takes precedence.
 For models with small context windows, keep in mind that prompt and completion tokens share the
 model's context window: size `config.max_model_tokens` so the packed prompt leaves room for the
 configured output limit.

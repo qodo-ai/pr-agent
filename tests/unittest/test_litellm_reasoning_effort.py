@@ -860,6 +860,69 @@ class TestLiteLLMReasoningEffort:
                 )
 
 
+class TestLiteLLMReasoningEffortGPT6:
+    @pytest.mark.parametrize("provider", ["openai", "azure"])
+    @pytest.mark.parametrize("effort", ["low", "medium", "high", "xhigh", "max"])
+    def test_litellm_forwards_astra_reasoning(self, monkeypatch, provider, effort):
+        monkeypatch.setattr(litellm, "drop_params", False)
+        params = get_optional_params(
+            model="gpt-6-astra",
+            custom_llm_provider=provider,
+            reasoning_effort=effort,
+            allowed_openai_params=["reasoning_effort"],
+            max_completion_tokens=4096,
+        )
+        assert params["reasoning_effort"] == effort
+        assert params["max_completion_tokens"] == 4096
+        assert "max_tokens" not in params
+        assert "temperature" not in params
+
+    @pytest.mark.parametrize("prefix", ["", "openai/", "azure/", "azure/openai/"])
+    @pytest.mark.parametrize("suffix", ["", "_thinking"])
+    @pytest.mark.parametrize("azure", [False, True])
+    @pytest.mark.parametrize("effort, expected", [
+        ("low", "low"), ("medium", "medium"), ("high", "high"),
+        ("xhigh", "xhigh"), ("max", "max"), ("none", "low"), ("minimal", "low"),
+        (None, "medium"), ("invalid", "medium"),
+    ])
+    async def test_astra_request(self, monkeypatch, prefix, suffix, azure, effort, expected):
+        fake_settings = create_mock_settings(effort)
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: fake_settings)
+        for name in ("AWS_USE_IMDS", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+                     "AWS_SESSION_TOKEN", "AWS_REGION_NAME", "OPENAI_API_KEY"):
+            monkeypatch.delenv(name, raising=False)
+
+        with patch.object(litellm_handler, "acompletion", new_callable=AsyncMock) as completion:
+            completion.return_value = create_mock_acompletion_response()
+            handler = LiteLLMAIHandler()
+            handler.azure = azure
+            result = await handler.chat_completion(
+                model=f"{prefix}gpt-6-astra{suffix}", system="system", user="user",
+            )
+
+        kwargs = completion.call_args.kwargs
+        provider = "azure/" if azure or prefix.startswith("azure/") else "openai/"
+        assert kwargs["model"] == provider + "gpt-6-astra"
+        assert kwargs["reasoning_effort"] == expected
+        assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
+        assert "temperature" not in kwargs
+        assert kwargs["messages"] == [{"role": "system", "content": "system"}, {"role": "user", "content": "user"}]
+        assert result == ("test", "stop")
+
+    async def test_astra_output_limit(self, monkeypatch):
+        fake_settings = create_mock_settings("max")
+        fake_settings.config.get = lambda key, default=None: 4096 if key == "max_output_tokens" else default
+        monkeypatch.setattr(litellm_handler, "get_settings", lambda: fake_settings)
+
+        with patch.object(litellm_handler, "acompletion", new_callable=AsyncMock) as completion:
+            completion.return_value = create_mock_acompletion_response()
+            await LiteLLMAIHandler().chat_completion(model="gpt-6-astra", system="system", user="user")
+
+        kwargs = completion.call_args.kwargs
+        assert kwargs["max_completion_tokens"] == 4096
+        assert "max_tokens" not in kwargs
+
+
 class TestLiteLLMReasoningEffortGemini:
     """Gemini 2.5 reasoning_effort handling via the SUPPORT_REASONING_EFFORT_MODELS path.
 

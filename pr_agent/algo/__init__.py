@@ -315,6 +315,7 @@ MAX_TOKENS = {
     'gpt-5.6-sol': 1050000,  # 1.05M, but may be limited by config.max_model_tokens
     'gpt-5.6-terra': 1050000,  # 1.05M, but may be limited by config.max_model_tokens
     'gpt-5.6-luna': 1050000,  # 1.05M, but may be limited by config.max_model_tokens
+    'gpt-6-astra': 1050000,  # 1.05M, but may be limited by config.max_model_tokens
     'o1-mini': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-mini-2024-09-12': 128000,  # 128K, but may be limited by config.max_model_tokens
     'o1-preview': 128000,  # 128K, but may be limited by config.max_model_tokens
