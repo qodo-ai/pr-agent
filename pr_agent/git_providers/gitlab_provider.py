@@ -1498,12 +1498,10 @@ class GitLabProvider(GitProvider):
     def get_workspace_name(self):
         return self.id_project.split('/')[0]
 
-    def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        if disable_eyes:
-            return None
+    def add_reaction(self, issue_comment_id: int, reaction: str) -> Optional[int]:
         try:
             if not self.id_mr:
-                get_logger().warning("Cannot add eyes reaction: merge request ID is not set.")
+                get_logger().warning("Cannot add a reaction: merge request ID is not set.")
                 return None
 
             mr = self.gl.projects.get(self.id_project).mergerequests.get(self.id_mr)
@@ -1514,11 +1512,11 @@ class GitLabProvider(GitProvider):
                 return None
 
             award_emoji = comment.awardemojis.create({
-                'name': 'eyes'
+                'name': reaction
             })
             return award_emoji.id
         except Exception as e:
-            get_logger().warning(f"Failed to add eyes reaction, error: {e}")
+            get_logger().warning(f"Failed to add the {reaction} reaction, error: {e}")
             return None
 
     def remove_reaction(self, issue_comment_id: int, reaction_id: str) -> bool:

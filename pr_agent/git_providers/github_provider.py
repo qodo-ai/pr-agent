@@ -1225,17 +1225,23 @@ class GithubProvider(GitProvider):
     def get_workspace_name(self):
         return self.repo.split('/')[0]
 
-    def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        if disable_eyes:
+    # The reaction API accepts only this closed set; anything else is rejected with 422.
+    SUPPORTED_REACTIONS = ("+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes")
+
+    def add_reaction(self, issue_comment_id: int, reaction: str) -> Optional[int]:
+        if reaction not in self.SUPPORTED_REACTIONS:
+            get_logger().warning(
+                f"GitHub does not support the reaction {reaction!r}; "
+                f"choose one of {', '.join(self.SUPPORTED_REACTIONS)}")
             return None
         try:
             headers, data_patch = self.pr._requester.requestJsonAndCheck(
                 "POST", f"{self.base_url}/repos/{self.repo}/issues/comments/{issue_comment_id}/reactions",
-                input={"content": "eyes"}
+                input={"content": reaction}
             )
             return data_patch.get("id", None)
         except Exception as e:
-            get_logger().warning(f"Failed to add eyes reaction, error: {e}")
+            get_logger().warning(f"Failed to add the {reaction} reaction, error: {e}")
             return None
 
     def remove_reaction(self, issue_comment_id: int, reaction_id: str) -> bool:

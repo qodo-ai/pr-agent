@@ -25,6 +25,12 @@ _URL_USERINFO_RE = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]{0,30}://)[^/@
 _AUTH_HEADER_RE = re.compile(r"(?i)(authorization\s*:\s*(?:bearer|basic|token)\s+)\S+")
 
 
+def get_reaction_setting(name: str) -> str:
+    """Read one `config.reaction_*` setting as a stripped string, "" when unset."""
+    value = get_settings().config.get(name, "")
+    return value.strip() if isinstance(value, str) else ""
+
+
 def redact_credentials(text) -> str:
     if not text:
         return ""
@@ -609,9 +615,36 @@ class GitProvider(ABC):
     def get_repo_labels(self):
         pass
 
-    @abstractmethod
+    def add_reaction(self, issue_comment_id: int, reaction: str) -> Optional[int]:
+        """Add a named reaction to a comment, returning its id.
+
+        Returns None when the provider has no reaction API, when the name is empty, or when
+        the call failed. Providers that support reactions override this; `add_eyes_reaction`
+        and `react_to_outcome` are built on top of it.
+        """
+        return None
+
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        pass
+        """Acknowledge a comment command with the configured start reaction."""
+        if disable_eyes:
+            return None
+        reaction = get_reaction_setting("reaction_on_start")
+        if not reaction:
+            return None
+        return self.add_reaction(issue_comment_id, reaction)
+
+    def react_to_outcome(self, issue_comment_id: int, succeeded: bool) -> Optional[int]:
+        """Mark a finished comment command with the configured outcome reaction.
+
+        Both outcome reactions are unset by default, so nothing is added unless an operator
+        asks for it.
+        """
+        reaction = get_reaction_setting(
+            "reaction_on_success" if succeeded else "reaction_on_failure"
+        )
+        if not reaction or issue_comment_id is None:
+            return None
+        return self.add_reaction(issue_comment_id, reaction)
 
     @abstractmethod
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
