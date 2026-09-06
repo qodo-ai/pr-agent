@@ -25,9 +25,19 @@ _URL_USERINFO_RE = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]{0,30}://)[^/@
 _AUTH_HEADER_RE = re.compile(r"(?i)(authorization\s*:\s*(?:bearer|basic|token)\s+)\S+")
 
 
-def get_reaction_setting(name: str) -> str:
-    """Read one `config.reaction_*` setting as a stripped string, "" when unset."""
-    value = get_settings().config.get(name, "")
+# The reaction PR-Agent has always added when it picks a comment command up. Used as the
+# fallback for `reaction_on_start` so that a deployment whose configuration.toml predates
+# these settings keeps acknowledging comments instead of silently going quiet.
+DEFAULT_START_REACTION = "eyes"
+
+
+def get_reaction_setting(name: str, default: str = "") -> str:
+    """Read one `config.reaction_*` setting as a stripped string.
+
+    `default` applies only when the key is absent. A key that is present but unusable - empty,
+    or not a string - means the operator asked for no reaction, so "" is returned.
+    """
+    value = get_settings().config.get(name, default)
     return value.strip() if isinstance(value, str) else ""
 
 
@@ -628,23 +638,42 @@ class GitProvider(ABC):
         """Acknowledge a comment command with the configured start reaction."""
         if disable_eyes:
             return None
-        reaction = get_reaction_setting("reaction_on_start")
+        reaction = get_reaction_setting("reaction_on_start", DEFAULT_START_REACTION)
         if not reaction:
             return None
-        return self.add_reaction(issue_comment_id, reaction)
+        reaction_id = self.add_reaction(issue_comment_id, reaction)
+        if reaction_id is not None:
+            # Remembered so that `react_to_outcome` can take it down again. Nothing else removes
+            # it, so without this the start reaction would sit next to the outcome one forever.
+            self._start_reaction = (issue_comment_id, reaction_id)
+        return reaction_id
 
     def react_to_outcome(self, issue_comment_id: int, succeeded: bool) -> Optional[int]:
-        """Mark a finished comment command with the configured outcome reaction.
+        """Replace the start reaction with the configured outcome reaction.
 
-        Both outcome reactions are unset by default, so nothing is added unless an operator
-        asks for it.
+        Both outcome reactions are unset by default, so nothing changes unless an operator asks
+        for it. When one is configured the start reaction is removed first, so the comment ends
+        up carrying the outcome rather than both.
         """
         reaction = get_reaction_setting(
             "reaction_on_success" if succeeded else "reaction_on_failure"
         )
         if not reaction or issue_comment_id is None:
             return None
+        self._remove_start_reaction(issue_comment_id)
         return self.add_reaction(issue_comment_id, reaction)
+
+    def _remove_start_reaction(self, issue_comment_id: int) -> None:
+        """Take down the start reaction this provider added to `issue_comment_id`, if any."""
+        pending = getattr(self, "_start_reaction", None)
+        if not pending or pending[0] != issue_comment_id:
+            return
+        self._start_reaction = None
+        try:
+            self.remove_reaction(issue_comment_id, pending[1])
+        except Exception as e:
+            # Losing the start reaction is cosmetic; never let it fail the command that succeeded.
+            get_logger().warning("Failed to remove the start reaction", artifact={"error": e})
 
     @abstractmethod
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:

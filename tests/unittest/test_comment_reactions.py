@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers.git_provider import GitProvider
+from pr_agent.git_providers.git_provider import GitProvider, get_reaction_setting
 from pr_agent.git_providers.github_provider import GithubProvider
 from pr_agent.git_providers.gitlab_provider import GitLabProvider
 
@@ -20,6 +20,7 @@ class _RecordingProvider(GitProvider):
 
     def __init__(self):
         self.reactions = []
+        self.removed = []
 
     def add_reaction(self, issue_comment_id: int, reaction: str):
         self.reactions.append((issue_comment_id, reaction))
@@ -41,7 +42,9 @@ class _RecordingProvider(GitProvider):
     def get_pr_description_full(self): return ""
     def get_issue_comments(self): return []
     def get_repo_settings(self): return b""
-    def remove_reaction(self, issue_comment_id, reaction_id): return True
+    def remove_reaction(self, issue_comment_id, reaction_id):
+        self.removed.append((issue_comment_id, reaction_id))
+        return True
     def get_commit_messages(self) -> str: return ""
     def publish_labels(self, labels): pass
     def get_pr_labels(self, update=False): return []
@@ -64,6 +67,31 @@ def test_the_start_reaction_defaults_to_eyes(reactions):
     provider.add_eyes_reaction(7)
 
     assert provider.reactions == [(7, "eyes")]
+
+
+def test_the_start_reaction_survives_an_older_configuration(monkeypatch):
+    """A configuration.toml that predates these settings must keep acknowledging comments.
+
+    `config` is a Dynaconf table, so an operator running an older settings file simply has no
+    `reaction_on_start` key. Reading that as "no reaction" would silently remove the
+    acknowledgement PR-Agent has always given.
+    """
+    monkeypatch.delattr(get_settings().config, "reaction_on_start", raising=False)
+    provider = _RecordingProvider()
+
+    assert get_reaction_setting("reaction_on_start", "eyes") == "eyes"
+    provider.add_eyes_reaction(7)
+
+    assert provider.reactions == [(7, "eyes")]
+
+
+def test_an_absent_outcome_reaction_stays_absent(monkeypatch):
+    """Control: the outcome reactions are opt-in, so an absent key means silence."""
+    monkeypatch.delattr(get_settings().config, "reaction_on_success", raising=False)
+    provider = _RecordingProvider()
+
+    assert provider.react_to_outcome(7, succeeded=True) is None
+    assert provider.reactions == []
 
 
 def test_the_start_reaction_is_configurable(reactions):
@@ -108,6 +136,74 @@ def test_the_success_reaction_is_added_when_configured(reactions):
     provider.react_to_outcome(7, succeeded=True)
 
     assert provider.reactions == [(7, "hooray")]
+
+
+def test_the_outcome_reaction_replaces_the_start_reaction(reactions):
+    """The outcome supersedes the acknowledgement; the comment must not carry both."""
+    reactions(success="hooray")
+    provider = _RecordingProvider()
+
+    start_id = provider.add_eyes_reaction(7)
+    provider.react_to_outcome(7, succeeded=True)
+
+    assert provider.removed == [(7, start_id)]
+
+
+def test_the_start_reaction_is_kept_when_no_outcome_is_configured(reactions):
+    """Control: with the shipped defaults the eyes stay, which is today's behaviour."""
+    provider = _RecordingProvider()
+
+    provider.add_eyes_reaction(7)
+    provider.react_to_outcome(7, succeeded=True)
+
+    assert provider.removed == []
+    assert provider.reactions == [(7, "eyes")]
+
+
+def test_a_start_reaction_on_another_comment_is_left_alone(reactions):
+    """The provider instance is reused; only its own acknowledgement may be taken down."""
+    reactions(success="hooray")
+    provider = _RecordingProvider()
+
+    provider.add_eyes_reaction(7)
+    provider.react_to_outcome(8, succeeded=True)
+
+    assert provider.removed == []
+
+
+def test_the_start_reaction_is_only_removed_once(reactions):
+    reactions(success="hooray", failure="confused")
+    provider = _RecordingProvider()
+
+    provider.add_eyes_reaction(7)
+    provider.react_to_outcome(7, succeeded=True)
+    provider.react_to_outcome(7, succeeded=False)
+
+    assert provider.removed == [(7, 1)]
+
+
+def test_a_failing_removal_does_not_lose_the_outcome_reaction(reactions):
+    """Removal is cosmetic: a provider that refuses it must still get its outcome mark."""
+    reactions(success="hooray")
+    provider = _RecordingProvider()
+    provider.add_eyes_reaction(7)
+    provider.remove_reaction = MagicMock(side_effect=RuntimeError("boom"))
+
+    provider.react_to_outcome(7, succeeded=True)
+
+    assert provider.reactions == [(7, "eyes"), (7, "hooray")]
+
+
+def test_nothing_is_removed_when_the_provider_has_no_reaction_api(reactions):
+    """`add_reaction` returned None, so there is no reaction id to take down."""
+    reactions(success="hooray")
+    provider = _RecordingProvider()
+    provider.add_reaction = MagicMock(return_value=None)
+
+    provider.add_eyes_reaction(7)
+    provider.react_to_outcome(7, succeeded=True)
+
+    assert provider.removed == []
 
 
 def test_the_failure_reaction_is_added_when_configured(reactions):
@@ -222,6 +318,7 @@ async def test_a_successful_comment_command_is_marked(reactions, comment_handler
     await github_app.handle_comments_on_pr(_comment_event(), "issue_comment", "user", "1", "created", {}, agent)
 
     assert provider.reactions == [(4242, "eyes"), (4242, "hooray")]
+    assert provider.removed == [(4242, 1)]
 
 
 async def test_a_failed_comment_command_is_marked(reactions, comment_handler):
@@ -238,6 +335,7 @@ async def test_a_failed_comment_command_is_marked(reactions, comment_handler):
     await github_app.handle_comments_on_pr(_comment_event(), "issue_comment", "user", "1", "created", {}, agent)
 
     assert provider.reactions == [(4242, "eyes"), (4242, "confused")]
+    assert provider.removed == [(4242, 1)]
 
 
 async def test_the_default_configuration_adds_only_the_start_reaction(reactions, comment_handler):
@@ -254,3 +352,4 @@ async def test_the_default_configuration_adds_only_the_start_reaction(reactions,
     await github_app.handle_comments_on_pr(_comment_event(), "issue_comment", "user", "1", "created", {}, agent)
 
     assert provider.reactions == [(4242, "eyes")]
+    assert provider.removed == []
