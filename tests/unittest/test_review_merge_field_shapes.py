@@ -8,6 +8,7 @@ Python list repr into the PR.
 import pytest
 
 from pr_agent.algo.review_merge import merge_review_chunks
+from pr_agent.algo.utils import is_value_no
 
 
 def _merged(*chunk_values, field="security_concerns"):
@@ -43,10 +44,18 @@ def test_a_mapping_is_rendered_as_text():
     assert "{'" not in merged
 
 
-def test_a_list_saying_no_is_still_no():
-    merged = _merged(["No"], "No")
+@pytest.mark.parametrize("chunks", [
+    (["No"], "No"),
+    (["No"], ["No"]),
+    ("No", "No"),
+    ([], ""),
+    ([None], None),
+])
+def test_nothing_reported_merges_to_a_value_the_renderer_suppresses(chunks):
+    """`is_value_no` only recognises a string, so the merged value must be one."""
+    merged = _merged(*chunks)
 
-    assert "- No" not in str(merged)
+    assert is_value_no(merged), f"the review would render a concern reading {merged!r}"
 
 
 def test_plain_strings_are_unchanged():

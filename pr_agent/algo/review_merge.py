@@ -158,7 +158,10 @@ def _merge_findings_text(values: List[Any]) -> Any:
         seen.add(fingerprint)
         reported.append(text)
     if not reported:
-        return _first_non_empty(values)
+        # Every chunk reported nothing. Return the canonical "No" rather than one chunk's raw
+        # value: a chunk answering ["No"] would otherwise reach the renderer as a list, which
+        # is_value_no does not recognise, and the review would show a concern reading "- No".
+        return "No"
     return "\n\n".join(reported)
 
 
