@@ -67,9 +67,6 @@ def setup_logger(level: str = "INFO", fmt: LoggingFormat = LoggingFormat.CONSOLE
     return logger
 
 
-_LOG_METHODS = ("trace", "debug", "info", "success", "warning", "error", "critical", "exception")
-
-
 def _is_template_for(message, payload: dict) -> bool:
     """Whether the message reads as a loguru template these keywords are meant to fill.
 
