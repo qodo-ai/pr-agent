@@ -13,6 +13,7 @@ from starlette_context import context
 from starlette_context.middleware import RawContextMiddleware
 
 from pr_agent.agent.pr_agent import PRAgent, prepare_command
+from pr_agent.algo.run_details import command_failed, init_run_details
 from pr_agent.config_loader import get_settings, global_settings
 from pr_agent.git_providers import get_git_provider, get_git_provider_with_context
 from pr_agent.git_providers.utils import apply_repo_settings
@@ -544,7 +545,16 @@ async def _perform_auto_commands_github(commands_conf: str, agent: PRAgent, body
         try:
             new_command = prepare_command(command)
             get_logger().info(f"{commands_conf}. Performing auto command '{new_command}', for {api_url=}")
+            # Install a fresh collector so `command_failed()` below cannot read a verdict left
+            # behind by the previous command; the tool replaces it with its own on entry.
+            init_run_details()
             if not await agent.handle_request(api_url, new_command):
+                succeeded = False
+            elif command_failed():
+                # `propagate_tool_errors` is false by default, so a tool that failed internally
+                # still returns normally. Reporting that as success would put a green tick on a
+                # pull request that never got its review.
+                get_logger().warning(f"Command '{command}' reported success but recorded a failure")
                 succeeded = False
         except Exception as e:
             succeeded = False
