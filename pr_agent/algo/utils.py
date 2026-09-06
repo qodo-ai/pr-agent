@@ -26,7 +26,11 @@ from pydantic import BaseModel
 from starlette_context import context
 
 from pr_agent.algo import MAX_TOKENS
-from pr_agent.algo.git_patch_processing import extract_hunk_headers, extract_hunk_lines_from_patch
+from pr_agent.algo.git_patch_processing import (
+    extract_hunk_headers,
+    extract_hunk_lines_from_patch,
+    to_hunk_only_patch,
+)
 from pr_agent.algo.run_details import get_run_details
 from pr_agent.algo.token_handler import TokenEncoder
 from pr_agent.algo.types import FilePatchInfo
@@ -911,7 +915,7 @@ def convert_str_to_datetime(date_str):
 def load_large_diff(filename, new_file_content_str: str, original_file_content_str: str, show_warning: bool = True) -> str:
     """
     Generate a patch for a modified file by comparing the original content of the file with the new content provided as
-    input.
+    input. The returned patch starts at its first hunk and excludes unified-diff file metadata.
     """
     if not original_file_content_str and not new_file_content_str:
         return ""
@@ -923,8 +927,7 @@ def load_large_diff(filename, new_file_content_str: str, original_file_content_s
                                     new_file_content_str.splitlines(keepends=True))
         if get_verbosity_level() >= 2 and show_warning:
             get_logger().info(f"File was modified, but no patch was found. Manually creating patch: {filename}.")
-        patch = ''.join(diff)
-        return patch
+        return to_hunk_only_patch(''.join(diff))
     except Exception as e:
         get_logger().exception(f"Failed to generate patch for file: {filename}")
         return ""

@@ -10,6 +10,7 @@ are read from MOSAICO.INPUT on the (context) settings.
 import re
 from typing import List, Optional
 
+from pr_agent.algo.git_patch_processing import to_hunk_only_patch
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers.git_provider import GitProvider
@@ -30,10 +31,9 @@ def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
     """Parse a supplied unified diff (git format) into a list of FilePatchInfo.
 
     Splits on ``diff --git a/<f> b/<f>`` headers; per file: filename = the b/ path,
-    patch = that file's section verbatim (the @@ hunk body pr-agent's hunk processing
-    consumes), edit_type inferred from new/deleted/rename file modes, and head/base
-    file content reconstructed best-effort from +/-/context lines. Degrades gracefully:
-    a blob with no ``diff --git`` header yields []."""
+    patch = that file's hunk body, edit_type inferred from new/deleted/rename file
+    modes, and head/base file content reconstructed best-effort from +/-/context
+    lines. Degrades gracefully: a blob with no ``diff --git`` header yields []."""
     if not diff_text or not isinstance(diff_text, str):
         return []
 
@@ -51,8 +51,6 @@ def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
         m = _DIFF_GIT_RE.match(header)
         a_path = m.group("a") if m else ""
         b_path = m.group("b") if m else ""
-
-        patch = "".join(section)
 
         edit_type = EDIT_TYPE.MODIFIED
         old_filename = None
@@ -96,7 +94,7 @@ def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
         files.append(FilePatchInfo(
             base_file="".join(base_lines),
             head_file="".join(head_lines),
-            patch=patch,
+            patch=to_hunk_only_patch("".join(section)),
             filename=filename,
             edit_type=edit_type,
             old_filename=old_filename,

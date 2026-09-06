@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import pr_agent.tools.pr_code_suggestions as pr_code_suggestions_module
-from pr_agent.algo.pr_processing import retry_with_fallback_models
+from pr_agent.algo.pr_processing import pr_generate_extended_diff, retry_with_fallback_models
 from pr_agent.algo.types import FilePatchInfo
-from pr_agent.algo.utils import PRCodeSuggestionsHeader, PRCodeSuggestionsIdentity
+from pr_agent.algo.utils import PRCodeSuggestionsHeader, PRCodeSuggestionsIdentity, load_large_diff
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import AzureDevopsProvider
 from pr_agent.git_providers.git_provider import GitProvider, IncrementalPR
@@ -65,6 +65,39 @@ code_suggestions:
     assert len(data["code_suggestions"]) == 1
     assert data["code_suggestions"][0]["one_sentence_summary"] == "Avoid duplicated work"
     assert data["code_suggestions"][0]["improved_code"] == "new()"
+
+
+@pytest.mark.asyncio
+async def test_convert_to_decoupled_uses_normalized_diff_and_keeps_ai_summary():
+    settings_snapshot = snapshot_settings(("config.enable_ai_metadata",))
+    token_handler = MagicMock(prompt_tokens=0)
+    token_handler.count_tokens.return_value = 1
+    file = FilePatchInfo(
+        base_file="old\n",
+        head_file="new\n",
+        patch=load_large_diff("app.py", "new\n", "old\n"),
+        filename="app.py",
+        ai_file_summary={"long_summary": "Keep the existing summary."},
+    )
+    try:
+        get_settings().set("config.enable_ai_metadata", True)
+        patches, _, _ = pr_generate_extended_diff(
+            [{"language": "Python", "files": [file]}],
+            token_handler,
+            add_line_numbers_to_hunks=False,
+        )
+    finally:
+        restore_settings(settings_snapshot)
+    tool = _make_tool()
+    tool.token_handler = token_handler
+
+    result = await tool.convert_to_decoupled_with_line_numbers(patches, "gpt-4o-mini")
+
+    assert len(result) == 1
+    assert "### AI-generated changes summary:" in result[0]
+    assert "Keep the existing summary." in result[0]
+    assert not any(line.startswith(("---", "+++")) for line in result[0].splitlines())
+    assert "1 +new" in result[0]
 
 
 @pytest.mark.asyncio
