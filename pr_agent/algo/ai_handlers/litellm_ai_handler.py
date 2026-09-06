@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import re
+from typing import List, Optional
 
 import httpx
 import litellm
@@ -29,6 +30,7 @@ from pr_agent.algo.ai_handlers.litellm_helpers import (
     get_repetition_penalty,
 )
 from pr_agent.algo.run_details import _as_decimal_cost, record_ai_call
+from pr_agent.algo.tool_registry import get_max_tool_iterations, get_tool_registry
 from pr_agent.algo.utils import ReasoningEffort, get_version
 from pr_agent.config_loader import get_settings, get_verbosity_level
 from pr_agent.log import get_logger
@@ -1228,9 +1230,61 @@ class LiteLLMAIHandler(BaseAiHandler):
 
         return resp, finish_reason
 
-    async def _get_completion(self, **kwargs):
+    async def chat_completion_with_tools(self, model: str, system: str, user: str,
+                                         temperature: float = 0.2,
+                                         max_iterations: Optional[int] = None):
+        """Answer with the host's tools available to the model.
+
+        Kept separate from `chat_completion`, which is a single request/response call used by
+        every tool prompt: this one owns a conversation, because a tool call is answered and
+        the model is asked again. Returns the final text and the calls that were made, so a
+        caller can show its work.
+
+        The loop is bounded by `tools.max_iterations`; when the budget runs out the model is
+        asked once more without tools so it always produces an answer.
+        """
+        registry = get_tool_registry()
+        specs = registry.specs()
+        iterations = get_max_tool_iterations() if max_iterations is None else max_iterations
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        calls: List[dict] = []
+        if not specs:
+            response, finish_reason = await self.chat_completion(
+                model=model, system=system, user=user, temperature=temperature)
+            return response, finish_reason, calls
+
+        for _round in range(max(0, iterations)):
+            content, finish_reason, response = await self._get_completion(
+                model=model, messages=messages, temperature=temperature,
+                tools=specs, tool_choice="auto", allow_tool_calls=True,
+                timeout=get_settings().config.ai_timeout)
+            message = response["choices"][0]["message"]
+            tool_calls = getattr(message, "tool_calls", None) or []
+            if not tool_calls:
+                return content or "", finish_reason, calls
+            messages.append(message.model_dump() if hasattr(message, "model_dump") else message)
+            for tool_call in tool_calls:
+                name = tool_call.function.name
+                arguments = tool_call.function.arguments
+                get_logger().info(f"The model called the tool {name!r}")
+                result = registry.execute(name, arguments)
+                calls.append({"name": name, "arguments": arguments, "result": result})
+                messages.append({"role": "tool", "tool_call_id": tool_call.id,
+                                 "name": name, "content": result})
+
+        # The budget is spent: ask once more with the results in hand, but no further tools.
+        get_logger().info("The tool-call budget is spent; asking for a final answer")
+        content, finish_reason, _response = await self._get_completion(
+            model=model, messages=messages, temperature=temperature,
+            timeout=get_settings().config.ai_timeout)
+        return content or "", finish_reason, calls
+
+    async def _get_completion(self, allow_tool_calls: bool = False, **kwargs):
         """
         Wrapper that automatically handles streaming for required models.
+
+        `allow_tool_calls` accepts a response whose content is empty because the model asked
+        to call a tool instead of answering; every other caller still requires content.
         """
         model = kwargs["model"]
         custom_llm_provider = str(kwargs.get("custom_llm_provider") or "").strip().lower()
@@ -1271,7 +1325,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 )
             content = response["choices"][0]['message']['content']
             finish_reason = response["choices"][0]["finish_reason"]
-            if not content:
+            requested_tools = getattr(response["choices"][0]["message"], "tool_calls", None)
+            if not content and not (allow_tool_calls and requested_tools):
                 get_logger().warning(
                     f"Empty content in model response, finish_reason: {finish_reason}")
                 raise openai.APIError(
