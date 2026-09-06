@@ -158,14 +158,20 @@ def prepare_command(command: str) -> list[str]:
             key, value = argument.split("=", 1)
             argument = f"{key}={json.dumps(value, ensure_ascii=False)}"
         args.append(argument)
-    is_valid, offending_arg = CliArgs.validate_user_args(args)
-    if not is_valid:
+    kept, rejected = [], []
+    for argument in args:
+        # Validate the key only. The value is free text - a review instruction may legitimately
+        # mention openai.key or config.url - and only the key can actually set a setting.
+        is_allowed, offending_param = CliArgs.validate_user_args([argument.split("=", 1)[0]])
+        if is_allowed:
+            kept.append(argument)
+        else:
+            rejected.append(offending_param)
+    if rejected:
         get_logger().error(
-            f"Dropping auto-command argument for forbidden param '{offending_arg}'. "
-            f"Use instead a configuration file."
-        )
-        args = [argument for argument in args
-                if CliArgs.validate_user_args([argument])[0]]
+            "Dropping auto-command argument(s) targeting forbidden param(s): "
+            + ", ".join(f"'{param}'" for param in rejected))
+        args = kept
     other_args = update_settings_from_args(args)
     return [action] + other_args
 
