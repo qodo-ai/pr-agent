@@ -376,6 +376,29 @@ class TestGetMaxTokens:
     @pytest.mark.parametrize(
         "model",
         [
+            "anthropic/claude-fable-5-1",
+            "claude-fable-5-1",
+            "vertex_ai/claude-fable-5-1",
+            "bedrock/anthropic.claude-fable-5-1",
+            "bedrock/global.anthropic.claude-fable-5-1",
+            "bedrock/us.anthropic.claude-fable-5-1",
+        ],
+    )
+    def test_claude_fable_5_1_model_max_tokens(self, monkeypatch, model):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 0,
+                "max_model_tokens": 0,
+            })()
+        })()
+
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+
+        assert get_max_tokens(model) == 1000000
+
+    @pytest.mark.parametrize(
+        "model",
+        [
             "anthropic/claude-sonnet-4-6",
             "claude-sonnet-4-6",
             "vertex_ai/claude-sonnet-4-6",

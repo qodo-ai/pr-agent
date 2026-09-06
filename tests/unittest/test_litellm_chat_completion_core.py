@@ -213,6 +213,30 @@ async def test_chat_completion_strips_temperature_for_claude_sonnet_5(monkeypatc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "anthropic/claude-fable-5-1",
+        "claude-fable-5-1",
+        "vertex_ai/claude-fable-5-1",
+        "bedrock/anthropic.claude-fable-5-1",
+        "bedrock/global.anthropic.claude-fable-5-1",
+        "bedrock/us.anthropic.claude-fable-5-1",
+    ],
+)
+async def test_chat_completion_strips_temperature_for_claude_fable_5_1(monkeypatch, model):
+    monkeypatch.setattr(litellm_handler, "get_settings", FakeSettings)
+
+    with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion", new_callable=AsyncMock) as mock_call:
+        mock_call.return_value = _mock_response()
+        handler = litellm_handler.LiteLLMAIHandler()
+
+        await handler.chat_completion(model=model, system="sys", user="usr", temperature=0.2)
+
+    assert "temperature" not in mock_call.call_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_chat_completion_does_not_use_extended_thinking_for_claude_opus_4_8(monkeypatch):
     monkeypatch.setattr(
         litellm_handler,
@@ -277,6 +301,36 @@ async def test_chat_completion_does_not_use_extended_thinking_for_claude_sonnet_
         handler = litellm_handler.LiteLLMAIHandler()
 
         await handler.chat_completion(model="claude-sonnet-5", system="sys", user="usr", temperature=0.2)
+
+    assert "thinking" not in mock_call.call_args.kwargs
+    assert "max_tokens" not in mock_call.call_args.kwargs
+    assert "temperature" not in mock_call.call_args.kwargs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "model",
+    [
+        "anthropic/claude-fable-5-1",
+        "claude-fable-5-1",
+        "vertex_ai/claude-fable-5-1",
+        "bedrock/anthropic.claude-fable-5-1",
+        "bedrock/global.anthropic.claude-fable-5-1",
+        "bedrock/us.anthropic.claude-fable-5-1",
+    ],
+)
+async def test_chat_completion_does_not_use_extended_thinking_for_claude_fable_5_1(monkeypatch, model):
+    monkeypatch.setattr(
+        litellm_handler,
+        "get_settings",
+        lambda: FakeSettings(config_values={"enable_claude_extended_thinking": True}),
+    )
+
+    with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion", new_callable=AsyncMock) as mock_call:
+        mock_call.return_value = _mock_response()
+        handler = litellm_handler.LiteLLMAIHandler()
+
+        await handler.chat_completion(model=model, system="sys", user="usr", temperature=0.2)
 
     assert "thinking" not in mock_call.call_args.kwargs
     assert "max_tokens" not in mock_call.call_args.kwargs

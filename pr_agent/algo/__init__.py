@@ -105,6 +105,17 @@ _CLAUDE_MODEL_FAMILIES = [
             "claude-3-7-sonnet-20250219",
         ],
     },
+    # claude-fable-5-1 is a 1M-context model with the same registry shape
+    # as Opus 5 / Sonnet 5 above; placed here next to its predecessor.
+    {
+        "model_id": "claude-fable-5-1",
+        "max_tokens": 1000000,
+        # Fable 5.1 exposes the global and US geo inference IDs on Bedrock;
+        # EU/AU/JP geo inference IDs are not available.
+        # Ref: https://platform.claude.com/docs/en/build-with-claude/claude-in-amazon-bedrock#regions
+        "bedrock_regions": ("global", "us"),
+        "no_temperature": True,
+    },
     # ── No-temperature only (not in MAX_TOKENS) ──────────────────────────
     {
         "model_id": "claude-fable-5",
@@ -584,7 +595,7 @@ GROK_REASONING_EFFORT_LEVELS = {
 # thinking={"type": "enabled", "budget_tokens": ...} request built by
 # LiteLLMAIHandler._configure_claude_extended_thinking(). Only models that
 # accept budget_tokens belong here. Adaptive-only models (Claude Opus 4.7/4.8,
-# Opus 5, Sonnet 5, Fable 5) reject budget_tokens with an HTTP 400 and must not be added
+# Opus 5, Sonnet 5, Fable 5, Fable 5.1) reject budget_tokens with an HTTP 400 and must not be added
 # without also adding an adaptive-thinking code path. This list is the built-in
 # default; it can be replaced via the `claude_extended_thinking_models_override`
 # configuration option.
