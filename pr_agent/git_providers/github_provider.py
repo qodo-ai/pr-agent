@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from github import AppAuthentication, Auth, Github, GithubException
+from github import AppAuthentication, Auth, Github, GithubException, GithubIntegration
 from github.Issue import Issue
 from retry.api import retry_call
 from starlette_context import context
@@ -433,17 +433,70 @@ class GithubProvider(GitProvider):
         return True
 
     def supports_review_finding_state(self) -> bool:
-        deployment_type = getattr(self, "deployment_type", None)
-        if deployment_type is None:
-            deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
+        deployment_type = self._deployment_type()
         # User deployments resolve the authenticated account through the API.
-        # App deployments require a login grounded in a trusted provider response.
+        # App deployments resolve their own `<slug>[bot]` login through the app JWT.
         if deployment_type == "user":
             return True
         if deployment_type == "app":
-            cached_login = getattr(self, "github_user_id", None)
-            return isinstance(cached_login, str) and bool(cached_login.strip())
+            return bool(self._agent_login())
         return False
+
+    def _deployment_type(self) -> str:
+        deployment_type = getattr(self, "deployment_type", None)
+        if deployment_type is None:
+            deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
+        return deployment_type
+
+    def _resolve_app_login(self) -> str:
+        """Return the app's own `<slug>[bot]` login, or "" when it cannot be resolved.
+
+        An app authenticates the API with an installation token, which cannot call
+        `GET /user`. The app's slug comes from the app JWT instead, so the identity does
+        not depend on PR-Agent having already commented on the pull request.
+        """
+        cached = getattr(self, "_app_login", None)
+        if isinstance(cached, str):
+            return cached
+        self._app_login = ""
+        try:
+            integration = GithubIntegration(
+                integration_id=str(get_settings().github.app_id),
+                private_key=get_settings().github.private_key,
+                base_url=self.base_url,
+            )
+            slug = (getattr(integration.get_app(), "slug", "") or "").strip()
+            if slug:
+                self._app_login = f"{slug}[bot]"
+        except Exception as e:
+            get_logger().warning(f"Could not resolve the GitHub App login: {e}")
+        return self._app_login
+
+    def _resolve_user_login(self) -> str:
+        """Return the authenticated login, falling back to the Actions bot identity.
+
+        The workflow token cannot call `GET /user`, but every comment it posts is
+        authored by `github-actions[bot]`.
+        """
+        try:
+            login = self.get_user_id()
+        except Exception as e:
+            get_logger().warning(f"Could not resolve the GitHub user login: {e}")
+            login = ""
+        if isinstance(login, str) and login.strip():
+            return login.strip()
+        if os.getenv("GITHUB_ACTIONS", "").strip().lower() == "true":
+            return "github-actions[bot]"
+        return ""
+
+    def _agent_login(self) -> str:
+        """Login PR-Agent posts as, or "" when this deployment cannot establish one."""
+        cached = getattr(self, "github_user_id", None)
+        if isinstance(cached, str) and cached.strip():
+            return cached.strip()
+        if self._deployment_type() == "app":
+            return self._resolve_app_login()
+        return self._resolve_user_login()
 
     def is_comment_authored_by_pr_agent(self, comment) -> bool:
         if isinstance(comment, dict):
@@ -457,22 +510,12 @@ class GithubProvider(GitProvider):
         if not isinstance(login, str) or not login.strip():
             raise RuntimeError("GitHub comment author cannot be verified")
 
-        deployment_type = getattr(self, "deployment_type", None)
-        if deployment_type is None:
-            deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
-        if deployment_type not in {"user", "app"}:
+        if self._deployment_type() not in {"user", "app"}:
             raise RuntimeError("Unsupported GitHub deployment identity")
 
-        agent_login = getattr(self, "github_user_id", None)
-        if not isinstance(agent_login, str) or not agent_login.strip():
-            if deployment_type == "app":
-                raise RuntimeError("GitHub App identity cannot be verified")
-            try:
-                agent_login = self.get_user_id()
-            except Exception as error:
-                raise RuntimeError("GitHub user identity cannot be verified") from error
-        if not isinstance(agent_login, str) or not agent_login.strip():
-            raise RuntimeError("GitHub user identity cannot be verified")
+        agent_login = self._agent_login()
+        if not agent_login:
+            raise RuntimeError("GitHub identity cannot be verified")
         return login.casefold() == agent_login.casefold()
 
     def _publish_check_run(self, text: str, name: str) -> bool:
