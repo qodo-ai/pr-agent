@@ -159,6 +159,10 @@ def serialize_review_state(state: Mapping[str, Any]) -> str:
     if not _is_valid_state(state):
         raise ValueError("Invalid review finding state")
     payload = json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    # An HTML comment ends at the first "-->" or "--!>", and a finding quotes whatever the
+    # diff contains. Escaping the ">" keeps the marker one comment; json.loads decodes the
+    # escape, so the finding round-trips unchanged.
+    payload = payload.replace("-->", "--\\u003e").replace("--!>", "--!\\u003e")
     return f"<!-- pr-agent-review-state:v{STATE_SCHEMA_VERSION}\n{payload}\n-->"
 
 
