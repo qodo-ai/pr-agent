@@ -40,6 +40,9 @@ Suggestions whose replacement ranges cannot be verified remain regular comments 
 If batch publication fails, `/improve` retries each suggestion individually. If every retry fails,
 it reports a failure instead of silently removing the progress comment. With
 `config.propagate_tool_errors=true`, the publication error is also raised to the caller.
+Regular fallback comments and coverage notices are published before the error is reported.
+When this fallback output succeeds, it is retained without an additional failure banner;
+error propagation still follows `config.propagate_tool_errors`.
 If any individual retry succeeds, the existing partial-recovery behavior is preserved.
 
 ![improve](https://codium.ai/images/pr_agent/improve.png){width=512}

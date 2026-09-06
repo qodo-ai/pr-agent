@@ -450,3 +450,68 @@ async def test_run_reports_exhausted_inline_publication_retries(
             provider.remove_comment.assert_called_once_with(provider.publish_comment.return_value)
     finally:
         restore_settings(settings_snapshot)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("propagate_errors", [False, True])
+@pytest.mark.parametrize(("supports_artifact", "fallback_kind"), [
+    (False, "anchor"), (True, "anchor"), (False, "syntax"),
+    (False, "truncated"), (False, "coverage"),
+])
+async def test_failed_inline_retries_preserve_fallback_output(
+    monkeypatch, propagate_errors, supports_artifact, fallback_kind
+):
+    settings_snapshot = snapshot_settings(_TRACKED_SETTINGS)
+    try:
+        provider = MagicMock()
+        provider.get_files.return_value = [object()]
+        provider.is_supported.return_value = False
+        provider.supports_code_suggestions_artifact.return_value = supports_artifact
+        provider.publish_code_suggestions_artifact.return_value = False
+        provider.publish_code_suggestions.return_value = False
+        tool = _make_tool(provider)
+        tool._validate_suggestion = MagicMock(side_effect=[
+            (True, "", True),
+            (False, "unverified range", False) if fallback_kind == "anchor" else (True, "", True),
+        ])
+        tool._validate_python_replacement_syntax = MagicMock(side_effect=[True, False])
+        tool.dedent_code = MagicMock(side_effect=lambda _file, _line, code: code)
+        tool._get_suggestions_coverage_footer = MagicMock(
+            return_value="\n\nCoverage notice" if fallback_kind == "coverage" else ""
+        )
+        suggestion = {
+            "relevant_file": "app.py", "relevant_lines_start": 1, "relevant_lines_end": 1,
+            "suggestion_content": "Inline suggestion.", "existing_code": "old()",
+            "improved_code": "new()", "label": "maintainability",
+        }
+        suggestions = [suggestion]
+        if fallback_kind != "coverage":
+            fallback = {**suggestion, "suggestion_content": "Fallback suggestion."}
+            if fallback_kind == "truncated":
+                fallback["_is_truncated"] = True
+            suggestions.append(fallback)
+        monkeypatch.setattr(
+            pr_code_suggestions_module, "retry_with_fallback_models",
+            AsyncMock(return_value={"code_suggestions": suggestions}),
+        )
+        _configure_published_run()
+        settings = get_settings()
+        settings.config.propagate_tool_errors = propagate_errors
+        settings.pr_code_suggestions.commitable_code_suggestions = True
+
+        if propagate_errors:
+            with pytest.raises(RuntimeError, match="Failed to publish code suggestions"):
+                await tool.run()
+        else:
+            await tool.run()
+
+        comments = [call.args[0] for call in provider.publish_comment.call_args_list]
+        assert len(comments) == 2
+        assert comments[0] == "Preparing suggestions..."
+        expected = "Coverage notice" if fallback_kind == "coverage" else "Fallback suggestion."
+        assert expected in comments[1]
+        assert "Failed to generate code suggestions" not in comments[1]
+        assert tool._output_published is True
+        provider.remove_comment.assert_called_once_with(provider.publish_comment.return_value)
+    finally:
+        restore_settings(settings_snapshot)

@@ -1089,13 +1089,13 @@ class PRCodeSuggestions:
                     if self.git_provider.publish_code_suggestions([code_suggestion]):
                         is_successful = True
                         self._output_published = True
-                if not is_successful:
-                    raise RuntimeError("Failed to publish code suggestions after individual retries")
         if coverage_footer and not supports_suggestions_artifact:
             fallback_comments.append(coverage_footer.strip())
         if fallback_comments:
             self.git_provider.publish_comment("\n\n---\n\n".join(fallback_comments))
             self._output_published = True
+        if code_suggestions and not is_successful:
+            raise RuntimeError("Failed to publish code suggestions after individual retries")
         return
 
     def _get_diff_file(self, relevant_file):
