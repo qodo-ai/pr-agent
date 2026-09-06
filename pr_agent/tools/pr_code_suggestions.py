@@ -23,7 +23,7 @@ from pr_agent.algo.pr_processing import (
 )
 from pr_agent.algo.prompt_fragments import render_diff_hunk_format
 from pr_agent.algo.repo_context import build_repo_context
-from pr_agent.algo.run_details import init_run_details
+from pr_agent.algo.run_details import init_run_details, record_command_failure
 from pr_agent.algo.skills_loader import get_skills_context
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.utils import (
@@ -387,6 +387,8 @@ class PRCodeSuggestions:
                         self.git_provider.publish_comment("Failed to generate code suggestions for PR")
                     except Exception as e:
                         get_logger().exception(f"Failed to update persistent review, error: {e}")
+            # The status of the whole run must not read as success just because the error stopped here.
+            record_command_failure()
             if get_settings().config.get("propagate_tool_errors", False):
                 raise
 

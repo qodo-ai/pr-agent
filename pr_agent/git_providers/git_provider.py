@@ -609,6 +609,16 @@ class GitProvider(ABC):
     def get_repo_labels(self):
         pass
 
+    def publish_run_status(self, state: str, description: str) -> bool:
+        """Report that PR-Agent is working, before any output exists.
+
+        `state` is "pending", "success" or "failure". This is the only signal available at the
+        moment a pull request is opened: an automatic command publishes no progress comment, so
+        nothing tells the author anything is happening until the model has answered. Providers
+        without a commit-status API return False.
+        """
+        return False
+
     @abstractmethod
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
         pass
