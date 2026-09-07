@@ -6,7 +6,6 @@ import copy
 import json
 import os
 import re
-import secrets
 from urllib.parse import quote, unquote
 
 import uvicorn
@@ -28,6 +27,7 @@ from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.azuredevops_provider import AZURE_AGENT_RESPONSE_MARKER, AzureDevopsProvider
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
+from pr_agent.servers.utils import basic_auth_matches, get_pr_commands
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 security = HTTPBasic(auto_error=False)
@@ -181,8 +181,13 @@ def handle_line_comment(body: str, thread_id: int, comment_id: int, provider: Az
 # currently only basic auth is supported with azure webhooks
 # for this reason, https must be enabled to ensure the credentials are not sent in clear text
 def authorize(credentials: HTTPBasicCredentials = Depends(security)):
-    if WEBHOOK_USERNAME is None or WEBHOOK_PASSWORD is None:
+    if not WEBHOOK_USERNAME and not WEBHOOK_PASSWORD:
         return
+    if not WEBHOOK_USERNAME or not WEBHOOK_PASSWORD:
+        # Fail closed on a half-configured pair rather than reverting to open access.
+        get_logger().error("Incomplete azure_devops_server webhook credentials: set both "
+                           "webhook_username and webhook_password, or neither")
+        raise HTTPException(status_code=500, detail="Webhook authentication is misconfigured.")
 
     if credentials is None:
         raise HTTPException(
@@ -191,9 +196,7 @@ def authorize(credentials: HTTPBasicCredentials = Depends(security)):
             headers={"WWW-Authenticate": "Basic"},
         )
 
-    is_user_ok = secrets.compare_digest(credentials.username, WEBHOOK_USERNAME)
-    is_pass_ok = secrets.compare_digest(credentials.password, WEBHOOK_PASSWORD)
-    if not (is_user_ok and is_pass_ok):
+    if not basic_auth_matches(credentials, WEBHOOK_USERNAME, WEBHOOK_PASSWORD):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Incorrect username or password.',
@@ -206,7 +209,11 @@ async def _perform_commands_azure(commands_conf: str, agent: PRAgent, api_url: s
     if commands_conf == "pr_commands" and get_settings().config.disable_auto_feedback:  # auto commands for PR, and auto feedback is disabled
         get_logger().info(f"Auto feedback is disabled, skipping auto commands for PR {api_url=}", **log_context)
         return
-    commands = get_settings().get(f"azure_devops_server.{commands_conf}")
+    commands = (
+        get_pr_commands("azure_devops_server")
+        if commands_conf == "pr_commands"
+        else get_settings().get(f"azure_devops_server.{commands_conf}")
+    )
     if not commands:
         return
 

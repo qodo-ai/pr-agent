@@ -26,6 +26,7 @@ from pr_agent.algo.ai_handlers.litellm_helpers import (
     _handle_streaming_response,
     _process_litellm_extra_body,
     _response_field,
+    get_repetition_penalty,
 )
 from pr_agent.algo.run_details import _as_decimal_cost, record_ai_call
 from pr_agent.algo.utils import ReasoningEffort, get_version
@@ -34,6 +35,7 @@ from pr_agent.log import get_logger
 
 MODEL_RETRIES = 2
 DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
+_IMAGE_HEAD_TIMEOUT_SECONDS = 5
 
 
 def _as_bool(value, default: bool) -> bool:
@@ -250,8 +252,9 @@ class LiteLLMAIHandler(BaseAiHandler):
             self.api_base = get_settings().ollama.api_base
         if get_settings().get("OLLAMA.API_KEY", None):
             litellm.api_key = get_settings().ollama.api_key
-        if get_settings().get("HUGGINGFACE.REPETITION_PENALTY", None):
-            self.repetition_penalty = float(get_settings().huggingface.repetition_penalty)
+        repetition_penalty = get_repetition_penalty()
+        if repetition_penalty is not None:
+            self.repetition_penalty = repetition_penalty
         if get_settings().get("VERTEXAI.VERTEX_PROJECT", None):
             litellm.vertex_project = get_settings().vertexai.vertex_project
             litellm.vertex_location = get_settings().get(
@@ -792,7 +795,12 @@ class LiteLLMAIHandler(BaseAiHandler):
                 if img_path:
                     try:
                         # check if the image link is alive
-                        r = requests.head(img_path, allow_redirects=True)
+                        r = await asyncio.to_thread(
+                            requests.head,
+                            img_path,
+                            allow_redirects=True,
+                            timeout=_IMAGE_HEAD_TIMEOUT_SECONDS,
+                        )
                         if r.status_code == 404:
                             error_msg = "The image link is not [alive](img_path).\nPlease repost the original image as a comment, and send the question again with 'quote reply' (see [instructions](https://pr-agent-docs.codium.ai/tools/ask/#ask-on-images-using-the-pr-code-as-context))."
                             get_logger().error(error_msg)
@@ -812,7 +820,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 model_base = model
                 while model_base.startswith(('openai/', 'azure/')):
                     model_base = model_base.removeprefix('openai/').removeprefix('azure/')
-                if model_base.startswith('gpt-5'):
+                is_gpt6_astra = model_base.removesuffix('_thinking') == 'gpt-6-astra'
+                if model_base.startswith('gpt-5') or is_gpt6_astra:
                     # Use configured reasoning_effort or default to MEDIUM
                     config_effort = get_settings().config.reasoning_effort
                     try:
@@ -826,11 +835,16 @@ class LiteLLMAIHandler(BaseAiHandler):
                                 f"Using default '{effort}'. Valid values: {[e.value for e in ReasoningEffort]}"
                             )
 
+                    if is_gpt6_astra and effort in (ReasoningEffort.NONE.value, ReasoningEffort.MINIMAL.value):
+                        get_logger().info(f"GPT-6 Astra does not support reasoning_effort='{effort}'; using 'low'")
+                        effort = ReasoningEffort.LOW.value
+
                     thinking_kwargs_gpt5 = {
                         "reasoning_effort": effort,
                         "allowed_openai_params": ["reasoning_effort"],
                     }
-                    get_logger().info(f"Using reasoning_effort='{effort}' for GPT-5 model")
+                    model_family = "GPT-6 Astra" if is_gpt6_astra else "GPT-5"
+                    get_logger().info(f"Using reasoning_effort='{effort}' for {model_family} model")
                     # Routing priority: Azure mode > explicit provider prefix in user config > openai/
                     # default. This preserves an explicit "azure/" the user wrote in config even when
                     # self.azure is false, and avoids stacking when self.azure already added "azure/".
@@ -963,7 +977,8 @@ class LiteLLMAIHandler(BaseAiHandler):
                 except (TypeError, ValueError):
                     max_output_tokens = 0
                 if max_output_tokens > 0:
-                    kwargs.setdefault("max_tokens", max_output_tokens)
+                    output_limit_param = "max_completion_tokens" if is_gpt6_astra else "max_tokens"
+                    kwargs.setdefault(output_limit_param, max_output_tokens)
 
                 if get_settings().litellm.get("enable_callbacks", False):
                     kwargs = self.add_litellm_callbacks(kwargs)

@@ -227,7 +227,7 @@ class TestGitLabProvider:
 
     def test_has_create_or_update_pr_file_method(self, gitlab_provider):
         assert hasattr(gitlab_provider, "create_or_update_pr_file")
-        assert callable(getattr(gitlab_provider, "create_or_update_pr_file"))
+        assert callable(gitlab_provider.create_or_update_pr_file)
 
     def test_method_signature_compatibility(self, gitlab_provider):
         import inspect
@@ -368,6 +368,14 @@ class TestGitLabProvider:
         assert gitlab_provider.mr.title == "AI title"
         assert gitlab_provider.mr.description == "Updated description"
         gitlab_provider.mr.save.assert_called_once()
+
+    def test_publish_description_propagates_save_failure(self, gitlab_provider):
+        gitlab_provider.mr = MagicMock()
+        gitlab_provider.mr.save.side_effect = RuntimeError("permission denied")
+        gitlab_provider.id_mr = 1
+
+        with pytest.raises(RuntimeError, match="permission denied"):
+            gitlab_provider.publish_description("AI title", "Updated description")
 
     @pytest.mark.parametrize("configured", [True, False])
     def test_should_publish_review_as_thread_reflects_config(self, gitlab_provider, configured):
@@ -1904,6 +1912,14 @@ class TestGitLabCapabilities:
 
         assert provider.get_issue_comments() == ["oldest", "middle", "newest"]
 
+    def test_persistent_state_ownership_uses_authenticated_user_id(self):
+        provider = self._provider()
+        provider._get_own_user_id = MagicMock(return_value=42)
+
+        assert provider.supports_review_finding_state() is True
+        assert provider.is_comment_authored_by_pr_agent({"author": {"id": 42}}) is True
+        assert provider.is_comment_authored_by_pr_agent({"author": {"id": 99}}) is False
+
     @pytest.mark.parametrize("capability", [
         "create_inline_comment",
         "publish_inline_comments",
@@ -2023,3 +2039,11 @@ class TestGitLabProviderUrlParsing:
         provider = self._provider("https://host.local/gitlab")
         with pytest.raises(ValueError):
             provider._parse_merge_request_url("https://host.local/gitlab/shai/pr-agent")
+
+
+def test_get_issue_comments_newest_first_returns_notes_newest_first():
+    provider = GitLabProvider.__new__(GitLabProvider)
+    provider.mr = MagicMock()
+    provider.mr.notes.list.return_value = ["newest", "middle", "oldest"]
+
+    assert provider.get_issue_comments_newest_first() == ["newest", "middle", "oldest"]

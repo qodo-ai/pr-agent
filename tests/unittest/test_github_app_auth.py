@@ -45,3 +45,30 @@ class TestGithubAppAuth:
         finally:
             for name, value in original.items():
                 settings.set(name, value)
+
+    def test_is_bot_user_reads_github_section_setting(self):
+        """is_bot_user must honor `ignore_bot_pr` from the [github] section
+        (#3017): configuration.toml sets it under [github], so reading
+        GITHUB_APP.IGNORE_BOT_PR left the guard permanently off."""
+        from pr_agent.servers.github_app import is_bot_user
+
+        settings = get_settings()
+        original = settings.get("GITHUB.IGNORE_BOT_PR", None)
+        settings.set("GITHUB.IGNORE_BOT_PR", True)
+        try:
+            assert is_bot_user("some-bot[bot]", "Bot") is True
+            assert is_bot_user("human", "User") is False
+        finally:
+            settings.set("GITHUB.IGNORE_BOT_PR", original)
+
+    def test_is_bot_user_off_when_setting_unset(self):
+        """With the setting off, bot senders are not filtered."""
+        from pr_agent.servers.github_app import is_bot_user
+
+        settings = get_settings()
+        original = settings.get("GITHUB.IGNORE_BOT_PR", None)
+        settings.set("GITHUB.IGNORE_BOT_PR", False)
+        try:
+            assert is_bot_user("some-bot[bot]", "Bot") is False
+        finally:
+            settings.set("GITHUB.IGNORE_BOT_PR", original)

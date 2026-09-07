@@ -15,6 +15,7 @@ from ..algo.language_handler import is_valid_file
 from ..algo.utils import add_pr_review_identity, comment_matches_identity, find_line_number_of_relevant_line_in_file
 from ..config_loader import get_settings, get_verbosity_level
 from ..log import get_logger
+from .diff_parsing import to_hunk_only_patch
 from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, get_cached_global_settings, redact_credentials
 
 
@@ -298,32 +299,20 @@ class BitbucketProvider(GitProvider):
         if len(diff_split) != len(diffs):
             get_logger().error(f"Error - failed to split the diff into {len(diffs)} parts")
             return []
-        # bitbucket diff has a header for each file, we need to remove it:
-        # "diff --git filename
-        # new file mode 100644 (optional)
-        #  index caa56f0..61528d7 100644
-        #   --- a/pr_agent/cli_pip.py
-        #  +++ b/pr_agent/cli_pip.py
-        #   @@ -... @@"
-        for i, _ in enumerate(diff_split):
-            diff_split_lines = diff_split[i].splitlines()
-            if (len(diff_split_lines) >= 6) and \
-                    ((diff_split_lines[2].startswith("---") and
-                      diff_split_lines[3].startswith("+++") and
-                      diff_split_lines[4].startswith("@@")) or
-                     (diff_split_lines[3].startswith("---") and  # new or deleted file
-                      diff_split_lines[4].startswith("+++") and
-                      diff_split_lines[5].startswith("@@"))):
-                diff_split[i] = "\n".join(diff_split_lines[4:])
+        # Bitbucket headers vary by change type and may include mode or rename
+        # metadata. Keep only the unified-diff hunks consumed downstream.
+        for i, patch in enumerate(diff_split):
+            diff_split[i] = to_hunk_only_patch(patch)
+            if diff_split[i]:
+                continue
+
+            if diffs[i].data.get('lines_added', 0) == 0 and diffs[i].data.get('lines_removed', 0) == 0:
+                continue
+
+            if len(patch.splitlines()) <= 3:
+                get_logger().info(f"Disregarding empty diff for file {_gef_filename(diffs[i])}")
             else:
-                if diffs[i].data.get('lines_added', 0) == 0 and diffs[i].data.get('lines_removed', 0) == 0:
-                    diff_split[i] = ""
-                elif len(diff_split_lines) <= 3:
-                    diff_split[i] = ""
-                    get_logger().info(f"Disregarding empty diff for file {_gef_filename(diffs[i])}")
-                else:
-                    get_logger().warning(f"Bitbucket failed to get diff for file {_gef_filename(diffs[i])}")
-                    diff_split[i] = ""
+                get_logger().warning(f"Bitbucket failed to get diff for file {_gef_filename(diffs[i])}")
 
         invalid_files_names = []
         diff_files = []
@@ -469,6 +458,7 @@ class BitbucketProvider(GitProvider):
             comment.update(body)
         except Exception as e:
             get_logger().exception(f"Failed to update comment, error: {e}")
+            return False
 
     def remove_initial_comment(self):
         try:
@@ -501,15 +491,24 @@ class BitbucketProvider(GitProvider):
         path = relevant_file.strip()
         return dict(body=body, path=path, position=absolute_position) if subject_type == "LINE" else {}
 
-    def publish_inline_comment(self, comment: str, from_line: int, file: str, original_suggestion=None) -> bool:
-        comment = self.limit_output_characters(comment, self.max_comment_length)
+    def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str | int,
+                               original_suggestion=None) -> bool:
+        body = self.limit_output_characters(body, self.max_comment_length)
+        # The base contract passes the line's text; publish_inline_comments passes an already resolved line number.
+        if not isinstance(relevant_line_in_file, int):
+            comment = self.create_inline_comment(body, relevant_file, relevant_line_in_file)
+            if not comment:
+                get_logger().error(f"Could not find line '{relevant_line_in_file}' in '{relevant_file}' "
+                                   "to publish an inline comment")
+                return False
+            relevant_file, relevant_line_in_file = comment["path"], comment["position"]
         payload = json.dumps({
             "content": {
-                "raw": comment,
+                "raw": body,
             },
             "inline": {
-                "to": from_line,
-                "path": file
+                "to": relevant_line_in_file,
+                "path": relevant_file
             },
         })
         try:
@@ -519,7 +518,7 @@ class BitbucketProvider(GitProvider):
             response.raise_for_status()
         except Exception as e:
             get_logger().error(
-                f"Failed to publish inline comment to '{file}' at line {from_line}, error: {e}")
+                f"Failed to publish inline comment to '{relevant_file}' at line {relevant_line_in_file}, error: {e}")
             return False
         return True
 
@@ -566,7 +565,7 @@ class BitbucketProvider(GitProvider):
                 continue
 
             publishable_count += 1
-            if self.publish_inline_comment(comment['body'], from_line, comment['path']):
+            if self.publish_inline_comment(comment['body'], comment['path'], from_line):
                 published_count += 1
 
         # A partial failure must not report failure: the caller republishes the whole
@@ -608,7 +607,7 @@ class BitbucketProvider(GitProvider):
         )
 
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        return True
+        return None
 
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
         return True
@@ -696,23 +695,21 @@ class BitbucketProvider(GitProvider):
         except Exception:
             return ""
 
-    def get_commit_messages(self):
+    def get_commit_messages(self) -> str:
         return ""  # not implemented yet
 
     # bitbucket does not support labels
-    def publish_description(self, pr_title: str, description: str):
+    def publish_description(self, pr_title: str, description: str) -> None:
         payload_dict = {"description": description}
         if pr_title is not None:
             payload_dict["title"] = pr_title
         payload = json.dumps(payload_dict)
 
         response = requests.request("PUT", self.bitbucket_pull_request_api_url, headers=self.headers, data=payload)
-        try:
-            if response.status_code != 200:
-                get_logger().info(f"Failed to update description, error code: {response.status_code}")
-        except:
-            pass
-        return response
+        if not 200 <= response.status_code < 300:
+            message = f"Failed to update description, error code: {response.status_code}"
+            get_logger().error(message)
+            raise RuntimeError(message)
 
     # bitbucket does not support labels
     def publish_labels(self, pr_types: list):

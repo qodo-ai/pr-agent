@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from github import AppAuthentication, Auth, Github, GithubException
+from github import AppAuthentication, Auth, Github, GithubException, GithubIntegration
 from github.Issue import Issue
 from retry.api import retry_call
 from starlette_context import context
@@ -431,6 +431,105 @@ class GithubProvider(GitProvider):
 
     def supports_review_comment_identity(self) -> bool:
         return True
+
+    def supports_review_finding_state(self) -> bool:
+        deployment_type = self._deployment_type()
+        # User deployments resolve the authenticated account through the API.
+        # App deployments resolve their own `<slug>[bot]` login through the app JWT.
+        if deployment_type == "user":
+            return True
+        if deployment_type == "app":
+            return bool(self._agent_login())
+        return False
+
+    def _deployment_type(self) -> str:
+        deployment_type = getattr(self, "deployment_type", None)
+        if deployment_type is None:
+            deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
+        return deployment_type
+
+    def _resolve_app_login(self) -> str:
+        """Return the app's own `<slug>[bot]` login, or "" when it cannot be resolved.
+
+        An app authenticates the API with an installation token, which cannot call
+        `GET /user`. The app's slug comes from the app JWT instead, so the identity does
+        not depend on PR-Agent having already commented on the pull request.
+        """
+        cached = getattr(self, "_app_login", None)
+        if isinstance(cached, str) and cached:
+            return cached
+        try:
+            integration = GithubIntegration(
+                integration_id=str(get_settings().github.app_id),
+                private_key=get_settings().github.private_key,
+                base_url=self.base_url,
+            )
+            slug = (getattr(integration.get_app(), "slug", "") or "").strip()
+            if slug:
+                # Only a success is cached. Caching the failure too would let one timed-out
+                # `GET /app` demote every later command in the same request, which is the
+                # behaviour this change exists to remove.
+                self._app_login = f"{slug}[bot]"
+                return self._app_login
+        except Exception as e:
+            get_logger().warning(f"Could not resolve the GitHub App login: {e}")
+        return ""
+
+    def _resolve_user_login(self) -> str:
+        """Return the authenticated login, falling back to the Actions bot identity.
+
+        The workflow token cannot call `GET /user`, but every comment it posts is authored by
+        `github-actions[bot]`.
+
+        This fallback is a deliberate widening, and the one place where the identity is assumed
+        rather than read: inside a GitHub Actions run the workflow token is the only credential
+        PR-Agent has, so a comment marked as PR-Agent's and authored by `github-actions[bot]`
+        will be edited. Anything else in the same workflow that posts under the workflow token -
+        another action, another step - shares that identity. The exposure is bounded by the
+        identity marker (the comment must already carry PR-Agent's own marker) and by the fact
+        that GitHub reserves the `[bot]` suffix, so no human account can hold this login. It
+        applies only when `GITHUB_ACTIONS=true` and `GET /user` failed; a deployment that can
+        resolve its real login never reaches it.
+        """
+        try:
+            login = self.get_user_id()
+        except Exception as e:
+            get_logger().warning(f"Could not resolve the GitHub user login: {e}")
+            login = ""
+        if isinstance(login, str) and login.strip():
+            return login.strip()
+        if os.getenv("GITHUB_ACTIONS", "").strip().lower() == "true":
+            return "github-actions[bot]"
+        return ""
+
+    def _agent_login(self) -> str:
+        """Login PR-Agent posts as, or "" when this deployment cannot establish one."""
+        cached = getattr(self, "github_user_id", None)
+        if isinstance(cached, str) and cached.strip():
+            return cached.strip()
+        if self._deployment_type() == "app":
+            return self._resolve_app_login()
+        return self._resolve_user_login()
+
+    def is_comment_authored_by_pr_agent(self, comment) -> bool:
+        if isinstance(comment, dict):
+            author = comment.get("user") or comment.get("author")
+        else:
+            author = getattr(comment, "user", None) or getattr(comment, "author", None)
+        if isinstance(author, dict):
+            login = author.get("login")
+        else:
+            login = getattr(author, "login", None)
+        if not isinstance(login, str) or not login.strip():
+            raise RuntimeError("GitHub comment author cannot be verified")
+
+        if self._deployment_type() not in {"user", "app"}:
+            raise RuntimeError("Unsupported GitHub deployment identity")
+
+        agent_login = self._agent_login()
+        if not agent_login:
+            raise RuntimeError("GitHub identity cannot be verified")
+        return login.casefold() == agent_login.casefold()
 
     def _publish_check_run(self, text: str, name: str) -> bool:
         if not getattr(self, 'last_commit_id', None):
@@ -948,6 +1047,10 @@ class GithubProvider(GitProvider):
                     artifact={"error": e})
             else:
                 get_logger().exception("Failed to edit github comment", artifact={"error": e})
+            return False
+        except Exception as e:
+            get_logger().exception("Failed to edit github comment", artifact={"error": e})
+            return False
 
     def edit_comment_from_comment_id(self, comment_id: int, body: str):
         try:
@@ -1178,17 +1281,23 @@ class GithubProvider(GitProvider):
     def get_workspace_name(self):
         return self.repo.split('/')[0]
 
-    def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        if disable_eyes:
+    # The reaction API accepts only this closed set; anything else is rejected with 422.
+    SUPPORTED_REACTIONS = ("+1", "-1", "laugh", "confused", "heart", "hooray", "rocket", "eyes")
+
+    def add_reaction(self, issue_comment_id: int, reaction: str) -> Optional[int]:
+        if reaction not in self.SUPPORTED_REACTIONS:
+            get_logger().warning(
+                f"GitHub does not support the reaction {reaction!r}; "
+                f"choose one of {', '.join(self.SUPPORTED_REACTIONS)}")
             return None
         try:
             headers, data_patch = self.pr._requester.requestJsonAndCheck(
                 "POST", f"{self.base_url}/repos/{self.repo}/issues/comments/{issue_comment_id}/reactions",
-                input={"content": "eyes"}
+                input={"content": reaction}
             )
             return data_patch.get("id", None)
         except Exception as e:
-            get_logger().warning(f"Failed to add eyes reaction, error: {e}")
+            get_logger().warning(f"Failed to add the {reaction} reaction, error: {e}")
             return None
 
     def remove_reaction(self, issue_comment_id: int, reaction_id: str) -> bool:
@@ -1364,7 +1473,7 @@ class GithubProvider(GitProvider):
         labels = self.repo_obj.get_labels()
         return [label for label in itertools.islice(labels, 50)]
 
-    def get_commit_messages(self):
+    def get_commit_messages(self) -> str:
         """
         Retrieves the commit messages of a pull request.
 
@@ -1525,7 +1634,7 @@ class GithubProvider(GitProvider):
                 return sub_issues
 
             nodes = sub_issues_data.get("nodes") or []
-            get_logger().info(f"Github Sub-issues fetched: {len(nodes)}", artifact={"nodes": nodes})
+            get_logger().info(f"GitHub Sub-issues fetched: {len(nodes)}", artifact={"nodes": nodes})
 
             for sub_issue in nodes:
                 if not sub_issue:

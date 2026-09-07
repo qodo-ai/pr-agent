@@ -12,7 +12,7 @@ from dynaconf.loaders import env_loader
 from starlette_context import context
 
 from pr_agent.config_loader import get_settings
-from pr_agent.config_security import REPO_OVERRIDABLE_KEYS_BY_HOST_SECTION
+from pr_agent.config_security import REPO_HOST_ONLY_KEYS_BY_SECTION, REPO_OVERRIDABLE_KEYS_BY_HOST_SECTION
 from pr_agent.custom_merge_loader import MAX_TOML_SIZE_IN_BYTES, validate_file_security
 from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.log import get_logger
@@ -357,6 +357,16 @@ def _apply_repo_settings_file(repo_settings_file, category="local"):
             contents = {k: v for k, v in contents.items() if k.lower() in allowed_keys}
             if not contents:
                 continue
+        else:
+            host_only_keys = REPO_HOST_ONLY_KEYS_BY_SECTION.get(section.lower(), frozenset())
+            rejected = [k for k in contents if k.lower() in host_only_keys]
+            if rejected:
+                get_logger().warning(
+                    f"Ignoring host-only key(s) {rejected} in section [{section}] from repo settings"
+                )
+                contents = {k: v for k, v in contents.items() if k.lower() not in host_only_keys}
+                if not contents:
+                    continue
         if category != "global":
             protected_keys = _LOCAL_REPO_PROTECTED_KEYS_BY_SECTION.get(section.lower(), frozenset())
             rejected = [key for key in contents if key.lower() in protected_keys]

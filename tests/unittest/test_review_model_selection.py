@@ -201,7 +201,7 @@ async def test_review_without_selector_uses_existing_constructor_and_settings(mo
 
 @pytest.mark.asyncio
 async def test_selector_sets_existing_model_and_effort_configuration(monkeypatch):
-    snapshot = _snapshot_sections("CONFIG", "PR_REVIEWER")
+    snapshot = _snapshot_sections("CONFIG", "PR_REVIEWER", "MODEL_ROUTING")
     reviewer_calls = []
 
     class _Reviewer:
@@ -225,6 +225,7 @@ async def test_selector_sets_existing_model_and_effort_configuration(monkeypatch
             COMMAND_MODEL_ALIASES={"fable": "anthropic/claude-fable-5"},
             EXTRA_INSTRUCTIONS="before",
         )
+        _replace_section_values("MODEL_ROUTING", ENABLE=True)
         monkeypatch.setattr(pr_agent_module, "apply_repo_settings", lambda _pr_url: None)
         monkeypatch.setitem(pr_agent_module.command2class, "review", _Reviewer)
 
@@ -238,6 +239,7 @@ async def test_selector_sets_existing_model_and_effort_configuration(monkeypatch
         assert get_settings().config.model == "anthropic/claude-fable-5"
         assert get_settings().config.reasoning_effort == "high"
         assert get_settings().config.enable_claude_adaptive_thinking is True
+        assert get_settings().model_routing.enable is False
         assert get_settings().pr_reviewer.extra_instructions == "focused"
     finally:
         _restore_sections(snapshot)

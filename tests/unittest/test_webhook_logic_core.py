@@ -337,6 +337,218 @@ async def test_github_automatic_feedback_preserves_quoted_command_arguments(monk
     assert repo_settings_calls == 1
 
 
+def _github_review_event(action="submitted", state="changes_requested", review_author_type="User"):
+    return {
+        "action": action,
+        "review": {"state": state, "user": {"type": review_author_type}},
+        "pull_request": {
+            "url": "https://api.github.com/repos/org/repo/pulls/1",
+            "state": "open",
+            "draft": False,
+            "title": "Regular PR",
+            "labels": [],
+            "head": {"ref": "feature/cache"},
+            "base": {"ref": "main"},
+        },
+        "sender": {"login": "alice", "id": 1, "type": "User"},
+        "repository": {"full_name": "org/repo"},
+    }
+
+
+def test_matches_review_state_is_case_insensitive_and_handles_empty_values():
+    assert github_app.matches_review_state(" CHANGES_REQUESTED ", ["changes_requested"])
+    assert github_app.matches_review_state("approved", "approved")
+    assert not github_app.matches_review_state("approved", [])
+    assert not github_app.matches_review_state("", ["approved"])
+
+
+@pytest.mark.asyncio
+async def test_github_review_submission_is_disabled_without_review_commands(monkeypatch):
+    settings = get_settings()
+    original_github_app = copy.deepcopy(settings.get("GITHUB_APP"))
+    original_is_auto_command = settings.get("CONFIG.IS_AUTO_COMMAND")
+    settings.set("GITHUB_APP.REVIEW_COMMANDS", [])
+    settings.set("GITHUB_APP.REVIEW_STATES", ["changes_requested"])
+    settings.set("GITHUB_APP.REVIEW_AUTHOR_TYPES", ["User"])
+
+    agent = RecordingAgent()
+    monkeypatch.setattr(github_app, "apply_repo_settings", lambda _url: None)
+    monkeypatch.setattr(github_app, "should_process_pr_logic", lambda _body: True)
+    monkeypatch.setattr(github_app, "PRAgent", lambda: agent)
+    monkeypatch.setattr(
+        github_app,
+        "get_identity_provider",
+        lambda: SimpleNamespace(verify_eligibility=lambda *args, **kwargs: Eligibility.ELIGIBLE),
+    )
+
+    try:
+        await github_app.handle_request(_github_review_event(), "pull_request_review")
+    finally:
+        settings.set("GITHUB_APP", original_github_app)
+        settings.set("CONFIG.IS_AUTO_COMMAND", original_is_auto_command)
+
+    assert agent.commands == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["edited", "dismissed"])
+async def test_github_review_submission_ignores_non_submitted_actions(monkeypatch, action):
+    settings = get_settings()
+    original_github_app = copy.deepcopy(settings.get("GITHUB_APP"))
+    original_is_auto_command = settings.get("CONFIG.IS_AUTO_COMMAND")
+    settings.set("GITHUB_APP.REVIEW_COMMANDS", ["/review"])
+    settings.set("GITHUB_APP.REVIEW_STATES", ["changes_requested"])
+    settings.set("GITHUB_APP.REVIEW_AUTHOR_TYPES", ["User"])
+
+    agent = RecordingAgent()
+    monkeypatch.setattr(github_app, "should_process_pr_logic", lambda _body: True)
+    monkeypatch.setattr(github_app, "PRAgent", lambda: agent)
+
+    try:
+        await github_app.handle_request(_github_review_event(action=action), "pull_request_review")
+    finally:
+        settings.set("GITHUB_APP", original_github_app)
+        settings.set("CONFIG.IS_AUTO_COMMAND", original_is_auto_command)
+
+    assert agent.commands == []
+
+
+@pytest.mark.asyncio
+async def test_github_review_submission_runs_configured_commands(monkeypatch):
+    settings = get_settings()
+    original_github_app = copy.deepcopy(settings.get("GITHUB_APP"))
+    original_is_auto_command = settings.get("CONFIG.IS_AUTO_COMMAND")
+    settings.set("GITHUB_APP.REVIEW_COMMANDS", ["/review"])
+    settings.set("GITHUB_APP.REVIEW_STATES", ["changes_requested"])
+    settings.set("GITHUB_APP.REVIEW_AUTHOR_TYPES", ["User"])
+
+    agent = RecordingAgent()
+    monkeypatch.setattr(github_app, "apply_repo_settings", lambda _url: None)
+    monkeypatch.setattr(github_app, "PRAgent", lambda: agent)
+    monkeypatch.setattr(
+        github_app,
+        "get_identity_provider",
+        lambda: SimpleNamespace(verify_eligibility=lambda *args, **kwargs: Eligibility.ELIGIBLE),
+    )
+
+    try:
+        await github_app.handle_request(
+            {
+                "action": "submitted",
+                "review": {
+                    "state": "changes_requested",
+                    "body": "Please fix the validation.",
+                    "user": {"type": "User"},
+                },
+                "pull_request": {
+                    "url": "https://api.github.com/repos/org/repo/pulls/1",
+                    "state": "open",
+                    "draft": False,
+                    "title": "Regular PR",
+                    "labels": [],
+                    "head": {"ref": "feature/cache"},
+                    "base": {"ref": "main"},
+                },
+                "sender": {"login": "alice", "id": 1, "type": "User"},
+                "repository": {"full_name": "org/repo"},
+            },
+            "pull_request_review",
+        )
+    finally:
+        settings.set("GITHUB_APP", original_github_app)
+        settings.set("CONFIG.IS_AUTO_COMMAND", original_is_auto_command)
+
+    assert agent.commands == [["/review"]]
+
+
+@pytest.mark.asyncio
+async def test_github_review_submission_ignores_unconfigured_state(monkeypatch):
+    settings = get_settings()
+    original_github_app = copy.deepcopy(settings.get("GITHUB_APP"))
+    original_is_auto_command = settings.get("CONFIG.IS_AUTO_COMMAND")
+    settings.set("GITHUB_APP.REVIEW_COMMANDS", ["/review"])
+    settings.set("GITHUB_APP.REVIEW_STATES", ["changes_requested"])
+    settings.set("GITHUB_APP.REVIEW_AUTHOR_TYPES", ["User"])
+
+    agent = RecordingAgent()
+    monkeypatch.setattr(github_app, "apply_repo_settings", lambda _url: None)
+    monkeypatch.setattr(github_app, "PRAgent", lambda: agent)
+    monkeypatch.setattr(
+        github_app,
+        "get_identity_provider",
+        lambda: SimpleNamespace(verify_eligibility=lambda *args, **kwargs: Eligibility.ELIGIBLE),
+    )
+
+    try:
+        await github_app.handle_request(
+            {
+                "action": "submitted",
+                "review": {"state": "approved", "user": {"type": "User"}},
+                "pull_request": {
+                    "url": "https://api.github.com/repos/org/repo/pulls/1",
+                    "state": "open",
+                    "draft": False,
+                    "title": "Regular PR",
+                    "labels": [],
+                    "head": {"ref": "feature/cache"},
+                    "base": {"ref": "main"},
+                },
+                "sender": {"login": "alice", "id": 1, "type": "User"},
+                "repository": {"full_name": "org/repo"},
+            },
+            "pull_request_review",
+        )
+    finally:
+        settings.set("GITHUB_APP", original_github_app)
+        settings.set("CONFIG.IS_AUTO_COMMAND", original_is_auto_command)
+
+    assert agent.commands == []
+
+
+@pytest.mark.asyncio
+async def test_github_review_submission_ignores_unconfigured_author_type(monkeypatch):
+    settings = get_settings()
+    original_github_app = copy.deepcopy(settings.get("GITHUB_APP"))
+    original_is_auto_command = settings.get("CONFIG.IS_AUTO_COMMAND")
+    settings.set("GITHUB_APP.REVIEW_COMMANDS", ["/review"])
+    settings.set("GITHUB_APP.REVIEW_STATES", ["changes_requested"])
+    settings.set("GITHUB_APP.REVIEW_AUTHOR_TYPES", ["User"])
+
+    agent = RecordingAgent()
+    monkeypatch.setattr(github_app, "apply_repo_settings", lambda _url: None)
+    monkeypatch.setattr(github_app, "PRAgent", lambda: agent)
+    monkeypatch.setattr(
+        github_app,
+        "get_identity_provider",
+        lambda: SimpleNamespace(verify_eligibility=lambda *args, **kwargs: Eligibility.ELIGIBLE),
+    )
+
+    try:
+        await github_app.handle_request(
+            {
+                "action": "submitted",
+                "review": {"state": "changes_requested", "user": {"type": "Bot"}},
+                "pull_request": {
+                    "url": "https://api.github.com/repos/org/repo/pulls/1",
+                    "state": "open",
+                    "draft": False,
+                    "title": "Regular PR",
+                    "labels": [],
+                    "head": {"ref": "feature/cache"},
+                    "base": {"ref": "main"},
+                },
+                "sender": {"login": "review-bot", "id": 1, "type": "User"},
+                "repository": {"full_name": "org/repo"},
+            },
+            "pull_request_review",
+        )
+    finally:
+        settings.set("GITHUB_APP", original_github_app)
+        settings.set("CONFIG.IS_AUTO_COMMAND", original_is_auto_command)
+
+    assert agent.commands == []
+
+
 @pytest.mark.asyncio
 async def test_github_automatic_feedback_continues_after_invalid_command(monkeypatch):
     commands, repo_settings_calls = await _run_github_pr_commands(
@@ -493,16 +705,48 @@ async def test_gitlab_manual_feedback_on_draft_is_unaffected(gitlab_webhook_modu
     assert agent.commands == ["/review"]
 
 
-def test_gitlab_handle_ask_line_converts_new_line_diff_note_to_right_side_command(gitlab_webhook_module):
+@pytest.mark.parametrize(
+    "line_range, expected_start, expected_end, expected_side",
+    [
+        (
+            {
+                "start": {"type": "new", "new_line": 10, "old_line": 9},
+                "end": {"type": "new", "new_line": 12, "old_line": 11},
+            },
+            10,
+            12,
+            "RIGHT",
+        ),
+        (
+            {
+                "start": {"type": "old", "new_line": None, "old_line": 9},
+                "end": {"type": "old", "new_line": None, "old_line": 11},
+            },
+            9,
+            11,
+            "LEFT",
+        ),
+        (
+            {
+                "start": {"new_line": 10},
+                "end": {"new_line": 12},
+            },
+            10,
+            12,
+            "RIGHT",
+        ),
+    ],
+)
+def test_gitlab_handle_ask_line_selects_line_numbers_and_side_from_line_range(
+    gitlab_webhook_module, line_range, expected_start, expected_end, expected_side
+):
     data = {
         "object_attributes": {
             "discussion_id": "disc-1",
             "position": {
-                "new_path": "src/app.py",
-                "line_range": {
-                    "start": {"new_line": 10},
-                    "end": {"new_line": 12},
-                },
+                "new_path": "new/src/app.py",
+                "old_path": "old/src/app.py",
+                "line_range": line_range,
             },
         }
     }
@@ -510,9 +754,60 @@ def test_gitlab_handle_ask_line_converts_new_line_diff_note_to_right_side_comman
     body = gitlab_webhook_module.handle_ask_line("/ask why this change?", data)
 
     assert body == (
-        "/ask_line --line_start=10 --line_end=12 --side=RIGHT "
-        "--file_name=src/app.py --comment_id=disc-1 why this change?"
+        [
+            "/ask_line",
+            f"--line_start={expected_start}",
+            f"--line_end={expected_end}",
+            f"--side={expected_side}",
+            "--file_name=new/src/app.py",
+            "--comment_id=disc-1",
+            "why this change?",
+        ]
     )
+
+
+def test_gitlab_handle_ask_line_only_strips_leading_ask_command(gitlab_webhook_module):
+    data = {
+        "object_attributes": {
+            "discussion_id": "disc-1",
+            "position": {
+                "new_path": "src/app.py",
+                "line_range": {
+                    "start": {"type": "new", "new_line": 10},
+                    "end": {"type": "new", "new_line": 10},
+                },
+            },
+        }
+    }
+
+    body = gitlab_webhook_module.handle_ask_line(
+        "/ask explain why /ask appears in the source",
+        data,
+    )
+
+    assert body[-1] == "explain why /ask appears in the source"
+
+
+def test_gitlab_handle_ask_line_keeps_question_as_one_argv_item(gitlab_webhook_module):
+    data = {
+        "object_attributes": {
+            "discussion_id": "disc-1",
+            "position": {
+                "new_path": "src/app.py",
+                "line_range": {
+                    "start": {"type": "new", "new_line": 10},
+                    "end": {"type": "new", "new_line": 10},
+                },
+            },
+        }
+    }
+
+    body = gitlab_webhook_module.handle_ask_line(
+        "/ask explain --file_name=not-a-cli-argument and keep spaces",
+        data,
+    )
+
+    assert body[-1] == "explain --file_name=not-a-cli-argument and keep spaces"
 
 
 @pytest.mark.parametrize(

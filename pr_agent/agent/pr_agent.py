@@ -177,6 +177,20 @@ def prepare_command(command: str) -> list[str]:
             key, value = argument.split("=", 1)
             argument = f"{key}={json.dumps(value, ensure_ascii=False)}"
         args.append(argument)
+    kept, rejected = [], []
+    for argument in args:
+        # Validate the key only. The value is free text - a review instruction may legitimately
+        # mention openai.key or config.url - and only the key can actually set a setting.
+        is_allowed, offending_param = CliArgs.validate_user_args([argument.split("=", 1)[0]])
+        if is_allowed:
+            kept.append(argument)
+        else:
+            rejected.append(offending_param)
+    if rejected:
+        get_logger().error(
+            "Dropping auto-command argument(s) targeting forbidden param(s): "
+            + ", ".join(f"'{param}'" for param in rejected))
+        args = kept
     other_args = update_settings_from_args(args)
     return [action] + other_args
 
@@ -305,6 +319,7 @@ class PRAgent:
         if model_selection:
             settings.set("CONFIG.MODEL", model_selection.model)
             settings.set("CONFIG.REASONING_EFFORT", model_selection.reasoning_effort)
+            settings.set("MODEL_ROUTING.ENABLE", False)
             if "claude" in model_selection.model.lower() and model_selection.reasoning_effort != "none":
                 settings.set("CONFIG.ENABLE_CLAUDE_ADAPTIVE_THINKING", True)
 

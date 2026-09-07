@@ -9,8 +9,8 @@ body:
       label: Git provider
       description: 'The problem arises when using:'
       options:
-        - "Github Cloud"
-        - "Github Enterprise"
+        - "GitHub Cloud"
+        - "GitHub Enterprise"
         - "Gitlab"
         - "Bitbucket Cloud"
         - "Bitbucket Server"

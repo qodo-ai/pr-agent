@@ -954,7 +954,66 @@ class AzureDevopsProvider(GitProvider):
     def supports_review_comment_identity(self) -> bool:
         return True
 
-    def publish_description(self, pr_title: str, pr_body: str):
+    def _configured_agent_identities(self) -> set[str]:
+        configured = get_settings().get("azure_devops_server.agent_identity", "")
+        if isinstance(configured, str):
+            values = (configured,)
+        elif isinstance(configured, (list, tuple, set)):
+            values = configured
+        else:
+            values = ()
+        return {
+            value.strip().casefold()
+            for value in values
+            if isinstance(value, str) and value.strip()
+        }
+
+    @staticmethod
+    def _is_stable_agent_identity(identity: str) -> bool:
+        return (
+            "@" in identity
+            or bool(re.fullmatch(
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                identity,
+                re.IGNORECASE,
+            ))
+            or identity.startswith(("aad.", "acs.", "app.", "msa.", "svc.", "vss."))
+        )
+
+    def _configured_stable_agent_identities(self) -> set[str]:
+        return {
+            identity
+            for identity in self._configured_agent_identities()
+            if self._is_stable_agent_identity(identity)
+        }
+
+    def supports_review_finding_state(self) -> bool:
+        return bool(self._configured_stable_agent_identities())
+
+    def is_comment_authored_by_pr_agent(self, comment) -> bool:
+        identities = self._configured_agent_identities()
+        if not identities:
+            raise RuntimeError("Azure DevOps agent identity is not configured")
+        stable_identities = self._configured_stable_agent_identities()
+        if not stable_identities:
+            return False
+        author = self._value(comment, "author") or self._value(comment, "user")
+        if author is None:
+            raise RuntimeError("Azure DevOps comment author cannot be verified")
+        values = []
+        for attribute, serialized_attribute in (
+            ("id", None),
+            ("unique_name", "uniqueName"),
+            ("descriptor", "descriptor"),
+        ):
+            value = self._value(author, attribute, serialized_attribute)
+            if value is not None:
+                values.append(str(value).strip().casefold())
+        if not values:
+            raise RuntimeError("Azure DevOps comment author cannot be verified")
+        return any(value in stable_identities for value in values)
+
+    def publish_description(self, pr_title: str, pr_body: str) -> None:
         if len(pr_body) > MAX_PR_DESCRIPTION_AZURE_LENGTH:
 
             usage_guide_text='<details> <summary><strong>✨ Describe tool usage guide:</strong></summary><hr>'
@@ -987,6 +1046,7 @@ class AzureDevopsProvider(GitProvider):
             get_logger().exception(
                 f"Could not update pull request {self.pr_num} description: {e}"
             )
+            raise
 
     def remove_initial_comment(self):
         try:
@@ -1250,6 +1310,41 @@ class AzureDevopsProvider(GitProvider):
             return value.get(serialized_attribute or attribute)
         return getattr(value, attribute, None)
 
+    @staticmethod
+    def _stable_id_sort_key(value):
+        if value is None:
+            return (0, "")
+        text = str(value).strip()
+        if not text:
+            return (0, "")
+        try:
+            return (2, int(text))
+        except (TypeError, ValueError):
+            return (1, text.casefold())
+
+    @classmethod
+    def _comment_latest_timestamp(cls, comment):
+        timestamps = []
+        for attribute, serialized_attribute in (
+            ("published_date", "publishedDate"),
+            ("last_updated_date", "lastUpdatedDate"),
+        ):
+            value = cls._value(comment, attribute, serialized_attribute)
+            if isinstance(value, str):
+                value = value.strip()
+                if value.endswith("Z"):
+                    value = value[:-1] + "+00:00"
+                try:
+                    value = _dt.datetime.fromisoformat(value)
+                except ValueError:
+                    continue
+            if isinstance(value, _dt.datetime):
+                value = _to_naive_utc(value)
+                if value is not None:
+                    timestamps.append(value)
+        return max(timestamps, default=_dt.datetime.min)
+
+
     def _get_threads(self):
         threads = getattr(self, "_threads_cache", None)
         if threads is None:
@@ -1294,6 +1389,7 @@ class AzureDevopsProvider(GitProvider):
             comments.append(SimpleNamespace(
                 id=self._value(comment, "id"),
                 body=content,
+                author=author,
                 user=SimpleNamespace(login=author_name),
             ))
         return comments
@@ -1359,16 +1455,35 @@ class AzureDevopsProvider(GitProvider):
 
     def get_issue_comments(self) -> list[Comment]:
         comment_list = []
-        for thread in reversed(self._get_threads()):
-            for comment in thread.comments:
-                if comment.content and comment not in comment_list:
-                    comment.body = comment.content
-                    comment.thread_id = thread.id
-                    comment_list.append(comment)
+        for thread in self._get_threads():
+            thread_id = self._value(thread, "id")
+            for comment in self._value(thread, "comments") or []:
+                content = self._value(comment, "content")
+                if not content or comment in comment_list:
+                    continue
+                if isinstance(comment, dict):
+                    comment["body"] = content
+                    comment["thread_id"] = thread_id
+                else:
+                    comment.body = content
+                    comment.thread_id = thread_id
+                comment_list.append(comment)
+
+        comment_list.sort(
+            key=lambda comment: (
+                self._comment_latest_timestamp(comment),
+                self._stable_id_sort_key(self._value(comment, "id")),
+                self._stable_id_sort_key(self._value(comment, "thread_id")),
+            ),
+            reverse=True,
+        )
         return comment_list
 
+    def get_issue_comments_newest_first(self):
+        return list(self.get_issue_comments())
+
     def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        return True
+        return None
 
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
         return True
@@ -1480,7 +1595,7 @@ class AzureDevopsProvider(GitProvider):
         )
         return self.pr
 
-    def get_commit_messages(self):
+    def get_commit_messages(self) -> str:
         return ""  # not implemented yet
 
     def get_pr_id(self):

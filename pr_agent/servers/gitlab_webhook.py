@@ -22,6 +22,7 @@ from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.secret_providers import get_secret_provider, validate_secret_provider_setting
+from pr_agent.servers.utils import get_pr_commands
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
@@ -71,7 +72,11 @@ async def _perform_commands_gitlab(commands_conf: str, agent: PRAgent, api_url: 
         return
     if not should_process_pr_logic(data): # Here we already updated the configurations
         return
-    commands = get_settings().get(f"gitlab.{commands_conf}", {})
+    commands = (
+        get_pr_commands("gitlab")
+        if commands_conf == "pr_commands"
+        else get_settings().get(f"gitlab.{commands_conf}", {})
+    )
     get_settings().set("config.is_auto_command", True)
     for command in commands:
         try:
@@ -85,7 +90,7 @@ async def _perform_commands_gitlab(commands_conf: str, agent: PRAgent, api_url: 
 
 def is_bot_user(data) -> bool:
     try:
-        # logic to ignore bot users (unlike Github, no direct flag for bot users in gitlab)
+        # logic to ignore bot users (unlike GitHub, no direct flag for bot users in gitlab)
         sender_name = data.get("user", {}).get("name", "unknown").lower()
         # Indicators are sourced from config.bot_user_indicators in configuration.toml so the
         # default list has a single source of truth and can be reused by other providers in
@@ -445,18 +450,28 @@ async def gitlab_webhook(background_tasks: BackgroundTasks, request: Request):
 def handle_ask_line(body, data):
     try:
         line_range_ = data['object_attributes']['position']['line_range']
-        # if line_range_['start']['type'] == 'new':
-        start_line = line_range_['start']['new_line']
-        end_line = line_range_['end']['new_line']
-        # else:
-        #     start_line = line_range_['start']['old_line']
-        #     end_line = line_range_['end']['old_line']
-        question = body.replace('/ask', '').strip()
+        if line_range_['start'].get('type', 'new') == 'old':
+            start_line = line_range_['start']['old_line']
+            end_line = line_range_['end']['old_line']
+            side = 'LEFT'
+        else:
+            start_line = line_range_['start']['new_line']
+            end_line = line_range_['end']['new_line']
+            side = 'RIGHT'
+        question = body.strip().removeprefix('/ask').strip()
         path = data['object_attributes']['position']['new_path']
-        side = 'RIGHT'  # if line_range_['start']['type'] == 'new' else 'LEFT'
         comment_id = data['object_attributes']["discussion_id"]
         get_logger().info("Handling line ")
-        body = f"/ask_line --line_start={start_line} --line_end={end_line} --side={side} --file_name={path} --comment_id={comment_id} {question}"
+        body = [
+            "/ask_line",
+            f"--line_start={start_line}",
+            f"--line_end={end_line}",
+            f"--side={side}",
+            f"--file_name={path}",
+            f"--comment_id={comment_id}",
+        ]
+        if question:
+            body.append(question)
     except Exception as e:
         get_logger().error(f"Failed to handle ask line comment: {e}")
     return body
