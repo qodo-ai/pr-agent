@@ -22,7 +22,7 @@ from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.secret_providers import get_secret_provider, validate_secret_provider_setting
-from pr_agent.servers.utils import get_pr_commands
+from pr_agent.servers.utils import get_pr_commands, push_trigger_slot
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
@@ -376,7 +376,9 @@ async def gitlab_webhook(background_tasks: BackgroundTasks, request: Request):
                     return
 
                 get_logger().debug(f'A push event has been received: {url}')
-                await _perform_commands_gitlab("push_commands", PRAgent(), url, log_context, data)
+                async with push_trigger_slot(url, allow_backlog=True, ttl=300) as proceed:
+                    if proceed:
+                        await _perform_commands_gitlab("push_commands", PRAgent(), url, log_context, data)
 
             # for draft to ready triggered merge requests
             elif object_attributes.get('action') == 'update' and is_draft_ready(data):
