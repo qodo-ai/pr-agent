@@ -53,7 +53,7 @@ def test_shared_diff_processing_does_not_import_pygithub_rate_limit_exception():
         isinstance(node, ast.ImportFrom)
         and node.module == "github"
         and any(alias.name == "RateLimitExceededException" for alias in node.names)
-        for node in tree.body
+        for node in ast.walk(tree)
     )
 
 
