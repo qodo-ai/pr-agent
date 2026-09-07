@@ -35,6 +35,7 @@ from pr_agent.log import get_logger
 
 MODEL_RETRIES = 2
 DUMMY_LITELLM_API_KEY = "dummy_key"  # placeholder set when no OpenAI key is configured
+_IMAGE_HEAD_TIMEOUT_SECONDS = 5
 
 
 def _as_bool(value, default: bool) -> bool:
@@ -794,7 +795,12 @@ class LiteLLMAIHandler(BaseAiHandler):
                 if img_path:
                     try:
                         # check if the image link is alive
-                        r = requests.head(img_path, allow_redirects=True)
+                        r = await asyncio.to_thread(
+                            requests.head,
+                            img_path,
+                            allow_redirects=True,
+                            timeout=_IMAGE_HEAD_TIMEOUT_SECONDS,
+                        )
                         if r.status_code == 404:
                             error_msg = "The image link is not [alive](img_path).\nPlease repost the original image as a comment, and send the question again with 'quote reply' (see [instructions](https://pr-agent-docs.codium.ai/tools/ask/#ask-on-images-using-the-pr-code-as-context))."
                             get_logger().error(error_msg)

@@ -1,3 +1,5 @@
+import threading
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -60,6 +62,38 @@ async def test_chat_completion_passes_seed_when_temperature_is_zero(monkeypatch)
         await handler.chat_completion(model="gpt-4o", system="sys", user="usr", temperature=0)
 
     assert mock_call.call_args.kwargs["seed"] == 123
+
+
+@pytest.mark.asyncio
+async def test_chat_completion_probes_images_off_loop_with_timeout(monkeypatch):
+    monkeypatch.setattr(litellm_handler, "get_settings", FakeSettings)
+    loop_thread = threading.get_ident()
+    observed = {}
+
+    def fake_head(url, **kwargs):
+        observed.update(url=url, kwargs=kwargs, thread=threading.get_ident())
+        return SimpleNamespace(status_code=200)
+
+    monkeypatch.setattr(litellm_handler.requests, "head", fake_head)
+
+    with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion", new_callable=AsyncMock) as mock_call:
+        mock_call.return_value = _mock_response()
+        handler = litellm_handler.LiteLLMAIHandler()
+
+        await handler.chat_completion(
+            model="gpt-4o",
+            system="sys",
+            user="usr",
+            img_path="https://example.test/image.png",
+        )
+
+    assert observed["url"] == "https://example.test/image.png"
+    assert observed["kwargs"] == {"allow_redirects": True, "timeout": 5}
+    assert observed["thread"] != loop_thread
+    assert mock_call.call_args.kwargs["messages"][1]["content"][1] == {
+        "type": "image_url",
+        "image_url": {"url": "https://example.test/image.png"},
+    }
 
 
 @pytest.mark.asyncio
