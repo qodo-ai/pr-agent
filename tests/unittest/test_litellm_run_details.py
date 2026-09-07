@@ -191,15 +191,18 @@ def _bare_handler():
     handler.no_support_temperature_models = []
     handler.support_reasoning_models = []
     handler.user_message_only_models = []
+    handler._custom_llm_provider = ""
     handler._aws_imds_mode = False
     handler._aws_imds_fell_back = False
     handler._aws_static_creds = None
+    handler._aws_active_creds = {}
     handler._aws_bedrock_lock = None
     return handler
 
 
 def _streaming_handler():
     handler = LiteLLMAIHandler.__new__(LiteLLMAIHandler)
+    handler._sdk_header_defaults = {"organization": None, "project": None, "custom_headers": {}}
     handler.streaming_required_models = ["streaming-model"]
     handler.force_streaming_provider = ""
     handler.force_streaming_api_base_substrings = []
