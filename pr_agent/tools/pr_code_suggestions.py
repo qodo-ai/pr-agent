@@ -295,7 +295,8 @@ class PRCodeSuggestions:
             # if not self.is_extended:
             #     data = await retry_with_fallback_models(self._prepare_prediction, model_type=ModelType.REGULAR)
             # else:
-            data = await retry_with_fallback_models(self.prepare_prediction_main, model_type=ModelType.REGULAR)
+            data = await retry_with_fallback_models(self.prepare_prediction_main, model_type=ModelType.REGULAR,
+                                                    git_provider=self.git_provider)
             if not data:
                 data = {"code_suggestions": []}
             self.data = data
@@ -855,10 +856,14 @@ class PRCodeSuggestions:
             return ""
 
         models = _get_all_models(ModelType.REASONING)
-        if get_model('model_reasoning') == get_settings().config.model and model in models:
-            # No dedicated reasoning model, so this is the regular chain and the outer fallback
-            # loop has already burned everything before the model it settled on.
-            models = models[models.index(model):]
+        if get_model('model_reasoning') == get_settings().config.model:
+            # No dedicated reasoning model, so this is the regular chain.
+            if model in models:
+                # The outer fallback loop has already burned everything before the model it settled on.
+                models = models[models.index(model):]
+            else:
+                # A routed primary ([model_routing]) stood in for config.model, ahead of the same fallbacks.
+                models = [model] + models[1:]
         if get_settings().get("openai.fallback_deployments", []):
             # Each model is pinned to its own deployment, and openai.deployment_id is global to a
             # run whose chunk calls are already in flight concurrently. Retrying another model here
@@ -1613,12 +1618,13 @@ class PRCodeSuggestions:
                     patches = patch_prompt.strip().split(f"\n{file_prefix}")
                     patches_new = copy.deepcopy(patches)
                     for i in range(len(patches_new)):
+                        patch_body = patches_new[i].rstrip("\n")
                         if i == 0:
-                            prefix = patches_new[i].split("\n@@")[0].strip()
+                            prefix = patch_body.split("\n@@")[0].strip()
                         else:
-                            prefix = file_prefix + patches_new[i].split("\n@@")[0][1:]
+                            prefix = file_prefix + patch_body.split("\n@@")[0]
                             prefix = prefix.strip()
-                        patches_new[i] = prefix + '\n\n' + decouple_and_convert_to_hunks_with_lines_numbers(patches_new[i],
+                        patches_new[i] = prefix + '\n\n' + decouple_and_convert_to_hunks_with_lines_numbers(patch_body,
                                                                                                           file=None).strip()
                         patches_new[i] = patches_new[i].strip()
                     patch_final = "\n\n\n".join(patches_new)

@@ -50,6 +50,7 @@ class MethodContract:
     check_supported: Callable[[object], None]
     tiers: dict[str, Tier]
     check_return_annotation: bool = True
+    check_execution: bool = True
 
 
 def _github(monkeypatch) -> GithubProvider:
@@ -207,11 +208,24 @@ METHOD_CONTRACTS = (
         check_supported=_is_success,
         tiers=REACTION_TIERS,
     ),
+    MethodContract(
+        name="publish_inline_comment",
+        args=(),
+        noop_value=None,
+        check_supported=lambda _: None,
+        tiers=_tiers(),
+        # Signature-only contract: catches signature drift against GitProvider without
+        # requiring live backends or mock state for every provider.
+        check_return_annotation=False,
+        check_execution=False,
+    ),
 )
 
 
-def _rows(tier: Tier | None = None):
+def _rows(tier: Tier | None = None, check_execution_only: bool = False):
     for contract in METHOD_CONTRACTS:
+        if check_execution_only and not contract.check_execution:
+            continue
         for provider_name, provider_tier in contract.tiers.items():
             if tier is None or provider_tier is tier:
                 yield pytest.param(provider_name, contract, id=f"{provider_name}-{contract.name}")
@@ -252,7 +266,7 @@ def test_implementation_declares_the_base_return_type(provider_name: str, contra
     assert implementation_hints.get("return") == base_hints["return"]
 
 
-@pytest.mark.parametrize("provider_name,contract", tuple(_rows(Tier.SUPPORTED)))
+@pytest.mark.parametrize("provider_name,contract", tuple(_rows(Tier.SUPPORTED, check_execution_only=True)))
 def test_supported_tier_returns_the_contract_value(provider_name: str, contract: MethodContract, monkeypatch):
     _, factory = PROVIDERS[provider_name]
     provider = factory(monkeypatch)
@@ -260,7 +274,7 @@ def test_supported_tier_returns_the_contract_value(provider_name: str, contract:
     contract.check_supported(getattr(provider, contract.name)(*contract.args))
 
 
-@pytest.mark.parametrize("provider_name,contract", tuple(_rows(Tier.NOOP)))
+@pytest.mark.parametrize("provider_name,contract", tuple(_rows(Tier.NOOP, check_execution_only=True)))
 def test_noop_tier_returns_the_empty_value_without_a_backend(provider_name: str, contract: MethodContract):
     provider_type, _ = PROVIDERS[provider_name]
     provider = provider_type.__new__(provider_type)
@@ -271,7 +285,7 @@ def test_noop_tier_returns_the_empty_value_without_a_backend(provider_name: str,
     assert result == contract.noop_value
 
 
-@pytest.mark.parametrize("provider_name,contract", tuple(_rows(Tier.NOT_IMPLEMENTED)))
+@pytest.mark.parametrize("provider_name,contract", tuple(_rows(Tier.NOT_IMPLEMENTED, check_execution_only=True)))
 def test_not_implemented_tier_raises(provider_name: str, contract: MethodContract):
     provider_type, _ = PROVIDERS[provider_name]
     provider = provider_type.__new__(provider_type)

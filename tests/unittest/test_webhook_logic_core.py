@@ -1,6 +1,7 @@
 import copy
 import importlib
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import httpx
@@ -67,14 +68,17 @@ class _StubRequest:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("event_key", ["pr:from_ref_updated", "repo:refs_changed"])
-async def test_bitbucket_server_handle_webhook_accepts_push_trigger_event_keys(event_key, monkeypatch):
+@pytest.mark.parametrize("proceed", [True, False])
+async def test_bitbucket_server_handle_webhook_accepts_push_trigger_event_keys(event_key, proceed, monkeypatch):
     # Regression test: "pr:from_ref_updated" used to be excluded from this branch and
     # fell through to the "Unsupported event" 400 response instead of running push commands.
     settings = get_settings()
     original_webhook_secret = settings.get("BITBUCKET_SERVER.WEBHOOK_SECRET", None)
     original_handle_push_trigger = settings.get("BITBUCKET_SERVER.HANDLE_PUSH_TRIGGER", None)
+    original_url = settings.get("BITBUCKET_SERVER.URL", None)
     settings.set("BITBUCKET_SERVER.WEBHOOK_SECRET", None)
     settings.set("BITBUCKET_SERVER.HANDLE_PUSH_TRIGGER", True)
+    settings.set("BITBUCKET_SERVER.URL", "https://bitbucket.example.com")
 
     monkeypatch.setattr(bitbucket_server_webhook, "apply_repo_settings", lambda url: None)
     monkeypatch.setattr(bitbucket_server_webhook, "should_process_pr_logic", lambda data: True)
@@ -83,6 +87,19 @@ async def test_bitbucket_server_handle_webhook_accepts_push_trigger_event_keys(e
         "_get_commands_list_from_settings",
         lambda key: ["/review"] if key == "BITBUCKET_SERVER.PUSH_COMMANDS" else [],
     )
+    slots = []
+    commands = []
+
+    @asynccontextmanager
+    async def record_slot(key, **kwargs):
+        slots.append((key, kwargs))
+        yield proceed
+
+    async def record_commands(commands_to_run, url, _log_context):
+        commands.append((commands_to_run, url))
+
+    monkeypatch.setattr(bitbucket_server_webhook, "push_trigger_slot", record_slot)
+    monkeypatch.setattr(bitbucket_server_webhook, "_run_commands_sequentially", record_commands)
 
     payload = _bitbucket_server_payload()
     payload["eventKey"] = event_key
@@ -92,13 +109,18 @@ async def test_bitbucket_server_handle_webhook_accepts_push_trigger_event_keys(e
     try:
         with request_cycle_context({}):
             response = await bitbucket_server_webhook.handle_webhook(background_tasks, request)
+            await background_tasks()
     finally:
         settings.set("BITBUCKET_SERVER.WEBHOOK_SECRET", original_webhook_secret)
         settings.set("BITBUCKET_SERVER.HANDLE_PUSH_TRIGGER", original_handle_push_trigger)
+        settings.set("BITBUCKET_SERVER.URL", original_url)
 
     assert response.status_code == 200
     assert json.loads(response.body)["message"] == "success"
     assert len(background_tasks.tasks) == 1
+    expected_url = "https://bitbucket.example.com/projects/PROJ/repos/repo/pull-requests/7"
+    assert slots == [(expected_url, {"allow_backlog": True, "ttl": 300})]
+    assert commands == ([(["/review"], expected_url)] if proceed else [])
 
 
 def _gitlab_payload(**object_attributes):
@@ -640,6 +662,57 @@ async def _run_gitlab_pr_commands(module, monkeypatch, draft, repo_setting, even
 
 
 @pytest.mark.asyncio
+async def test_gitlab_push_uses_shared_dedupe_slot(gitlab_webhook_module, monkeypatch):
+    slots = []
+
+    @asynccontextmanager
+    async def reject_duplicate(key, **kwargs):
+        slots.append((key, kwargs))
+        yield False
+
+    monkeypatch.setattr(gitlab_webhook_module, "push_trigger_slot", reject_duplicate)
+    commands, _ = await _run_gitlab_pr_commands(
+        gitlab_webhook_module, monkeypatch, draft=False, repo_setting=False, event="update"
+    )
+
+    assert commands == []
+    assert slots == [
+        ("https://gitlab.com/org/repo/-/merge_requests/1", {"allow_backlog": True, "ttl": 300})
+    ]
+
+
+@pytest.mark.asyncio
+async def test_gitea_push_uses_shared_dedupe_slot(monkeypatch):
+    settings = get_settings()
+    original_gitea = copy.deepcopy(settings.get("GITEA"))
+    settings.set("GITEA.HANDLE_PUSH_TRIGGER", True)
+    settings.set("GITEA.PUSH_COMMANDS", ["/review"])
+    slots = []
+    performed = []
+
+    @asynccontextmanager
+    async def reject_duplicate(key, **kwargs):
+        slots.append((key, kwargs))
+        yield False
+
+    async def perform_commands(*args):
+        performed.append(args)
+
+    monkeypatch.setattr(gitea_app, "push_trigger_slot", reject_duplicate)
+    monkeypatch.setattr(gitea_app, "_perform_commands_gitea", perform_commands)
+    api_url = "https://gitea.example.com/org/repo/pulls/1"
+    try:
+        await gitea_app.handle_pr_event(
+            {"pull_request": {"url": api_url}}, "pull_request", "synchronized", RecordingAgent()
+        )
+    finally:
+        settings.set("GITEA", original_gitea)
+
+    assert performed == []
+    assert slots == [(api_url, {"allow_backlog": True, "ttl": 300})]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("event", "draft", "feedback_on_draft_pr", "expected_commands"),
     [
@@ -705,16 +778,48 @@ async def test_gitlab_manual_feedback_on_draft_is_unaffected(gitlab_webhook_modu
     assert agent.commands == ["/review"]
 
 
-def test_gitlab_handle_ask_line_converts_new_line_diff_note_to_right_side_command(gitlab_webhook_module):
+@pytest.mark.parametrize(
+    "line_range, expected_start, expected_end, expected_side",
+    [
+        (
+            {
+                "start": {"type": "new", "new_line": 10, "old_line": 9},
+                "end": {"type": "new", "new_line": 12, "old_line": 11},
+            },
+            10,
+            12,
+            "RIGHT",
+        ),
+        (
+            {
+                "start": {"type": "old", "new_line": None, "old_line": 9},
+                "end": {"type": "old", "new_line": None, "old_line": 11},
+            },
+            9,
+            11,
+            "LEFT",
+        ),
+        (
+            {
+                "start": {"new_line": 10},
+                "end": {"new_line": 12},
+            },
+            10,
+            12,
+            "RIGHT",
+        ),
+    ],
+)
+def test_gitlab_handle_ask_line_selects_line_numbers_and_side_from_line_range(
+    gitlab_webhook_module, line_range, expected_start, expected_end, expected_side
+):
     data = {
         "object_attributes": {
             "discussion_id": "disc-1",
             "position": {
-                "new_path": "src/app.py",
-                "line_range": {
-                    "start": {"new_line": 10},
-                    "end": {"new_line": 12},
-                },
+                "new_path": "new/src/app.py",
+                "old_path": "old/src/app.py",
+                "line_range": line_range,
             },
         }
     }
@@ -722,9 +827,60 @@ def test_gitlab_handle_ask_line_converts_new_line_diff_note_to_right_side_comman
     body = gitlab_webhook_module.handle_ask_line("/ask why this change?", data)
 
     assert body == (
-        "/ask_line --line_start=10 --line_end=12 --side=RIGHT "
-        "--file_name=src/app.py --comment_id=disc-1 why this change?"
+        [
+            "/ask_line",
+            f"--line_start={expected_start}",
+            f"--line_end={expected_end}",
+            f"--side={expected_side}",
+            "--file_name=new/src/app.py",
+            "--comment_id=disc-1",
+            "why this change?",
+        ]
     )
+
+
+def test_gitlab_handle_ask_line_only_strips_leading_ask_command(gitlab_webhook_module):
+    data = {
+        "object_attributes": {
+            "discussion_id": "disc-1",
+            "position": {
+                "new_path": "src/app.py",
+                "line_range": {
+                    "start": {"type": "new", "new_line": 10},
+                    "end": {"type": "new", "new_line": 10},
+                },
+            },
+        }
+    }
+
+    body = gitlab_webhook_module.handle_ask_line(
+        "/ask explain why /ask appears in the source",
+        data,
+    )
+
+    assert body[-1] == "explain why /ask appears in the source"
+
+
+def test_gitlab_handle_ask_line_keeps_question_as_one_argv_item(gitlab_webhook_module):
+    data = {
+        "object_attributes": {
+            "discussion_id": "disc-1",
+            "position": {
+                "new_path": "src/app.py",
+                "line_range": {
+                    "start": {"type": "new", "new_line": 10},
+                    "end": {"type": "new", "new_line": 10},
+                },
+            },
+        }
+    }
+
+    body = gitlab_webhook_module.handle_ask_line(
+        "/ask explain --file_name=not-a-cli-argument and keep spaces",
+        data,
+    )
+
+    assert body[-1] == "explain --file_name=not-a-cli-argument and keep spaces"
 
 
 @pytest.mark.parametrize(

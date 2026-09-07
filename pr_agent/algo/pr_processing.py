@@ -3,14 +3,13 @@ from __future__ import annotations
 import traceback
 from typing import Callable, List, Tuple
 
-from github import RateLimitExceededException
-
 from pr_agent.algo.git_patch_processing import (
     decouple_and_convert_to_hunks_with_lines_numbers,
     extend_patch,
     handle_patch_deletions,
 )
 from pr_agent.algo.language_handler import sort_files_by_main_languages
+from pr_agent.algo.model_routing import route_primary_model
 from pr_agent.algo.run_details import record_model_used
 from pr_agent.algo.token_handler import TokenHandler
 from pr_agent.algo.types import EDIT_TYPE
@@ -58,11 +57,7 @@ def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
         PATCH_EXTRA_LINES_BEFORE = cap_and_log_extra_lines(PATCH_EXTRA_LINES_BEFORE, "before")
         PATCH_EXTRA_LINES_AFTER = cap_and_log_extra_lines(PATCH_EXTRA_LINES_AFTER, "after")
 
-    try:
-        diff_files = git_provider.get_diff_files()
-    except RateLimitExceededException as e:
-        get_logger().error(f"Rate limit exceeded for git provider API. original message {e}")
-        raise
+    diff_files = git_provider.get_diff_files()
 
     # get pr languages
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)
@@ -152,11 +147,7 @@ def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
 
 def get_pr_diff_multiple_patchs(git_provider: GitProvider, token_handler: TokenHandler, model: str,
                 add_line_numbers_to_hunks: bool = False, disable_extra_lines: bool = False):
-    try:
-        diff_files = git_provider.get_diff_files()
-    except RateLimitExceededException as e:
-        get_logger().error(f"Rate limit exceeded for git provider API. original message {e}")
-        raise
+    diff_files = git_provider.get_diff_files()
 
     # get pr languages
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)
@@ -331,9 +322,14 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
     return total_tokens, patches, remaining_files_list_new, files_in_patch_list
 
 
-async def retry_with_fallback_models(f: Callable, model_type: ModelType = ModelType.REGULAR):
+async def retry_with_fallback_models(f: Callable, model_type: ModelType = ModelType.REGULAR,
+                                     git_provider: GitProvider | None = None):
     all_models = _get_all_models(model_type)
     all_deployments = _get_all_deployments(all_models)
+    routed = route_primary_model(model_type, git_provider)
+    if routed:
+        # A cheaper primary for a small pull request; config.fallback_models still follow it.
+        all_models[0], all_deployments[0] = routed
     original_deployment_id = get_settings().get("openai.deployment_id", None)
     try:
         # try each (model, deployment_id) pair until one is successful, otherwise raise exception
@@ -413,14 +409,8 @@ def get_pr_multi_diffs(git_provider: GitProvider,
         List[str]: A list of final diff strings, split into multiple groups based on the maximum number of tokens allowed for the given model.
         With `return_remaining_files`, a tuple of that list and the list of omitted file names.
 
-    Raises:
-        RateLimitExceededException: If the rate limit for the Git provider API is exceeded.
     """
-    try:
-        diff_files = git_provider.get_diff_files()
-    except RateLimitExceededException as e:
-        get_logger().error(f"Rate limit exceeded for git provider API. original message {e}")
-        raise
+    diff_files = git_provider.get_diff_files()
 
     # Sort files by main language
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)

@@ -1,9 +1,13 @@
+import ast
+from pathlib import Path
+
 import pytest
 
 import pr_agent.algo.pr_processing as pr_processing
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 from pr_agent.algo.utils import ModelType
 from pr_agent.config_loader import get_settings
+from pr_agent.servers.utils import RateLimitExceeded
 
 
 class FakeTokenHandler:
@@ -23,6 +27,34 @@ class FakeProvider:
 
     def get_languages(self):
         return {"Python": 100}
+
+
+@pytest.mark.parametrize(
+    "call_diff",
+    [
+        lambda provider, token_handler: pr_processing.get_pr_diff(provider, token_handler, "model"),
+        lambda provider, token_handler: pr_processing.get_pr_diff_multiple_patchs(provider, token_handler, "model"),
+        lambda provider, token_handler: pr_processing.get_pr_multi_diffs(provider, token_handler, "model"),
+    ],
+)
+def test_shared_diff_paths_propagate_project_rate_limit(call_diff):
+    class RateLimitedProvider(FakeProvider):
+        def get_diff_files(self):
+            raise RateLimitExceeded("rate limit exceeded")
+
+    with pytest.raises(RateLimitExceeded, match="rate limit exceeded"):
+        call_diff(RateLimitedProvider([]), FakeTokenHandler())
+
+
+def test_shared_diff_processing_does_not_import_pygithub_rate_limit_exception():
+    tree = ast.parse(Path(pr_processing.__file__).read_text())
+
+    assert not any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "github"
+        and any(alias.name == "RateLimitExceededException" for alias in node.names)
+        for node in ast.walk(tree)
+    )
 
 
 def test_generate_full_patch_keeps_remaining_files_when_patch_exceeds_soft_budget():
