@@ -1082,10 +1082,10 @@ class GitLabProvider(GitProvider):
                                  target_file, target_line_no, original_suggestion)
 
     def create_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str, absolute_position: int = None):
-        raise NotImplementedError("Gitlab provider does not support creating inline comments yet")
+        raise NotImplementedError("GitLab provider does not support creating inline comments yet")
 
     def create_inline_comments(self, comments: list[dict]):
-        raise NotImplementedError("Gitlab provider does not support publishing inline comments yet")
+        raise NotImplementedError("GitLab provider does not support publishing inline comments yet")
 
     def get_comment_body_from_comment_id(self, comment_id: int):
         comment = self.mr.notes.get(comment_id).body
