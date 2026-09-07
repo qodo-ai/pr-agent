@@ -678,7 +678,7 @@ class AzureDevopsProvider(GitProvider):
         return str(org)
 
     def _get_global_settings_cache_key(self, org: str) -> str:
-        return f"azure-devops:{org}"
+        return f"azure-devops:{org}:{self.workspace_slug}"
 
     def _fetch_global_repo_settings(self, org):
         # Convention: the org-wide <org>/pr-agent-settings settings repository lives in the

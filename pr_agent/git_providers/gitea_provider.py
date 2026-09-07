@@ -775,7 +775,7 @@ class GiteaProvider(GitProvider):
         return getattr(self, "owner", None)
 
     def _get_global_settings_cache_key(self, owner: str) -> str:
-        return f"gitea:{owner}"
+        return f"gitea:{getattr(self, 'base_url', '')}:{owner}"
 
     def _fetch_global_repo_settings(self, owner):
         # Owner-wide global settings live in an <owner>/pr-agent-settings repository.

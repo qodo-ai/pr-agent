@@ -1451,7 +1451,7 @@ class GitLabProvider(GitProvider):
         return settings_files if settings_files else ""
 
     def _get_global_settings_cache_key(self, group: str) -> str:
-        return f"gitlab:{group}"
+        return f"gitlab:{getattr(self, 'gitlab_url', '')}:{group}"
 
     def _fetch_global_repo_settings(self, group):
         try:

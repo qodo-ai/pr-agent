@@ -71,8 +71,8 @@ Create a repository named `pr-agent-settings` at the organization level; its `.p
 - **GitHub:** `<organization>/pr-agent-settings`
 - **GitLab:** `<top-level-group>/pr-agent-settings` (both GitLab.com and self-hosted GitLab)
 - **Bitbucket (cloud):** `<workspace>/pr-agent-settings`
-- **Bitbucket Server:** `<workspace>/pr-agent-settings`
-- **Azure DevOps:** `<org>/pr-agent-settings` (in the same project as the current repository)
+- **Bitbucket Server:** `<project>/pr-agent-settings`
+- **Azure DevOps:** `<org>/<project>/pr-agent-settings` (looked up in the same project as the current repository)
 - **Gitea:** `<owner>/pr-agent-settings`
 
 Parameters from a local `.pr_agent.toml` file, in a specific repo, will override the global configuration parameters (the global file is merged *beneath* the repo-local one).

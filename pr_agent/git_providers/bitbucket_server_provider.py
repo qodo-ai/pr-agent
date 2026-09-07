@@ -123,7 +123,7 @@ class BitbucketServerProvider(GitProvider):
         return settings_files if settings_files else ""
 
     def _get_global_settings_cache_key(self, workspace: str) -> str:
-        return f"bitbucket-server:{workspace}"
+        return f"bitbucket-server:{getattr(self, 'bitbucket_server_url', '')}:{workspace}"
 
     def _fetch_global_repo_settings(self, workspace):
         # A missing pr-agent-settings repo/file (404) is an expected fallback -> return "" (cached).
