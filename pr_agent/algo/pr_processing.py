@@ -290,7 +290,6 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
             continue
 
         patch = data['patch']
-        new_patch_tokens = data['tokens']
         edit_type = data['edit_type']
 
         # Hard Stop, no more tokens
@@ -298,6 +297,16 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
             get_logger().warning(f"File was fully skipped, no more tokens: {filename}.")
             remaining_files_list_new.append(filename)
             continue
+
+        if patch:
+            if not convert_hunks_to_line_numbers:
+                patch_final = f"\n\n## File: '{filename.strip()}'\n\n{patch.strip()}\n"
+            else:
+                patch_final = "\n\n" + patch.strip()
+            new_patch_tokens = token_handler.count_tokens(patch_final)
+        else:
+            patch_final = ""
+            new_patch_tokens = 0
 
         # If the patch is too large, just show the file name
         if total_tokens + new_patch_tokens > max_tokens_model - OUTPUT_BUFFER_TOKENS_SOFT_THRESHOLD:
@@ -310,12 +319,8 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
             continue
 
         if patch:
-            if not convert_hunks_to_line_numbers:
-                patch_final = f"\n\n## File: '{filename.strip()}'\n\n{patch.strip()}\n"
-            else:
-                patch_final = "\n\n" + patch.strip()
             patches.append(patch_final)
-            total_tokens += token_handler.count_tokens(patch_final)
+            total_tokens += new_patch_tokens
             files_in_patch_list.append(filename)
             if get_verbosity_level() >= 2:
                 get_logger().info(f"Tokens: {total_tokens}, last filename: {filename}")

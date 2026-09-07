@@ -67,12 +67,19 @@ def test_generate_full_patch_keeps_remaining_files_when_patch_exceeds_soft_budge
         "large.py": {"patch": "+ " + "large " * 80, "tokens": 250, "edit_type": EDIT_TYPE.MODIFIED},
         "second_small.py": {"patch": "+ second change", "tokens": 10, "edit_type": EDIT_TYPE.MODIFIED},
     }
+    included_tokens = sum(
+        token_handler.count_tokens(f"\n\n## File: '{filename}'\n\n{file_dict[filename]['patch'].strip()}\n")
+        for filename in ("small.py", "second_small.py")
+    )
+    max_tokens_model = (
+        pr_processing.OUTPUT_BUFFER_TOKENS_SOFT_THRESHOLD + token_handler.prompt_tokens + included_tokens
+    )
 
     try:
         total_tokens, patches, remaining_files, files_in_patch = pr_processing.generate_full_patch(
             convert_hunks_to_line_numbers=False,
             file_dict=file_dict,
-            max_tokens_model=1800,
+            max_tokens_model=max_tokens_model,
             remaining_files_list_prev=list(file_dict),
             token_handler=token_handler,
         )
@@ -89,11 +96,9 @@ def test_generate_full_patch_keeps_remaining_files_when_patch_exceeds_soft_budge
 def test_generate_full_patch_records_files_after_hard_token_stop():
     class HardStopTokenHandler(FakeTokenHandler):
         def count_tokens(self, patch):
-            if "first.py" in patch:
-                return 2_000
-            return super().count_tokens(patch)
+            raise AssertionError("hard-stopped patches must not be counted")
 
-    token_handler = HardStopTokenHandler(prompt_tokens=100)
+    token_handler = HardStopTokenHandler(prompt_tokens=2_001)
     file_dict = {
         "first.py": {"patch": "+ first change", "tokens": 1, "edit_type": EDIT_TYPE.MODIFIED},
         "hard_stop.py": {"patch": "+ hard stop change", "tokens": 1, "edit_type": EDIT_TYPE.MODIFIED},
@@ -109,16 +114,16 @@ def test_generate_full_patch_records_files_after_hard_token_stop():
     )
 
     assert total_tokens > 3_000 - pr_processing.OUTPUT_BUFFER_TOKENS_HARD_THRESHOLD
-    assert files_in_patch == ["first.py"]
-    assert remaining_files == ["hard_stop.py", "after_stop.py"]
-    assert len(patches) == 1
+    assert files_in_patch == []
+    assert remaining_files == list(file_dict)
+    assert patches == []
 
 
 def test_generate_full_patch_records_too_large_patch_files():
     token_handler = FakeTokenHandler(prompt_tokens=100)
     file_dict = {
         "included.py": {"patch": "+ included change", "tokens": 5, "edit_type": EDIT_TYPE.MODIFIED},
-        "too_large.py": {"patch": "+ too large change", "tokens": 5_000, "edit_type": EDIT_TYPE.MODIFIED},
+        "too_large.py": {"patch": "+ " + "large " * 5_000, "tokens": 5_000, "edit_type": EDIT_TYPE.MODIFIED},
         "after_large.py": {"patch": "+ after large change", "tokens": 5, "edit_type": EDIT_TYPE.MODIFIED},
     }
 
