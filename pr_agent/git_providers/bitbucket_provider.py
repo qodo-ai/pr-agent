@@ -16,7 +16,7 @@ from ..algo.utils import add_pr_review_identity, comment_matches_identity, find_
 from ..config_loader import get_settings, get_verbosity_level
 from ..log import get_logger
 from .diff_parsing import to_hunk_only_patch
-from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, get_cached_global_settings, redact_credentials
+from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, redact_credentials
 
 
 def _gef_filename(diff):
@@ -96,15 +96,8 @@ class BitbucketProvider(GitProvider):
             get_logger().warning(f"Failed to load local .pr_agent.toml file, error: {e}")
         return settings_files if settings_files else ""
 
-    def _get_global_repo_settings(self):
-        # Load a workspace-wide <workspace>/pr-agent-settings/.pr_agent.toml.
-        if not get_settings().config.use_global_settings_file:
-            return ""
-        workspace = self.get_pr_owner_id()
-        if not workspace or not getattr(self, "headers", None):
-            return ""
-        return get_cached_global_settings(
-            f"bitbucket:{workspace}", lambda: self._fetch_global_repo_settings(workspace))
+    def _get_global_settings_cache_key(self, workspace: str) -> str:
+        return f"bitbucket:{workspace}"
 
     def _fetch_global_repo_settings(self, workspace):
         # A missing settings repo/file (404) is an expected fallback -> return "" (cached). Other
@@ -491,15 +484,24 @@ class BitbucketProvider(GitProvider):
         path = relevant_file.strip()
         return dict(body=body, path=path, position=absolute_position) if subject_type == "LINE" else {}
 
-    def publish_inline_comment(self, comment: str, from_line: int, file: str, original_suggestion=None) -> bool:
-        comment = self.limit_output_characters(comment, self.max_comment_length)
+    def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str | int,
+                               original_suggestion=None) -> bool:
+        body = self.limit_output_characters(body, self.max_comment_length)
+        # The base contract passes the line's text; publish_inline_comments passes an already resolved line number.
+        if not isinstance(relevant_line_in_file, int):
+            comment = self.create_inline_comment(body, relevant_file, relevant_line_in_file)
+            if not comment:
+                get_logger().error(f"Could not find line '{relevant_line_in_file}' in '{relevant_file}' "
+                                   "to publish an inline comment")
+                return False
+            relevant_file, relevant_line_in_file = comment["path"], comment["position"]
         payload = json.dumps({
             "content": {
-                "raw": comment,
+                "raw": body,
             },
             "inline": {
-                "to": from_line,
-                "path": file
+                "to": relevant_line_in_file,
+                "path": relevant_file
             },
         })
         try:
@@ -509,7 +511,7 @@ class BitbucketProvider(GitProvider):
             response.raise_for_status()
         except Exception as e:
             get_logger().error(
-                f"Failed to publish inline comment to '{file}' at line {from_line}, error: {e}")
+                f"Failed to publish inline comment to '{relevant_file}' at line {relevant_line_in_file}, error: {e}")
             return False
         return True
 
@@ -556,7 +558,7 @@ class BitbucketProvider(GitProvider):
                 continue
 
             publishable_count += 1
-            if self.publish_inline_comment(comment['body'], from_line, comment['path']):
+            if self.publish_inline_comment(comment['body'], comment['path'], from_line):
                 published_count += 1
 
         # A partial failure must not report failure: the caller republishes the whole
@@ -584,6 +586,11 @@ class BitbucketProvider(GitProvider):
             return self.pr.destination_branch
 
     def get_pr_owner_id(self) -> str | None:
+        return self.workspace_slug
+
+    def get_owning_namespace(self) -> str | None:
+        if not getattr(self, "headers", None):
+            return None
         return self.workspace_slug
 
     def get_pr_description_full(self):

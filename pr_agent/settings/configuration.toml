@@ -38,7 +38,8 @@ max_description_tokens = 500
 max_commits_tokens = 500
 max_model_tokens = 32000 # Limits the maximum number of tokens that can be used by any model, regardless of the model's default capabilities.
 custom_model_max_tokens=-1 # for models not in the default list
-max_output_tokens = 0 # Output token limit sent as max_tokens on model calls; 0 = unset (the provider's own default applies)
+# Sent as max_completion_tokens for GPT-6 Astra, otherwise max_tokens; use a limit supported by the model.
+max_output_tokens = 0 # 0 = unset (the provider's own default applies)
 model_token_count_estimate_factor=0.3 # factor to increase the token count estimate, in order to reduce likelihood of model failure due to too many tokens - applicable only when requesting an accurate estimate.
 # patch extension logic
 patch_extension_skip_types =[".md",".txt"]
@@ -447,6 +448,16 @@ reasoning_effort = ""
 # Some providers require max_tokens to be greater than the reasoning budget.
 reasoning_max_tokens = 0
 max_tokens = 0 # hard cap on completion tokens for the request; 0 = unset
+
+[model_routing] # send a small pull request to a cheaper primary model (disabled by default)
+# Rules are checked in order; the first one whose limits the pull request fits selects the primary model for the
+# call, and config.fallback_models still apply after it. A pull request that fits no rule uses config.model.
+# Size is measured after the [ignore] rules by diff hunks (max_hunks) and changed files (max_files), which every
+# git provider reports and which do not depend on any model's tokenizer. Only calls that ask for the regular model
+# are routed (/review, /improve, /generate_labels, /add_docs); tools that use model_weak are left alone.
+# With Azure (openai.deployment_id set) a rule also needs its own deployment_id, or it is skipped.
+enable = false
+rules = [] # e.g. [{ max_hunks = 3, model = "gpt-5.6-luna" }, { max_hunks = 15, max_files = 6, model = "gpt-5.6-terra" }]
 
 [otel]
 # Keys map to settings.get("OTEL.*") via section-key dot notation.

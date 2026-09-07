@@ -170,7 +170,7 @@ def _wire_reviewer(monkeypatch, provider):
     async def no_tickets(git_provider, vars):
         return None
 
-    async def direct_model(f, model_type=None):
+    async def direct_model(f, model_type=None, git_provider=None):
         return await f("gpt-4o")
 
     monkeypatch.setattr("pr_agent.tools.pr_reviewer.extract_and_cache_pr_tickets", no_tickets)

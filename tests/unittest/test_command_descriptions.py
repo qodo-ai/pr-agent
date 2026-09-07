@@ -65,3 +65,13 @@ async def test_pr_help_table_uses_canonical_command_descriptions():
 
     for description in COMMAND_DESCRIPTIONS.values():
         assert description in help_message.git_provider.comment
+    assert "help_docs" not in help_message.git_provider.comment
+
+
+def test_disabled_commands_are_not_advertised():
+    cli_usage = set_parser().format_help()
+    bot_help = HelpMessage.get_general_commands_text()
+
+    assert "help_docs" not in cli_usage
+    assert "help_docs" not in bot_help
+    assert "reflect" not in cli_usage

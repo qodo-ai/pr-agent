@@ -588,7 +588,7 @@ async def test_run_removes_its_progress_comment_when_quiet_output_suppresses_rev
     reviewer.prediction = None
     reviewer._prepare_pr_review = lambda: "No major issues detected"
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr(pr_reviewer_module, "extract_and_cache_pr_tickets", AsyncMock())
@@ -755,7 +755,7 @@ async def test_run_does_not_publish_an_empty_review(
     reviewer.prediction = None
     reviewer.prediction_data = None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = prediction
 
     monkeypatch.setattr(pr_reviewer_module, "extract_and_cache_pr_tickets", AsyncMock())
@@ -1196,7 +1196,7 @@ async def test_run_threads_only_the_final_review_comment(monkeypatch, persistent
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr(pr_reviewer_module, "extract_and_cache_pr_tickets", fake_extract_tickets)
@@ -1271,7 +1271,7 @@ async def test_nonpersistent_review_adds_identity_for_incremental_capable_provid
     async def fake_extract_tickets(git_provider, vars):
         return None
 
-    async def fake_retry(prepare_fn, model_type=None):
+    async def fake_retry(prepare_fn, model_type=None, git_provider=None):
         reviewer.prediction = "prediction"
 
     monkeypatch.setattr(pr_reviewer_module, "extract_and_cache_pr_tickets", fake_extract_tickets)

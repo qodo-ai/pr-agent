@@ -103,20 +103,37 @@ class BitbucketServerProvider(GitProvider):
         return (prefix, suffix)
 
     def get_repo_settings(self):
+        settings_files = []
+        global_settings = self._get_global_repo_settings()
+        if global_settings:
+            settings_files.append(("global", global_settings))
         try:
             content = self.bitbucket_client.get_content_of_file(self.workspace_slug, self.repo_slug, ".pr_agent.toml")
-
-            return content
+            settings_files.append(("local", content))
+        except HTTPError as e:
+            if e.response.status_code == 404:  # not found
+                pass
+            else:
+                # A missing .pr_agent.toml is an expected, optional case (like the other
+                # git providers), so don't report it as an error. Log at info level to keep
+                # visibility for genuinely unexpected failures without alarming users.
+                get_logger().info(f"Failed to load .pr_agent.toml file, error: {e}")
         except Exception as e:
-            if isinstance(e, HTTPError):
-                if e.response.status_code == 404:  # not found
-                    return ""
-
-            # A missing .pr_agent.toml is an expected, optional case (like the other
-            # git providers), so don't report it as an error. Log at info level to keep
-            # visibility for genuinely unexpected failures without alarming users.
             get_logger().info(f"Failed to load .pr_agent.toml file, error: {e}")
-            return ""
+        return settings_files if settings_files else ""
+
+    def _get_global_settings_cache_key(self, workspace: str) -> str:
+        return f"bitbucket-server:{getattr(self, 'bitbucket_server_url', '')}:{workspace}"
+
+    def _fetch_global_repo_settings(self, workspace):
+        # A missing pr-agent-settings repo/file (404) is an expected fallback -> return "" (cached).
+        try:
+            return self.bitbucket_client.get_content_of_file(workspace, "pr-agent-settings", ".pr_agent.toml")
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                return ""
+            raise
+        # Transient/unexpected errors propagate so the caller does not cache the failure.
 
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         # Read from the PR target ref (the branch being merged into), matching the other providers,
@@ -430,15 +447,24 @@ class BitbucketServerProvider(GitProvider):
         path = relevant_file.strip()
         return dict(body=body, path=path, position=absolute_position) if subject_type == "LINE" else {}
 
-    def publish_inline_comment(self, comment: str, from_line: int, file: str, original_suggestion=None) -> bool:
+    def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str | int,
+                               original_suggestion=None) -> bool:
+        # The base contract passes the line's text; publish_inline_comments passes an already resolved line number.
+        if not isinstance(relevant_line_in_file, int):
+            comment = self.create_inline_comment(body, relevant_file, relevant_line_in_file)
+            if not comment:
+                get_logger().error(f"Could not find line '{relevant_line_in_file}' in '{relevant_file}' "
+                                   "to publish an inline comment")
+                return False
+            relevant_file, relevant_line_in_file = comment["path"], comment["position"]
         payload = {
-            "text": comment,
+            "text": body,
             "severity": "NORMAL",
             "anchor": {
                 "diffType": "EFFECTIVE",
-                "path": file,
+                "path": relevant_file,
                 "lineType": "ADDED",
-                "line": from_line,
+                "line": relevant_line_in_file,
                 "fileType": "TO"
             }
         }
@@ -446,7 +472,7 @@ class BitbucketServerProvider(GitProvider):
         try:
             self.bitbucket_client.post(self._get_pr_comments_path(), data=payload)
         except Exception as e:
-            get_logger().error(f"Failed to publish inline comment to '{file}' at line {from_line}, error: {e}")
+            get_logger().error(f"Failed to publish inline comment to '{relevant_file}' at line {relevant_line_in_file}, error: {e}")
             return False
         return True
 
@@ -504,7 +530,7 @@ class BitbucketServerProvider(GitProvider):
                 continue
 
             publishable_count += 1
-            if self.publish_inline_comment(comment['body'], from_line, comment['path']):
+            if self.publish_inline_comment(comment['body'], comment['path'], from_line):
                 published_count += 1
 
         # A partial failure must not report failure: the caller republishes the whole
@@ -521,6 +547,9 @@ class BitbucketServerProvider(GitProvider):
         return self.pr.fromRef['displayId']
 
     def get_pr_owner_id(self) -> str | None:
+        return self.workspace_slug
+
+    def get_owning_namespace(self) -> str | None:
         return self.workspace_slug
 
     def get_pr_description_full(self):

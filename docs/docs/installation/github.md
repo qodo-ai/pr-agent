@@ -442,6 +442,8 @@ max_artifact_size = 50000                                   # characters; longer
 !!! note
     A path that resolves outside `GITHUB_WORKSPACE` is rejected, and a missing or unreadable file is skipped with a warning — in both cases the tools still run, just without the artifact context.
 
+The same settings apply when PR-Agent runs as a CLI from another CI system, with `ARTIFACT_PATH` set in the job's environment; see the [GitLab pipeline example](./gitlab.md#ci-artifact-context).
+
 #### Using Configuration Files
 
 Instead of setting all options via environment variables, you can use a `.pr_agent.toml` file in your repository root:
