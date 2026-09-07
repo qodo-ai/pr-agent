@@ -136,7 +136,7 @@ class PlainDiffGitProvider(GitProvider):
 
     def is_supported(self, capability: str) -> bool:
         if capability in ["get_issue_comments", "create_inline_comment",
-                          "publish_inline_comments", "publish_file_comments",
+                          "publish_inline_comments",
                           "get_labels"]:
             return False
         return True
