@@ -33,6 +33,10 @@ def _make_description(provider):
     description.vars = {}
     description.prediction = None
     description.file_label_dict = None
+    # `run()` reads `self.data` on the publish path (#3098). This fixture builds the
+    # instance with `__new__`, so it does not inherit `__init__`'s attributes and has
+    # to name every one `run()` touches.
+    description.data = {}
     return description
 
 

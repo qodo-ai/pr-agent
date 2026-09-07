@@ -108,6 +108,12 @@ class PRDescription:
         self.patches_diff = None
         self.prediction = None
         self.file_label_dict = None
+        # The parsed prediction, set by `_prepare_data()`. Initialised here because
+        # `run()` reads it on the publish path (#3098) and every path that reaches
+        # that read does not necessarily assign it first: a run whose prediction
+        # step is skipped or short-circuited would raise AttributeError from inside
+        # the `try`, and be reported as a failed description rather than published.
+        self.data = {}
 
     async def run(self):
         init_run_details()
