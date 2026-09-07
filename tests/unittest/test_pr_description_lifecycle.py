@@ -32,6 +32,7 @@ def _make_description(provider):
     description.git_provider = provider
     description.vars = {}
     description.prediction = None
+    description.data = None
     description.file_label_dict = None
     return description
 

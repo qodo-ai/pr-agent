@@ -17,6 +17,12 @@ from pr_agent.git_providers.bitbucket_provider import BitbucketProvider
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 
 
+def _added_file(filename="src/example.py", lines=("a = 1", "b = 2", "c = 3")):
+    patch = f"@@ -0,0 +1,{len(lines)} @@\n" + "\n".join("+" + line for line in lines)
+    return FilePatchInfo(base_file="", head_file="\n".join(lines), patch=patch, filename=filename,
+                         edit_type=EDIT_TYPE.ADDED)
+
+
 class TestBitbucketProvider:
     @staticmethod
     def _code_suggestion(line: int):
@@ -485,6 +491,48 @@ not a valid hunk
         existing.put.assert_called_once()
         provider.publish_comment.assert_not_called()
 
+    def test_publish_inline_comment_maps_payload_correctly(self):
+        provider = self._provider_for_code_suggestions()
+        response = self._inline_comment_response(201)
+
+        with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=response) as request:
+            result = provider.publish_inline_comment("looks good", "src/example.py", 42)
+
+        assert result is True
+        request.assert_called_once_with(
+            "POST",
+            provider.bitbucket_comment_api_url,
+            data='{"content": {"raw": "looks good"}, "inline": {"to": 42, "path": "src/example.py"}}',
+            headers=provider.headers,
+        )
+
+    def test_publish_inline_comment_resolves_line_text_to_line_number(self):
+        # The GitProvider contract passes the line's text, as the other providers already accept.
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+        response = self._inline_comment_response(201)
+
+        with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=response) as request:
+            result = provider.publish_inline_comment("looks good", "src/example.py", "b = 2")
+
+        assert result is True
+        request.assert_called_once_with(
+            "POST",
+            provider.bitbucket_comment_api_url,
+            data='{"content": {"raw": "looks good"}, "inline": {"to": 2, "path": "src/example.py"}}',
+            headers=provider.headers,
+        )
+
+    def test_publish_inline_comment_does_not_post_when_line_text_is_not_in_the_diff(self):
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+
+        with patch("pr_agent.git_providers.bitbucket_provider.requests.request") as request:
+            result = provider.publish_inline_comment("looks good", "src/example.py", "no such line")
+
+        assert result is False
+        request.assert_not_called()
+
     def test_publish_code_suggestions_reports_success(self):
         provider = self._provider_for_code_suggestions()
         responses = [self._inline_comment_response(201), self._inline_comment_response(201)]
@@ -829,6 +877,49 @@ class TestBitbucketServerProvider:
         assert PRCodeSuggestionsIdentity.SUMMARY.value in updated_body
         assert "new suggestions" in updated_body
         assert "Previous suggestions" in updated_body
+
+    def test_publish_inline_comment_maps_payload_correctly(self):
+        provider = self._provider_for_code_suggestions()
+
+        result = provider.publish_inline_comment("looks good", "src/example.py", 42)
+
+
+        assert result is True
+        provider.bitbucket_client.post.assert_called_once_with(
+            "rest/api/latest/projects/AAA/repos/my-repo/pull-requests/1/comments",
+            data={
+                "text": "looks good",
+                "severity": "NORMAL",
+                "anchor": {
+                    "diffType": "EFFECTIVE",
+                    "path": "src/example.py",
+                    "lineType": "ADDED",
+                    "line": 42,
+                    "fileType": "TO",
+                },
+            },
+        )
+
+    def test_publish_inline_comment_resolves_line_text_to_line_number(self):
+        # The GitProvider contract passes the line's text, as the other providers already accept.
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+
+        result = provider.publish_inline_comment("looks good", "src/example.py", "b = 2")
+
+        assert result is True
+        anchor = provider.bitbucket_client.post.call_args.kwargs["data"]["anchor"]
+        assert anchor["path"] == "src/example.py"
+        assert anchor["line"] == 2
+
+    def test_publish_inline_comment_does_not_post_when_line_text_is_not_in_the_diff(self):
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+
+        result = provider.publish_inline_comment("looks good", "src/example.py", "no such line")
+
+        assert result is False
+        provider.bitbucket_client.post.assert_not_called()
 
     def test_publish_code_suggestions_reports_success(self):
         provider = self._provider_for_code_suggestions()
@@ -1306,6 +1397,73 @@ class TestBitbucketServerProvider:
         assert actual == expected
 
 
+class TestBitbucketServerGlobalSettings:
+    def _make_provider(self, get_content_side_effect):
+        provider = BitbucketServerProvider.__new__(BitbucketServerProvider)
+        provider.workspace_slug = "AAA"
+        provider.repo_slug = "my-repo"
+        provider.bitbucket_client = MagicMock(Bitbucket)
+        provider.bitbucket_client.get_content_of_file.side_effect = get_content_side_effect
+        return provider
+
+    @staticmethod
+    def _http_404():
+        error = HTTPError("404 Not Found")
+        response = MagicMock()
+        response.status_code = 404
+        error.response = response
+        return error
+
+    def test_get_repo_settings_merges_global_then_local(self):
+        global_content = b"[pr_reviewer]\nextra_instructions = \"global\"\n"
+        local_content = b"[pr_reviewer]\nextra_instructions = \"local\"\n"
+
+        def get_content(project_key, repository_slug, filename):
+            if repository_slug == "pr-agent-settings":
+                return global_content
+            return local_content
+
+        provider = self._make_provider(get_content)
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = True
+            result = provider.get_repo_settings()
+
+        assert result == [("global", global_content), ("local", local_content)]
+
+    def test_get_repo_settings_skips_missing_global_and_keeps_local(self):
+        def get_content(project_key, repository_slug, filename):
+            if repository_slug == "pr-agent-settings":
+                raise self._http_404()
+            return b"[pr_reviewer]\ntemperature = 0.2\n"
+
+        provider = self._make_provider(get_content)
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = True
+            result = provider.get_repo_settings()
+
+        assert result == [("local", b"[pr_reviewer]\ntemperature = 0.2\n")]
+
+    def test_get_repo_settings_empty_when_global_disabled_and_local_missing(self):
+        def raise_http_404(*args, **kwargs):
+            raise self._http_404()
+
+        provider = self._make_provider(raise_http_404)
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = False
+            result = provider.get_repo_settings()
+
+        assert result == ""
+
+    def test_global_settings_result_is_cached_per_workspace(self):
+        provider = self._make_provider(lambda *a, **k: b"[pr_reviewer]\nnum_max_findings = 5\n")
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = True
+            assert provider._get_global_repo_settings() == b"[pr_reviewer]\nnum_max_findings = 5\n"
+            assert provider._get_global_repo_settings() == b"[pr_reviewer]\nnum_max_findings = 5\n"  # cached
+
+        assert provider.bitbucket_client.get_content_of_file.call_count == 1
+
+
 @pytest.fixture(autouse=True)
 def _clear_global_settings_cache():
     from pr_agent.git_providers import git_provider as _gp
@@ -1329,7 +1487,7 @@ class TestBitbucketGlobalSettings:
         file_resp.text = "[pr_reviewer]\nnum_max_findings = 5\n"
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request",
                    side_effect=[repo_resp, file_resp]) as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             result = provider._get_global_repo_settings()
         assert result == b"[pr_reviewer]\nnum_max_findings = 5\n"
@@ -1342,7 +1500,7 @@ class TestBitbucketGlobalSettings:
         provider = self._provider()
         repo_resp = MagicMock(status_code=403)
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=repo_resp) as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             assert provider._get_global_repo_settings() == ""
             assert provider._get_global_repo_settings() == ""  # served from cache
@@ -1353,14 +1511,14 @@ class TestBitbucketGlobalSettings:
         repo_resp = MagicMock(status_code=404)
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request",
                    return_value=repo_resp), \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             assert provider._get_global_repo_settings() == ""
 
     def test_disabled_returns_empty(self):
         provider = self._provider()
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request") as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = False
             assert provider._get_global_repo_settings() == ""
         rq.assert_not_called()
@@ -1373,7 +1531,7 @@ class TestBitbucketGlobalSettings:
         file_resp.text = "[pr_reviewer]\nx = 1\n"
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request",
                    side_effect=[repo_resp, file_resp]) as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             provider._get_global_repo_settings()
             provider._get_global_repo_settings()
@@ -1392,7 +1550,7 @@ class TestBitbucketLocalSettingsRobustness:
         resp = MagicMock(status_code=500)
         resp.text = "<html>internal error</html>"
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=resp), \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = False
             result = provider.get_repo_settings()
         assert result == ""

@@ -94,10 +94,66 @@ async def test_convert_to_decoupled_uses_normalized_diff_and_keeps_ai_summary():
     result = await tool.convert_to_decoupled_with_line_numbers(patches, "gpt-4o-mini")
 
     assert len(result) == 1
+    assert result[0].startswith("## File: 'app.py'")
     assert "### AI-generated changes summary:" in result[0]
     assert "Keep the existing summary." in result[0]
     assert not any(line.startswith(("---", "+++")) for line in result[0].splitlines())
     assert "1 +new" in result[0]
+
+
+@pytest.mark.asyncio
+async def test_convert_to_decoupled_preserves_quoted_file_headings_across_files():
+    token_handler = MagicMock(prompt_tokens=0)
+    token_handler.count_tokens.return_value = 1
+    first_base = "keep first\nold first\n"
+    first_head = "keep first\nnew first\n"
+    second_base = "".join(f"line {i}\n" for i in range(1, 10)) + "keep second\nold second\n"
+    second_head = "".join(f"line {i}\n" for i in range(1, 10)) + "keep second\nnew second\n"
+    files = (
+        FilePatchInfo(
+            base_file=first_base,
+            head_file=first_head,
+            patch=load_large_diff("first.py", first_head, first_base),
+            filename="first.py",
+        ),
+        FilePatchInfo(
+            base_file=second_base,
+            head_file=second_head,
+            patch=load_large_diff("second.py", second_head, second_base),
+            filename="second.py",
+        ),
+    )
+    patches, _, _ = pr_generate_extended_diff(
+        [{"language": "Python", "files": files}],
+        token_handler,
+        add_line_numbers_to_hunks=False,
+    )
+    tool = _make_tool()
+    tool.token_handler = token_handler
+
+    result = await tool.convert_to_decoupled_with_line_numbers(["\n".join(patches)], "gpt-4o-mini")
+
+    assert len(result) == 1
+    converted = result[0]
+    assert converted.count("## File: 'first.py'") == 1
+    assert converted.count("## File: 'second.py'") == 1
+    assert "## File: second.py'" not in converted
+    first_index = converted.index("## File: 'first.py'")
+    second_index = converted.index("## File: 'second.py'")
+    assert first_index < second_index
+
+    first_section = converted[first_index:second_index]
+    second_section = converted[second_index:]
+    assert "1  keep first" in first_section
+    assert "2 +new first" in first_section
+    assert "10  keep second" not in first_section
+    assert "11 +new second" not in first_section
+    first_new_hunk = first_section.split("__new hunk__\n", 1)[1].split("__old hunk__", 1)[0]
+    assert first_new_hunk.splitlines() == ["1  keep first", "2 +new first"]
+    assert "10  keep second" in second_section
+    assert "11 +new second" in second_section
+    assert "1  keep first" not in second_section
+    assert "2 +new first" not in second_section
 
 
 @pytest.mark.asyncio

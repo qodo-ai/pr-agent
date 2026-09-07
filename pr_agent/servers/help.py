@@ -9,7 +9,6 @@ class HelpMessage:
                 f"> - **/improve [--extended]**: {COMMAND_DESCRIPTIONS['improve']} Extended mode provides more thorough feedback.   \n" \
                 "> - **/ask \\<QUESTION\\>**: Ask a question about the PR.   \n" \
                 "> - **/update_changelog**: Update the changelog based on the PR's contents.   \n" \
-                "> - **/help_docs \\<QUESTION\\>**: Given a path to documentation (either for this repository or for a given one), ask a question.   \n" \
                 "> - **/add_docs**: Generate docstring for new components introduced in the PR.   \n" \
                 "> - **/generate_labels**: Generate labels for the PR based on the PR's contents.   \n\n" \
                 ">See the [tools guide](https://pr-agent-docs.codium.ai/tools/) for more details.\n" \

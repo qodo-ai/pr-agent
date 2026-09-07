@@ -44,7 +44,6 @@ from .git_provider import (
     FilePatchInfo,
     GitProvider,
     IncrementalPR,
-    get_cached_global_settings,
     redact_credentials,
 )
 
@@ -1148,6 +1147,13 @@ class GithubProvider(GitProvider):
             return None
         return self.repo.split('/')[0]
 
+    def get_owning_namespace(self) -> Optional[str]:
+        # Be robust to providers built without full __init__ (e.g. __new__ in tests/helpers):
+        # without a repo there is no org to resolve, so skip global settings quietly.
+        if not getattr(self, "repo", None):
+            return None
+        return self.repo.split('/')[0]
+
     def get_pr_description_full(self):
         return self.pr.body
 
@@ -1220,23 +1226,10 @@ class GithubProvider(GitProvider):
 
         return settings_files if settings_files else ""
 
-    def _get_global_repo_settings(self):
-        if not get_settings().config.use_global_settings_file:
-            return ""
-
-        # Be robust to providers built without full __init__ (e.g. __new__ in tests/helpers):
-        # without a repo/client there is no org to resolve, so skip global settings quietly.
-        if not getattr(self, "repo", None) or getattr(self, "github_client", None) is None:
-            return ""
-
-        repo_owner = self.get_pr_owner_id()
-        if not repo_owner:
-            return ""
-        # Cache per org: global settings change rarely, so avoid a lookup (and repeated 403/404
-        # fallbacks) on every webhook event.
-        return get_cached_global_settings(
-            f"github:{getattr(self, 'base_url', '')}:{repo_owner}",
-            lambda: self._fetch_global_repo_settings(repo_owner))
+    def _get_global_settings_cache_key(self, repo_owner: str) -> str:
+        # Cache per org AND host: the same org name on two different hosts (github.com vs a
+        # self-hosted GitHub Enterprise instance) must not share a settings entry.
+        return f"github:{getattr(self, 'base_url', '')}:{repo_owner}"
 
     def _fetch_global_repo_settings(self, repo_owner):
         try:
