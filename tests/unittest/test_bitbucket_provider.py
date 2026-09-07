@@ -689,6 +689,80 @@ class TestBitbucketServerProvider:
         assert repo_slug == "my-repo"
         assert pr_number == 1
 
+    @pytest.mark.parametrize(
+        ("pr_url", "server_url"),
+        [
+            (
+                "https://git.example.com/projects/PROJ/repos/repo/pull-requests/7",
+                "https://git.example.com",
+            ),
+            (
+                "https://git.example.com/users/alice/repos/repo/pull-requests/7",
+                "https://git.example.com",
+            ),
+            (
+                "https://git.example.com/bitbucket/projects/PROJ/repos/repo/pull-requests/7",
+                "https://git.example.com/bitbucket",
+            ),
+            (
+                "https://git.example.com/bitbucket/users/alice/repos/repo/pull-requests/7",
+                "https://git.example.com/bitbucket",
+            ),
+            (
+                "http://git.example.com:7990/apps/bitbucket/projects/PROJ/repos/repo/pull-requests/7",
+                "http://git.example.com:7990/apps/bitbucket",
+            ),
+            (
+                "http://git.example.com:7990/apps/bitbucket/users/alice/repos/repo/pull-requests/7/?tab=overview#comment-1",
+                "http://git.example.com:7990/apps/bitbucket",
+            ),
+        ],
+    )
+    def test_parse_bitbucket_server_url(self, pr_url, server_url):
+        assert BitbucketServerProvider._parse_bitbucket_server(pr_url) == server_url
+
+    @pytest.mark.parametrize(
+        ("pr_url", "server_url", "workspace_slug"),
+        [
+            (
+                "https://git.example.com/projects/PROJ/repos/repo/pull-requests/7",
+                "https://git.example.com",
+                "PROJ",
+            ),
+            (
+                "https://git.example.com/users/alice/repos/repo/pull-requests/7",
+                "https://git.example.com",
+                "~alice",
+            ),
+            (
+                "https://git.example.com/bitbucket/projects/PROJ/repos/repo/pull-requests/7",
+                "https://git.example.com/bitbucket",
+                "PROJ",
+            ),
+            (
+                "https://git.example.com/bitbucket/users/alice/repos/repo/pull-requests/7",
+                "https://git.example.com/bitbucket",
+                "~alice",
+            ),
+        ],
+    )
+    def test_constructor_uses_pr_context_path_for_api_client(self, pr_url, server_url, workspace_slug):
+        bitbucket_client = MagicMock(Bitbucket)
+        bitbucket_client.get.return_value = {"version": "8.16"}
+        bitbucket_client.get_pull_request.return_value = {}
+
+        with patch(
+            "pr_agent.git_providers.bitbucket_server_provider.Bitbucket",
+            return_value=bitbucket_client,
+        ) as bitbucket_class:
+            provider = BitbucketServerProvider(pr_url)
+
+        assert provider.bitbucket_server_url == server_url
+        assert provider.workspace_slug == workspace_slug
+        assert bitbucket_class.call_args.kwargs["url"] == server_url
+        bitbucket_client.get.assert_called_once_with("rest/api/1.0/application-properties")
+        bitbucket_client.get_pull_request.assert_called_once_with(workspace_slug, "repo", pull_request_id=7)
+
     def test_get_issue_comments_normalizes_top_level_comments_from_all_activities(self):
         provider = self._persistent_provider()
         provider.bitbucket_client.get_pull_requests_activities.return_value = iter([

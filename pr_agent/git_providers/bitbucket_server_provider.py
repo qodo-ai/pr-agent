@@ -614,9 +614,11 @@ class BitbucketServerProvider(GitProvider):
 
     @staticmethod
     def _parse_bitbucket_server(url: str) -> str:
-        # pr url format: f"{bitbucket_server}/projects/{project_name}/repos/{repository_name}/pull-requests/{pr_id}"
+        # PR URLs use either projects/{project} or users/{user} after the Bitbucket Server base URL.
         parsed_url = urlparse(url)
-        server_path = parsed_url.path.split("/projects/")
+        server_path = parsed_url.path.split("/projects/", maxsplit=1)
+        if len(server_path) == 1:
+            server_path = parsed_url.path.split("/users/", maxsplit=1)
         if len(server_path) > 1:
             server_path = server_path[0].strip("/")
             return f"{parsed_url.scheme}://{parsed_url.netloc}/{server_path}".strip("/")
