@@ -920,6 +920,12 @@ class GiteaProvider(GitProvider):
                 return ""
             raise
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        if from_default_branch:
+            return self.repo_api.repo_get(self.owner, self.repo).default_branch
+        # Only trust the PR target (base) ref — never the PR head (self.sha).
+        return self.base_sha or self.base_ref
+
 class RepoApi(giteapy.RepositoryApi):
     def __init__(self, client: giteapy.ApiClient):
         self.repository = giteapy.RepositoryApi(client)

@@ -1278,6 +1278,14 @@ class GithubProvider(GitProvider):
                 return ""
             raise
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        # Match get_repo_file_content: the PR target (base) commit is the cached revision, and
+        # the default branch carries no explicit ref (None).
+        if from_default_branch:
+            return None
+        base = getattr(getattr(self, "pr", None), "base", None)
+        return getattr(base, "sha", None) or getattr(base, "ref", None)
+
     def get_workspace_name(self):
         return self.repo.split('/')[0]
 
