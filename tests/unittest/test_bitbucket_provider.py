@@ -17,6 +17,12 @@ from pr_agent.git_providers.bitbucket_provider import BitbucketProvider
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 
 
+def _added_file(filename="src/example.py", lines=("a = 1", "b = 2", "c = 3")):
+    patch = f"@@ -0,0 +1,{len(lines)} @@\n" + "\n".join("+" + line for line in lines)
+    return FilePatchInfo(base_file="", head_file="\n".join(lines), patch=patch, filename=filename,
+                         edit_type=EDIT_TYPE.ADDED)
+
+
 class TestBitbucketProvider:
     @staticmethod
     def _code_suggestion(line: int):
@@ -500,6 +506,33 @@ not a valid hunk
             headers=provider.headers,
         )
 
+    def test_publish_inline_comment_resolves_line_text_to_line_number(self):
+        # The GitProvider contract passes the line's text, as the other providers already accept.
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+        response = self._inline_comment_response(201)
+
+        with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=response) as request:
+            result = provider.publish_inline_comment("looks good", "src/example.py", "b = 2")
+
+        assert result is True
+        request.assert_called_once_with(
+            "POST",
+            provider.bitbucket_comment_api_url,
+            data='{"content": {"raw": "looks good"}, "inline": {"to": 2, "path": "src/example.py"}}',
+            headers=provider.headers,
+        )
+
+    def test_publish_inline_comment_does_not_post_when_line_text_is_not_in_the_diff(self):
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+
+        with patch("pr_agent.git_providers.bitbucket_provider.requests.request") as request:
+            result = provider.publish_inline_comment("looks good", "src/example.py", "no such line")
+
+        assert result is False
+        request.assert_not_called()
+
     def test_publish_code_suggestions_reports_success(self):
         provider = self._provider_for_code_suggestions()
         responses = [self._inline_comment_response(201), self._inline_comment_response(201)]
@@ -866,6 +899,27 @@ class TestBitbucketServerProvider:
                 },
             },
         )
+
+    def test_publish_inline_comment_resolves_line_text_to_line_number(self):
+        # The GitProvider contract passes the line's text, as the other providers already accept.
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+
+        result = provider.publish_inline_comment("looks good", "src/example.py", "b = 2")
+
+        assert result is True
+        anchor = provider.bitbucket_client.post.call_args.kwargs["data"]["anchor"]
+        assert anchor["path"] == "src/example.py"
+        assert anchor["line"] == 2
+
+    def test_publish_inline_comment_does_not_post_when_line_text_is_not_in_the_diff(self):
+        provider = self._provider_for_code_suggestions()
+        provider.get_diff_files = MagicMock(return_value=[_added_file()])
+
+        result = provider.publish_inline_comment("looks good", "src/example.py", "no such line")
+
+        assert result is False
+        provider.bitbucket_client.post.assert_not_called()
 
     def test_publish_code_suggestions_reports_success(self):
         provider = self._provider_for_code_suggestions()
