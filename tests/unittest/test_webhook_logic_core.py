@@ -642,15 +642,15 @@ async def _run_gitlab_pr_commands(module, monkeypatch, draft, repo_setting, even
         module, "get_fork_safe_secret_provider", lambda: secret_provider
     )
     object_attributes = {
-        "action": "update" if event == "draft_ready" else event,
+        "action": "update" if event.startswith("draft_ready") else event,
         "draft": draft,
         "url": "https://gitlab.com/org/repo/-/merge_requests/1",
     }
-    if event == "update":
+    if event in ("update", "draft_ready_push"):
         object_attributes["oldrev"] = "previous-revision"
     data = _gitlab_payload(**object_attributes)
     data["object_kind"] = "merge_request"
-    if event == "draft_ready":
+    if event.startswith("draft_ready"):
         data["changes"] = {"draft": {"previous": True, "current": False}}
     try:
         response = await _post_gitlab_webhook(module.app, data)
@@ -679,6 +679,30 @@ async def test_gitlab_push_uses_shared_dedupe_slot(gitlab_webhook_module, monkey
     assert slots == [
         ("https://gitlab.com/org/repo/-/merge_requests/1", {"allow_backlog": True, "ttl": 300})
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("feedback_on_draft_pr", [True, False])
+async def test_gitlab_draft_ready_with_new_commits(gitlab_webhook_module, monkeypatch, feedback_on_draft_pr):
+    # One update clears the draft flag and carries commits. With draft feedback already on,
+    # the review has been running all along and only the push half is new, so it takes the
+    # push path through the dedupe slot instead of returning at the guard.
+    slots = []
+
+    @asynccontextmanager
+    async def record_slot(key, **kwargs):
+        slots.append((key, kwargs))
+        yield True
+
+    monkeypatch.setattr(gitlab_webhook_module, "push_trigger_slot", record_slot)
+    commands, _ = await _run_gitlab_pr_commands(
+        gitlab_webhook_module, monkeypatch, draft=False,
+        repo_setting=feedback_on_draft_pr, event="draft_ready_push",
+    )
+
+    assert commands == [["/review"]]
+    expected_slots = [("https://gitlab.com/org/repo/-/merge_requests/1", {"allow_backlog": True, "ttl": 300})]
+    assert slots == (expected_slots if feedback_on_draft_pr else [])
 
 
 @pytest.mark.asyncio
