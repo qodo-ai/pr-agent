@@ -53,6 +53,18 @@ class MethodContract:
     check_execution: bool = True
 
 
+@dataclass(frozen=True)
+class DeliberateMismatch:
+    reason: str
+
+
+@dataclass(frozen=True)
+class PredicateContract:
+    name: str
+    evidence: tuple[str, ...]
+    deliberate_mismatches: dict[str, DeliberateMismatch]
+
+
 def _github(monkeypatch) -> GithubProvider:
     provider = GithubProvider.__new__(GithubProvider)
     provider.base_url = "https://api.github.example"
@@ -183,6 +195,30 @@ def _is_success(value):
 
 REACTION_TIERS = _tiers(supported=("github", "gitlab", "gitea"), not_implemented=("gerrit",))
 
+PREDICATE_CONTRACTS = (
+    PredicateContract(
+        name="supports_review_comment_identity",
+        evidence=("publish_persistent_comment",),
+        deliberate_mismatches={
+            "gitea": DeliberateMismatch(
+                "Gitea forwards identity arguments but cannot safely activate identity tracking "
+                "until it normalizes dictionary-shaped comment payloads."
+            ),
+        },
+    ),
+    PredicateContract(
+        name="supports_thread_resolution",
+        evidence=("resolve_comment_thread", "set_thread_status"),
+        deliberate_mismatches={
+            "gitlab": DeliberateMismatch(
+                "GitLab resolves note IDs while /ask_line addresses discussion IDs, so thread resolution "
+                "must remain disabled."
+            ),
+        },
+    ),
+)
+
+
 METHOD_CONTRACTS = (
     MethodContract(
         name="get_commit_messages",
@@ -241,10 +277,56 @@ def _rows(tier: Tier | None = None, check_execution_only: bool = False):
                 yield pytest.param(provider_name, contract, id=f"{provider_name}-{contract.name}")
 
 
+def _predicate_rows():
+    for contract in PREDICATE_CONTRACTS:
+        for provider_name in PROVIDERS:
+            yield pytest.param(provider_name, contract, id=f"{provider_name}-{contract.name}")
+
+
+def _has_evidence(provider_type: type[GitProvider], contract: PredicateContract) -> bool:
+    for name in contract.evidence:
+        member = getattr(provider_type, name, None)
+        if member is not getattr(GitProvider, name, None):
+            if contract.name == "supports_review_comment_identity":
+                if "identity_marker" in inspect.signature(member).parameters:
+                    return True
+            else:
+                return True
+    return False
+
+
 def test_every_registered_provider_has_a_contract_row():
     contracted = {provider_type for provider_type, _ in PROVIDERS.values()}
 
     assert set(_GIT_PROVIDERS.values()) <= contracted
+
+
+@pytest.mark.parametrize("provider_name,contract", tuple(_predicate_rows()))
+def test_predicate_truth_matches_evidence(provider_name: str, contract: PredicateContract):
+    provider_type, _ = PROVIDERS[provider_name]
+    mismatch = contract.deliberate_mismatches.get(provider_name)
+    predicate = getattr(provider_type.__new__(provider_type), contract.name)
+
+    if mismatch:
+        assert mismatch.reason.strip()
+        assert predicate() is False
+    else:
+        assert predicate() is _has_evidence(provider_type, contract)
+
+
+@pytest.mark.parametrize("contract", PREDICATE_CONTRACTS, ids=lambda contract: contract.name)
+def test_predicate_mismatches_name_only_providers_with_evidence(contract: PredicateContract):
+    for provider_name in contract.deliberate_mismatches:
+        provider_type, _ = PROVIDERS[provider_name]
+
+        assert _has_evidence(provider_type, contract)
+
+
+@pytest.mark.parametrize("contract", PREDICATE_CONTRACTS, ids=lambda contract: contract.name)
+def test_predicate_contract_evidence_members_exist_on_registered_providers(contract: PredicateContract):
+    assert contract.evidence
+    for member_name in contract.evidence:
+        assert any(hasattr(provider_type, member_name) for provider_type, _ in PROVIDERS.values())
 
 
 @pytest.mark.parametrize("contract", METHOD_CONTRACTS, ids=lambda contract: contract.name)
