@@ -9,6 +9,7 @@ from pr_agent.algo.ai_handlers.litellm_helpers import (
     drain_litellm_callbacks,
     litellm_callbacks_registered,
 )
+from pr_agent.algo.artifacts import inject_artifact_context
 from pr_agent.algo.utils import get_version
 from pr_agent.command_descriptions import COMMAND_DESCRIPTIONS
 from pr_agent.config_loader import get_settings
@@ -141,6 +142,9 @@ def run(inargs=None, args=None):
     # previously-set value from an earlier run() call in the same process can't
     # leak into a later one (get_settings() is a process-wide singleton).
     get_settings().set("CONFIG.EXTRA_CONFIG_URL", getattr(args, "extra_config_url", None))
+    # A CI artifact (see [artifacts]) reaches the prompts from the environment or the settings files,
+    # the same way it does under the GitHub Action, so any pipeline that runs the CLI can supply one.
+    inject_artifact_context()
 
     async def inner():
         if args.issue_url:

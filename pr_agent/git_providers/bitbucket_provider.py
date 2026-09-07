@@ -491,15 +491,15 @@ class BitbucketProvider(GitProvider):
         path = relevant_file.strip()
         return dict(body=body, path=path, position=absolute_position) if subject_type == "LINE" else {}
 
-    def publish_inline_comment(self, comment: str, from_line: int, file: str, original_suggestion=None) -> bool:
-        comment = self.limit_output_characters(comment, self.max_comment_length)
+    def publish_inline_comment(self, body: str, relevant_file: str, relevant_line_in_file: str, original_suggestion=None) -> bool:
+        body = self.limit_output_characters(body, self.max_comment_length)
         payload = json.dumps({
             "content": {
-                "raw": comment,
+                "raw": body,
             },
             "inline": {
-                "to": from_line,
-                "path": file
+                "to": relevant_line_in_file,
+                "path": relevant_file
             },
         })
         try:
@@ -509,7 +509,7 @@ class BitbucketProvider(GitProvider):
             response.raise_for_status()
         except Exception as e:
             get_logger().error(
-                f"Failed to publish inline comment to '{file}' at line {from_line}, error: {e}")
+                f"Failed to publish inline comment to '{relevant_file}' at line {relevant_line_in_file}, error: {e}")
             return False
         return True
 
@@ -556,7 +556,7 @@ class BitbucketProvider(GitProvider):
                 continue
 
             publishable_count += 1
-            if self.publish_inline_comment(comment['body'], from_line, comment['path']):
+            if self.publish_inline_comment(comment['body'], comment['path'], from_line):
                 published_count += 1
 
         # A partial failure must not report failure: the caller republishes the whole

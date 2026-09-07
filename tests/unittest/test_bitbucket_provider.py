@@ -485,6 +485,21 @@ not a valid hunk
         existing.put.assert_called_once()
         provider.publish_comment.assert_not_called()
 
+    def test_publish_inline_comment_maps_payload_correctly(self):
+        provider = self._provider_for_code_suggestions()
+        response = self._inline_comment_response(201)
+
+        with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=response) as request:
+            result = provider.publish_inline_comment("looks good", "src/example.py", 42)
+
+        assert result is True
+        request.assert_called_once_with(
+            "POST",
+            provider.bitbucket_comment_api_url,
+            data='{"content": {"raw": "looks good"}, "inline": {"to": 42, "path": "src/example.py"}}',
+            headers=provider.headers,
+        )
+
     def test_publish_code_suggestions_reports_success(self):
         provider = self._provider_for_code_suggestions()
         responses = [self._inline_comment_response(201), self._inline_comment_response(201)]
@@ -829,6 +844,28 @@ class TestBitbucketServerProvider:
         assert PRCodeSuggestionsIdentity.SUMMARY.value in updated_body
         assert "new suggestions" in updated_body
         assert "Previous suggestions" in updated_body
+
+    def test_publish_inline_comment_maps_payload_correctly(self):
+        provider = self._provider_for_code_suggestions()
+
+        result = provider.publish_inline_comment("looks good", "src/example.py", 42)
+
+
+        assert result is True
+        provider.bitbucket_client.post.assert_called_once_with(
+            "rest/api/latest/projects/AAA/repos/my-repo/pull-requests/1/comments",
+            data={
+                "text": "looks good",
+                "severity": "NORMAL",
+                "anchor": {
+                    "diffType": "EFFECTIVE",
+                    "path": "src/example.py",
+                    "lineType": "ADDED",
+                    "line": 42,
+                    "fileType": "TO",
+                },
+            },
+        )
 
     def test_publish_code_suggestions_reports_success(self):
         provider = self._provider_for_code_suggestions()

@@ -1366,6 +1366,13 @@ def get_max_tokens(model):
     """
     settings = get_settings()
     custom_max_tokens = _as_int(settings.config.custom_model_max_tokens)
+    # Resolve GPT-6 Astra aliases before diff token accounting, just as the handler does.
+    # Preserve explicit custom limits for provider aliases that were not in the registry.
+    model_base = model
+    while model_base.startswith(('openai/', 'azure/')):
+        model_base = model_base.removeprefix('openai/').removeprefix('azure/')
+    if custom_max_tokens <= 0 and model_base.removesuffix('_thinking') == 'gpt-6-astra':
+        model = 'gpt-6-astra'
     if model in MAX_TOKENS:
         max_tokens_model = MAX_TOKENS[model]
     elif custom_max_tokens > 0:

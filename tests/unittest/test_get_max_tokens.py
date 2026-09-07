@@ -95,6 +95,37 @@ class TestGetMaxTokens:
 
         assert get_max_tokens(model) == 1050000
 
+    @pytest.mark.parametrize("prefix", ["", "openai/", "azure/", "azure/openai/"])
+    @pytest.mark.parametrize("suffix", ["", "_thinking"])
+    @pytest.mark.parametrize("cap", [0, 32000])
+    def test_gpt6_astra_model_max_tokens(self, monkeypatch, prefix, suffix, cap):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 0,
+                "max_model_tokens": cap,
+            })()
+        })()
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+        monkeypatch.setattr(litellm, "get_model_info", lambda *args, **kwargs: pytest.fail("Static lookup expected"))
+
+        assert get_max_tokens(f"{prefix}gpt-6-astra{suffix}") == (cap or 1050000)
+
+    @pytest.mark.parametrize("model", [
+        "openai/gpt-6-astra", "azure/gpt-6-astra", "azure/openai/gpt-6-astra_thinking",
+        "gpt-6-astra_thinking",
+    ])
+    @pytest.mark.parametrize("cap, expected", [(0, 128000), (32000, 32000)])
+    def test_gpt6_astra_alias_preserves_custom_limit(self, monkeypatch, model, cap, expected):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 128000,
+                "max_model_tokens": cap,
+            })()
+        })()
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+
+        assert get_max_tokens(model) == expected
+
     @pytest.mark.parametrize(
         ("model", "expected"),
         [
@@ -366,6 +397,29 @@ class TestGetMaxTokens:
             'config': type('', (), {
                 'custom_model_max_tokens': 0,
                 'max_model_tokens': 0
+            })()
+        })()
+
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+
+        assert get_max_tokens(model) == 1000000
+
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "anthropic/claude-fable-5-1",
+            "claude-fable-5-1",
+            "vertex_ai/claude-fable-5-1",
+            "bedrock/anthropic.claude-fable-5-1",
+            "bedrock/global.anthropic.claude-fable-5-1",
+            "bedrock/us.anthropic.claude-fable-5-1",
+        ],
+    )
+    def test_claude_fable_5_1_model_max_tokens(self, monkeypatch, model):
+        fake_settings = type("", (), {
+            "config": type("", (), {
+                "custom_model_max_tokens": 0,
+                "max_model_tokens": 0,
             })()
         })()
 

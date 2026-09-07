@@ -27,13 +27,23 @@ class _PullRequestMimic:
 _DIFF_GIT_RE = re.compile(r'^diff --git a/(?P<a>.+?) b/(?P<b>.+?)\s*$')
 
 
+def _normalize_file_header_path(path: str) -> str:
+    if path == "/dev/null":
+        return ""
+    if path.startswith(("a/", "b/")):
+        return path[2:]
+    return path
+
+
 def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
     """Parse a supplied unified diff (git format) into a list of FilePatchInfo.
 
     Splits on ``diff --git a/<f> b/<f>`` headers; per file: filename = the b/ path,
     patch = that file's hunk body, edit_type inferred from new/deleted/rename file
     modes, and head/base file content reconstructed best-effort from +/-/context
-    lines. Degrades gracefully: a blob with no ``diff --git`` header yields []."""
+    lines. File paths are taken from the ``---``/``+++`` headers when present, since
+    those headers do not ambiguously split paths containing `` b/``. Degrades
+    gracefully: a blob with no ``diff --git`` header yields []."""
     if not diff_text or not isinstance(diff_text, str):
         return []
 
@@ -47,7 +57,7 @@ def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
     files: List[FilePatchInfo] = []
     for idx in range(len(starts) - 1):
         section = lines[starts[idx]:starts[idx + 1]]
-        header = section[0].rstrip("\n")
+        header = section[0].rstrip("\r\n")
         m = _DIFF_GIT_RE.match(header)
         a_path = m.group("a") if m else ""
         b_path = m.group("b") if m else ""
@@ -55,7 +65,13 @@ def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
         edit_type = EDIT_TYPE.MODIFIED
         old_filename = None
         for ln in section[1:]:
-            s = ln.rstrip("\n")
+            s = ln.rstrip("\r\n")
+            if s.startswith("@@"):
+                break
+            if s.startswith("--- "):
+                a_path = _normalize_file_header_path(s[4:])
+            elif s.startswith("+++ "):
+                b_path = _normalize_file_header_path(s[4:])
             if s.startswith("new file mode"):
                 edit_type = EDIT_TYPE.ADDED
             elif s.startswith("deleted file mode"):
@@ -65,7 +81,12 @@ def parse_unified_diff(diff_text: str) -> List[FilePatchInfo]:
                 old_filename = s[len("rename from "):].strip()
             elif s.startswith("rename to "):
                 edit_type = EDIT_TYPE.RENAMED
-        if a_path != b_path and old_filename is None and a_path:
+        if (
+            edit_type not in (EDIT_TYPE.ADDED, EDIT_TYPE.DELETED)
+            and a_path != b_path
+            and old_filename is None
+            and a_path
+        ):
             old_filename = a_path
 
         # Best-effort reconstruct head/base file content from hunk lines.
