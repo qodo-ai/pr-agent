@@ -37,7 +37,6 @@ from .git_provider import (
     MAX_FILES_ALLOWED_FULL,
     GitProvider,
     IncrementalPR,
-    get_cached_global_settings,
     redact_credentials,
 )
 
@@ -1408,24 +1407,23 @@ class GitLabProvider(GitProvider):
     def get_pr_branch(self):
         return self.mr.source_branch
 
-    def get_pr_owner_id(self) -> str | None:
-        if not self.gitlab_url or 'gitlab.com' in self.gitlab_url:
-            if not self.id_project:
+    def get_owning_namespace(self) -> str | None:
+        # The top-level group of the project's path_with_namespace works on any host
+        # (gitlab.com or self-hosted) with no extra round trip: numeric project IDs are
+        # resolved to their canonical path first so the group name is still available.
+        if not getattr(self, "gl", None) or not getattr(self, "id_project", None):
+            return None
+        project_id = str(self.id_project)
+        if project_id.isascii() and project_id.isdigit():
+            try:
+                project_path = self.gl.projects.get(project_id).path_with_namespace
+            except Exception as e:
+                get_logger().warning(f"Failed to resolve canonical GitLab project path, error: {e}")
                 return None
-            project_id = str(self.id_project)
-            if project_id.isascii() and project_id.isdigit():
-                try:
-                    project_path = self.gl.projects.get(project_id).path_with_namespace
-                except Exception as e:
-                    get_logger().warning(f"Failed to resolve canonical GitLab project path, error: {e}")
-                    return None
-                if not project_path:
-                    return None
-                return project_path.split('/')[0]
-            return project_id.split('/')[0]
-        # extract host name
-        host = urlparse(self.gitlab_url).hostname
-        return host
+            if not project_path:
+                return None
+            return project_path.split('/')[0]
+        return project_id.split('/')[0]
 
     def get_pr_description_full(self):
         return self.mr.description
@@ -1452,21 +1450,8 @@ class GitLabProvider(GitProvider):
             get_logger().warning(f"Failed to load local .pr_agent.toml file, error: {e}")
         return settings_files if settings_files else ""
 
-    def _get_global_repo_settings(self):
-        # Load an org-wide <group>/pr-agent-settings/.pr_agent.toml (GitLab.com groups only).
-        if not get_settings().config.use_global_settings_file:
-            return ""
-        if not getattr(self, "gl", None) or not getattr(self, "id_project", None):
-            return ""
-        # Group-level global settings are GitLab.com only. Match the host exactly so a self-hosted
-        # instance whose hostname merely contains "gitlab.com" (e.g. "mygitlab.com") is not treated
-        # as GitLab.com. get_pr_owner_id returns the top-level group on gitlab.com.
-        host = (urlparse(self.gitlab_url).hostname or "").lower() if self.gitlab_url else ""
-        group = self.get_pr_owner_id()
-        if not group or host != "gitlab.com":
-            return ""
-        return get_cached_global_settings(
-            f"gitlab:{group}", lambda: self._fetch_global_repo_settings(group))
+    def _get_global_settings_cache_key(self, group: str) -> str:
+        return f"gitlab:{group}"
 
     def _fetch_global_repo_settings(self, group):
         try:

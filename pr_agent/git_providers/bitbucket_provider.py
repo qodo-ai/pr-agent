@@ -16,7 +16,7 @@ from ..algo.utils import add_pr_review_identity, comment_matches_identity, find_
 from ..config_loader import get_settings, get_verbosity_level
 from ..log import get_logger
 from .diff_parsing import to_hunk_only_patch
-from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, get_cached_global_settings, redact_credentials
+from .git_provider import MAX_FILES_ALLOWED_FULL, GitProvider, redact_credentials
 
 
 def _gef_filename(diff):
@@ -96,15 +96,8 @@ class BitbucketProvider(GitProvider):
             get_logger().warning(f"Failed to load local .pr_agent.toml file, error: {e}")
         return settings_files if settings_files else ""
 
-    def _get_global_repo_settings(self):
-        # Load a workspace-wide <workspace>/pr-agent-settings/.pr_agent.toml.
-        if not get_settings().config.use_global_settings_file:
-            return ""
-        workspace = self.get_pr_owner_id()
-        if not workspace or not getattr(self, "headers", None):
-            return ""
-        return get_cached_global_settings(
-            f"bitbucket:{workspace}", lambda: self._fetch_global_repo_settings(workspace))
+    def _get_global_settings_cache_key(self, workspace: str) -> str:
+        return f"bitbucket:{workspace}"
 
     def _fetch_global_repo_settings(self, workspace):
         # A missing settings repo/file (404) is an expected fallback -> return "" (cached). Other
@@ -593,6 +586,11 @@ class BitbucketProvider(GitProvider):
             return self.pr.destination_branch
 
     def get_pr_owner_id(self) -> str | None:
+        return self.workspace_slug
+
+    def get_owning_namespace(self) -> str | None:
+        if not getattr(self, "headers", None):
+            return None
         return self.workspace_slug
 
     def get_pr_description_full(self):

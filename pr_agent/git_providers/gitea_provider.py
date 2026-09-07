@@ -743,11 +743,16 @@ class GiteaProvider(GitProvider):
 
         return [label.name for label in labels]
 
-    def get_repo_settings(self) -> bytes:
-        """Get repository settings"""
+    def get_repo_settings(self):
+        """Get repository settings (org/global first, then repo-local)."""
+        settings_files = []
+        global_settings = self._get_global_repo_settings()
+        if global_settings:
+            settings_files.append(("global", global_settings))
+
         if not self.repo_settings:
             self.logger.error("Repository settings not found")
-            return b""
+            return settings_files if settings_files else ""
 
         response = self.repo_api.get_file_content(
             owner=self.owner,
@@ -757,13 +762,41 @@ class GiteaProvider(GitProvider):
         )
         if not response:
             self.logger.error("Failed to get repository settings")
-            return b""
+        else:
+            # utils.apply_repo_settings() writes this via os.write() and later
+            # calls .decode() on it, so it must be bytes to match the GitHub/
+            # GitLab/Bitbucket contract. get_file_content() decodes the raw bytes
+            # to str, so re-encode here (see issue #2347).
+            settings_files.append(("local", response.encode('utf-8')))
 
-        # utils.apply_repo_settings() writes this via os.write() and later
-        # calls .decode() on it, so it must be bytes to match the GitHub/
-        # GitLab/Bitbucket contract. get_file_content() decodes the raw bytes
-        # to str, so re-encode here (see issue #2347).
-        return response.encode('utf-8')
+        return settings_files if settings_files else ""
+
+    def get_owning_namespace(self) -> Optional[str]:
+        return getattr(self, "owner", None)
+
+    def _get_global_settings_cache_key(self, owner: str) -> str:
+        return f"gitea:{owner}"
+
+    def _fetch_global_repo_settings(self, owner):
+        # Owner-wide global settings live in an <owner>/pr-agent-settings repository.
+        # A missing settings repo/file (404) is an expected fallback -> return "" (cached).
+        try:
+            settings_repo = self.repo_api.repo_get(owner, "pr-agent-settings")
+            default_branch = getattr(settings_repo, "default_branch", None)
+            if not default_branch:
+                return ""
+            content = self.repo_api.get_file_content(
+                owner=owner,
+                repo="pr-agent-settings",
+                commit_sha=default_branch,
+                filepath=".pr_agent.toml",
+            )
+            return content.encode('utf-8')
+        except ApiException as e:
+            if getattr(e, "status", None) == 404:
+                return ""
+            raise
+
 
     def get_user_id(self) -> str:
         """Get the ID of the authenticated user"""

@@ -1397,6 +1397,73 @@ class TestBitbucketServerProvider:
         assert actual == expected
 
 
+class TestBitbucketServerGlobalSettings:
+    def _make_provider(self, get_content_side_effect):
+        provider = BitbucketServerProvider.__new__(BitbucketServerProvider)
+        provider.workspace_slug = "AAA"
+        provider.repo_slug = "my-repo"
+        provider.bitbucket_client = MagicMock(Bitbucket)
+        provider.bitbucket_client.get_content_of_file.side_effect = get_content_side_effect
+        return provider
+
+    @staticmethod
+    def _http_404():
+        error = HTTPError("404 Not Found")
+        response = MagicMock()
+        response.status_code = 404
+        error.response = response
+        return error
+
+    def test_get_repo_settings_merges_global_then_local(self):
+        global_content = b"[pr_reviewer]\nextra_instructions = \"global\"\n"
+        local_content = b"[pr_reviewer]\nextra_instructions = \"local\"\n"
+
+        def get_content(project_key, repository_slug, filename):
+            if repository_slug == "pr-agent-settings":
+                return global_content
+            return local_content
+
+        provider = self._make_provider(get_content)
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = True
+            result = provider.get_repo_settings()
+
+        assert result == [("global", global_content), ("local", local_content)]
+
+    def test_get_repo_settings_skips_missing_global_and_keeps_local(self):
+        def get_content(project_key, repository_slug, filename):
+            if repository_slug == "pr-agent-settings":
+                raise self._http_404()
+            return b"[pr_reviewer]\ntemperature = 0.2\n"
+
+        provider = self._make_provider(get_content)
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = True
+            result = provider.get_repo_settings()
+
+        assert result == [("local", b"[pr_reviewer]\ntemperature = 0.2\n")]
+
+    def test_get_repo_settings_empty_when_global_disabled_and_local_missing(self):
+        def raise_http_404(*args, **kwargs):
+            raise self._http_404()
+
+        provider = self._make_provider(raise_http_404)
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = False
+            result = provider.get_repo_settings()
+
+        assert result == ""
+
+    def test_global_settings_result_is_cached_per_workspace(self):
+        provider = self._make_provider(lambda *a, **k: b"[pr_reviewer]\nnum_max_findings = 5\n")
+        with patch("pr_agent.git_providers.git_provider.get_settings") as ms:
+            ms.return_value.config.use_global_settings_file = True
+            assert provider._get_global_repo_settings() == b"[pr_reviewer]\nnum_max_findings = 5\n"
+            assert provider._get_global_repo_settings() == b"[pr_reviewer]\nnum_max_findings = 5\n"  # cached
+
+        assert provider.bitbucket_client.get_content_of_file.call_count == 1
+
+
 @pytest.fixture(autouse=True)
 def _clear_global_settings_cache():
     from pr_agent.git_providers import git_provider as _gp
@@ -1420,7 +1487,7 @@ class TestBitbucketGlobalSettings:
         file_resp.text = "[pr_reviewer]\nnum_max_findings = 5\n"
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request",
                    side_effect=[repo_resp, file_resp]) as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             result = provider._get_global_repo_settings()
         assert result == b"[pr_reviewer]\nnum_max_findings = 5\n"
@@ -1433,7 +1500,7 @@ class TestBitbucketGlobalSettings:
         provider = self._provider()
         repo_resp = MagicMock(status_code=403)
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=repo_resp) as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             assert provider._get_global_repo_settings() == ""
             assert provider._get_global_repo_settings() == ""  # served from cache
@@ -1444,14 +1511,14 @@ class TestBitbucketGlobalSettings:
         repo_resp = MagicMock(status_code=404)
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request",
                    return_value=repo_resp), \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             assert provider._get_global_repo_settings() == ""
 
     def test_disabled_returns_empty(self):
         provider = self._provider()
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request") as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = False
             assert provider._get_global_repo_settings() == ""
         rq.assert_not_called()
@@ -1464,7 +1531,7 @@ class TestBitbucketGlobalSettings:
         file_resp.text = "[pr_reviewer]\nx = 1\n"
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request",
                    side_effect=[repo_resp, file_resp]) as rq, \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = True
             provider._get_global_repo_settings()
             provider._get_global_repo_settings()
@@ -1483,7 +1550,7 @@ class TestBitbucketLocalSettingsRobustness:
         resp = MagicMock(status_code=500)
         resp.text = "<html>internal error</html>"
         with patch("pr_agent.git_providers.bitbucket_provider.requests.request", return_value=resp), \
-             patch("pr_agent.git_providers.bitbucket_provider.get_settings") as ms:
+             patch("pr_agent.git_providers.git_provider.get_settings") as ms:
             ms.return_value.config.use_global_settings_file = False
             result = provider.get_repo_settings()
         assert result == ""

@@ -645,6 +645,10 @@ class AzureDevopsProvider(GitProvider):
         return latest
 
     def get_repo_settings(self):
+        settings_files = []
+        global_settings = self._get_global_repo_settings()
+        if global_settings:
+            settings_files.append(("global", global_settings))
         try:
             contents = self.azure_devops_client.get_item_content(
                 repository_id=self.repo_slug,
@@ -654,11 +658,46 @@ class AzureDevopsProvider(GitProvider):
                 include_content=True,
                 path=".pr_agent.toml",
             )
-            return b"".join(list(contents))
+            settings_files.append(("local", b"".join(list(contents))))
         except Exception as e:
             if get_verbosity_level() >= 2:
                 get_logger().error(f"Failed to get repo settings, error: {e}")
-            return ""
+        return settings_files if settings_files else ""
+
+    def get_owning_namespace(self) -> Optional[str]:
+        # In Azure DevOps the owning namespace is the organization, not the project
+        # (the org contains projects which contain repos). It is configured via
+        # azure_devops.org, which may be a bare org name or a full collection URL.
+        org = get_settings().azure_devops.get("org", None)
+        if not org:
+            return None
+        parsed = urlparse(org)
+        if parsed.scheme and parsed.netloc:
+            path_first = parsed.path.strip("/").split("/")[0]
+            return path_first if path_first else parsed.netloc.split(".")[0]
+        return str(org)
+
+    def _get_global_settings_cache_key(self, org: str) -> str:
+        return f"azure-devops:{org}"
+
+    def _fetch_global_repo_settings(self, org):
+        # Convention: the org-wide <org>/pr-agent-settings settings repository lives in the
+        # same project as the current repository (Azure DevOps orgs contain projects, not
+        # repos directly, so there is no repo addressable purely from the org name).
+        try:
+            contents = self.azure_devops_client.get_item_content(
+                repository_id="pr-agent-settings",
+                project=self.workspace_slug,
+                download=False,
+                include_content_metadata=False,
+                include_content=True,
+                path=".pr_agent.toml",
+            )
+            return b"".join(list(contents))
+        except Exception as e:
+            if _is_not_found_error(e):
+                return ""
+            raise
 
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         try:
