@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
+from pr_agent.git_providers.git_provider import IncrementalPR
 from pr_agent.git_providers.github_provider import GithubProvider
 
 
@@ -371,3 +372,39 @@ class TestGetDiffFilesRename:
         original_content_call = spy.call_args_list[-1]
         assert original_content_call.args[1] == "prev-sha"
         assert original_content_call.kwargs.get("path") == "old_dir/module.py"
+
+
+# ---------------------------------------------------------------------------
+# get_incremental_commits
+# ---------------------------------------------------------------------------
+class TestGetIncrementalCommits:
+    def test_default_incremental_is_fresh_instance_per_call(self):
+        p1 = _bare_provider()
+        p1.get_incremental_commits()
+
+        p2 = _bare_provider()
+        p2.get_incremental_commits()
+
+        assert isinstance(p1.incremental, IncrementalPR)
+        assert isinstance(p2.incremental, IncrementalPR)
+        assert p1.incremental is not p2.incremental
+        assert not p1.incremental.is_incremental
+        assert not p2.incremental.is_incremental
+
+    def test_explicit_incremental_passed_through(self):
+        p = _bare_provider()
+        custom_inc = IncrementalPR(False)
+        p.get_incremental_commits(custom_inc)
+        assert p.incremental is custom_inc
+
+    def test_mutating_one_incremental_does_not_leak_to_subsequent_default(self):
+        p1 = _bare_provider()
+        p1.get_incremental_commits()
+        p1.incremental.is_incremental = True
+        p1.incremental.commits_range = ["commit-1", "commit-2"]
+
+        p2 = _bare_provider()
+        p2.get_incremental_commits()
+        assert not p2.incremental.is_incremental
+        assert p2.incremental.commits_range is None
+
