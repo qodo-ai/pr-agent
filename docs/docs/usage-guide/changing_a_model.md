@@ -744,4 +744,4 @@ enabled, the run details show which model a routed pull request ended up on.
 
 !!! note "Azure deployments"
     An Azure deployment is tied to one model, so when `openai.deployment_id` is set each rule also needs its own
-    `deployment_id`. A rule without one is skipped with a warning and the configured primary model is used.
+    `deployment_id`. A rule without one is skipped with a warning and the next rule is tried.

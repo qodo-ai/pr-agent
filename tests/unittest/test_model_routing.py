@@ -147,7 +147,12 @@ class TestRouting:
 class TestAzureDeployments:
     def test_rule_without_a_deployment_is_skipped_when_a_deployment_is_configured(self, settings):
         settings.set("openai.deployment_id", "primary-deployment")
-        assert route_primary_model(ModelType.REGULAR, _pr(num_files=1, hunks_per_file=1)) is None
+        settings.set("model_routing.rules", [
+            {"max_hunks": 3, "model": "tiny-model"},
+            {"max_hunks": 3, "model": "small-model", "deployment_id": "small-deployment"},
+        ])
+        routed = route_primary_model(ModelType.REGULAR, _pr(num_files=1, hunks_per_file=1))
+        assert routed == ("small-model", "small-deployment")
 
     def test_rule_deployment_is_used_for_the_call_and_restored_after(self, settings):
         settings.set("openai.deployment_id", "primary-deployment")

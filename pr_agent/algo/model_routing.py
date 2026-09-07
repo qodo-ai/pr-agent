@@ -71,8 +71,8 @@ def route_primary_model(model_type: ModelType, git_provider) -> Optional[Tuple[s
         deployment_id = rule.get("deployment_id") or None
         if global_deployment_id and not deployment_id:
             get_logger().warning(f"Model routing rule for '{model}' has no deployment_id while "
-                                 f"openai.deployment_id is set, keeping the configured primary model")
-            return None
+                                 f"openai.deployment_id is set, skipping it")
+            continue
         get_logger().info(f"Model routing: {size}, using '{model}' as the primary model")
         return model, deployment_id
 
