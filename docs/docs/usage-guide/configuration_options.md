@@ -1,16 +1,15 @@
 The different tools and sub-tools used by PR-Agent are adjustable via a Git configuration file.
-There are four main ways to set persistent configurations:
+There are three main ways to set persistent configurations:
 
-1. [Wiki](./configuration_options.md#wiki-configuration-file) configuration page
-2. [Local](./configuration_options.md#local-configuration-file) configuration file
-3. [Global](./configuration_options.md#global-configuration-file) configuration file
-4. [External configuration URL](./configuration_options.md#external-configuration-url) (CLI flag)
+1. [Local](./configuration_options.md#local-configuration-file) configuration file
+2. [Global](./configuration_options.md#global-configuration-file) configuration file
+3. [External configuration URL](./configuration_options.md#external-configuration-url) (CLI flag)
 
-In terms of precedence, wiki configurations will override local configurations, local configurations will override global configurations, and global configurations will override an external configuration URL.
+In terms of precedence, local configurations will override global configurations, and global configurations will override an external configuration URL.
 
 
 For a list of all possible configurations, see the [configuration options](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/configuration.toml) page.
-In addition to general configuration options, each tool has its own configurations. For example, the `review` tool will use parameters from the [pr_reviewer](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/configuration.toml#L76) section in the configuration file.
+In addition to general configuration options, each tool has its own configurations. For example, the `review` tool will use parameters from the [pr_reviewer](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/settings/configuration.toml) section in the configuration file.
 
 !!! tip "Tip1: Edit only what you need"
     Your configuration file should be minimal, and edit only the relevant values. Don't copy the entire configuration options, since it can lead to legacy problems when something changes.
@@ -18,25 +17,6 @@ In addition to general configuration options, each tool has its own configuratio
     If you set `config.output_relevant_configurations` to True, each tool will also output in a collapsible section its relevant configurations. This can be useful for debugging, or getting to know the configurations better.
 
 
-
-## Wiki configuration file
-
-`Platforms supported: GitHub, GitLab, Bitbucket`
-
-With PR-Agent, you can set configurations by creating a page called `.pr_agent.toml` in the [wiki](https://github.com/the-pr-agent/pr-agent/wiki/pr_agent.toml) of the repo.
-The advantage of this method is that it allows to set configurations without needing to commit new content to the repo - just edit the wiki page and **save**.
-
-![wiki_configuration](https://codium.ai/images/pr_agent/wiki_configuration.png){width=512}
-
-Click [here](https://codium.ai/images/pr_agent/wiki_configuration_pr_agent.mp4) to see a short instructional video. We recommend surrounding the configuration content with triple-quotes (or \`\`\`toml), to allow better presentation when displayed in the wiki as markdown.
-An example content:
-
-```toml
-[pr_description]
-generate_ai_title=true
-```
-
-PR-Agent will know to remove the surrounding quotes when reading the configuration content.
 
 ## Local configuration file
 
@@ -86,8 +66,25 @@ If `.pr_agent.toml` cannot be loaded from the requested branch (e.g. the branch 
 
 `Platforms supported: GitHub, GitLab (cloud), Bitbucket (cloud)`
 
-If you create a repo called `pr-agent-settings` in your **organization**, its configuration file `.pr_agent.toml` will be used as a global configuration file for any other repo that belongs to the same organization.
-Parameters from a local `.pr_agent.toml` file, in a specific repo, will override the global configuration parameters.
+Create a repository named `pr-agent-settings` at the organization level; its `.pr_agent.toml` (read from that repo's default branch) is used as a global configuration for every repository under the same organization:
+
+- **GitHub:** `<organization>/pr-agent-settings`
+- **GitLab (cloud):** `<top-level-group>/pr-agent-settings` (GitLab.com only; not applied on self-hosted GitLab)
+- **Bitbucket (cloud):** `<workspace>/pr-agent-settings`
+
+Parameters from a local `.pr_agent.toml` file, in a specific repo, will override the global configuration parameters (the global file is merged *beneath* the repo-local one).
+For GitHub Enterprise Server, use the same organization-level repository on your GHES host.
+The app installation or token used by PR-Agent must have read access to both the pull request repository and the `pr-agent-settings` repository; otherwise, PR-Agent will skip the global configuration and continue with repository-local settings.
+
+!!! note "Caching"
+    In long-running deployments (the GitHub App / webhook server), the fetched global settings are cached **in-process** for up to 15 minutes to avoid re-fetching on every webhook event, so a change to `pr-agent-settings` may take up to that long to take effect there. CLI and CI (GitHub Action) runs are short-lived processes, so they fetch the global settings once per invocation and always see the latest version.
+
+Loading the global settings file is controlled by the `use_global_settings_file` flag, which is **enabled by default**. To opt out and rely only on each repo's local `.pr_agent.toml`, set:
+
+```toml
+[config]
+use_global_settings_file = false
+```
 
 For example, in the GitHub organization `qodo-ai`:
 
@@ -99,7 +96,7 @@ For example, in the GitHub organization `qodo-ai`:
 
 `Platforms supported: GitLab, Bitbucket Data Center`
 
-Create a repository named `pr-agent-settings` within a specific project (Bitbucket) or a group/subgroup (Gitlab). 
+Create a repository named `pr-agent-settings` within a specific project (Bitbucket) or a group/subgroup (Gitlab).
 The configuration file in this repository will apply to all repositories directly under the same project/group/subgroup.
 
 !!! note "Note"
@@ -175,8 +172,7 @@ built-in defaults
   < --extra_config_url
     < global pr-agent-settings
       < local .pr_agent.toml (repo default branch)
-        < wiki .pr_agent.toml
-          < environment variables (PR_AGENT__SECTION__KEY)
+        < environment variables (PR_AGENT__SECTION__KEY)
 ```
 
 This means an external URL acts as an organization-wide *default* that any team can still override with their own `pr-agent-settings` or repo-local `.pr_agent.toml`.

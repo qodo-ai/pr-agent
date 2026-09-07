@@ -30,6 +30,7 @@ from pr_agent.algo.utils import (
     process_can_be_split,
     ticket_markdown_logic,
 )
+from pr_agent.config_loader import get_settings
 from pr_agent.tools.pr_description import insert_br_after_x_chars
 from pr_agent.tools.ticket_pr_compliance_check import (
     extract_ticket_links_from_pr_description,
@@ -381,9 +382,31 @@ class TestTicketMarkdownLogic:
         # All tickets verified ⇒ green check.
         assert "Ticket compliance analysis ✅" in out
 
+    @pytest.mark.parametrize("gfm_supported", [True, False])
+    def test_human_verification_only_ticket_is_rendered(self, gfm_supported):
+        tickets = [
+            self._ticket(
+                requires_further_human_verification="- verify UI behavior\n",
+            )
+        ]
+
+        out = ticket_markdown_logic("🎫", "", tickets, gfm_supported)
+
+        assert "[42](https://example.com/ticket/42)" in out, (
+            "human-verification-only ticket should be rendered"
+        )
+        assert "[42](https://example.com/ticket/42) - PR Code Verified" in out
+        assert "Requires further human verification:" in out
+        assert "- verify UI behavior" in out
+        assert "Ticket compliance analysis ✅" in out
+        compliance_level = get_settings().get(
+            "config.extra_statistics.compliance_level"
+        )
+        assert compliance_level == "PR Code Verified"
+
     def test_ticket_with_no_requirements_renders_header_only(self):
-        # Tickets that have neither compliant nor non-compliant requirements
-        # are skipped in the per-ticket loop, but the gfm branch still
+        # Tickets with no classified requirements are skipped in the
+        # per-ticket loop, but the gfm branch still
         # emits an (empty-body) header row. This documents that current
         # behavior — no compliance level or per-ticket detail is shown.
         tickets = [self._ticket()]
@@ -665,9 +688,18 @@ class TestExtractTicketLinksFromPRDescription:
         assert out == []
 
     def test_hash_only_rejects_long_numbers(self):
-        desc = "Fixes #12345 (5 digits, looks like a code, not an issue)"
+        # The bound now matches BRANCH_ISSUE_PATTERN, which accepts up to six digits, so a
+        # number is only rejected once it is too long to be an issue in any repository.
+        desc = "Fixes #1234567 (7 digits, looks like a code, not an issue)"
         out = extract_ticket_links_from_pr_description(desc, "foo/bar")
         assert out == []
+
+    def test_hash_only_accepts_a_six_digit_issue(self):
+        # 123456-fix as a branch name already resolves; the same number in the description
+        # must resolve too.
+        desc = "Fixes #123456"
+        out = extract_ticket_links_from_pr_description(desc, "foo/bar")
+        assert out == ["https://github.com/foo/bar/issues/123456"]
 
     def test_results_capped_at_three(self):
         desc = " ".join(f"foo/bar#{i}" for i in range(1, 8))

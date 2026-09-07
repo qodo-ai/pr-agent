@@ -7,6 +7,12 @@
 
 * [Installation](installation/index.md)
 * [PR-Agent](installation/pr_agent.md)
+* [Locally](installation/locally.md)
+* [GitHub Integration](installation/github.md)
+* [GitLab Integration](installation/gitlab.md)
+* [BitBucket Integration](installation/bitbucket.md)
+* [Azure DevOps Integration](installation/azure.md)
+* [Gitea Integration](installation/gitea.md)
 
 ## Usage Guide
 
@@ -16,7 +22,10 @@
 * [Usage and Automation](usage-guide/automations_and_usage.md)
 * [Managing Mail Notifications](usage-guide/mail_notifications.md)
 * [Changing a Model](usage-guide/changing_a_model.md)
+* [Extending PR-Agent](usage-guide/extending_pr_agent.md)
 * [Additional Configurations](usage-guide/additional_configurations.md)
+* [Plain-Diff Mode](usage-guide/plain_diff_mode.md)
+* [Local Git Provider](usage-guide/local_git_provider.md)
 * [Frequently Asked Questions](faq/index.md)
 
 ## Tools
@@ -36,10 +45,9 @@
 ## Core Abilities
 
 * [Core Abilities](core-abilities/index.md)
-* [Chat on code suggestions](core-abilities/interactivity.md)
+* [Agent skills](core-abilities/agent_skills.md)
 * [Compression strategy](core-abilities/compression_strategy.md)
 * [Dynamic context](core-abilities/dynamic_context.md)
 * [Fetching ticket context](core-abilities/fetching_ticket_context.md)
-* [Interactivity](core-abilities/interactivity.md)
 * [Local and global metadata](core-abilities/metadata.md)
 * [Self-reflection](core-abilities/self_reflection.md)

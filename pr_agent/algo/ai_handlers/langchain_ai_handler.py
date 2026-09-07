@@ -2,18 +2,18 @@ _LANGCHAIN_INSTALLED = False
 
 try:
     from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.runnables import Runnable
     from langchain_openai import AzureChatOpenAI, ChatOpenAI
     _LANGCHAIN_INSTALLED = True
 except:  # we don't enforce langchain as a dependency, so if it's not installed, just move on
     pass
 
-import functools
 
 import openai
 from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt
-from langchain_core.runnables import Runnable
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
+from pr_agent.algo.run_details import record_ai_call
 from pr_agent.config_loader import get_settings
 from pr_agent.log import get_logger
 
@@ -26,7 +26,7 @@ class LangChainOpenAIHandler(BaseAiHandler):
             error_msg = "LangChain is not installed. Please install it with `pip install langchain`."
             get_logger().error(error_msg)
             raise ImportError(error_msg)
-        
+
         super().__init__()
         self.azure = get_settings().get("OPENAI.API_TYPE", "").lower() == "azure"
 
@@ -54,12 +54,12 @@ class LangChainOpenAIHandler(BaseAiHandler):
                     return ChatOpenAI(openai_api_key=get_settings().openai.key)
                 else:
                     return ChatOpenAI(
-                        openai_api_key=get_settings().openai.key, 
+                        openai_api_key=get_settings().openai.key,
                         openai_api_base=openai_api_base
                     )
         except AttributeError as e:
             # Handle configuration errors
-            error_msg = f"OpenAI {e.name} is required" if getattr(e, "name") else str(e)
+            error_msg = f"OpenAI {e.name} is required" if e.name else str(e)
             get_logger().error(error_msg)
             raise ValueError(error_msg) from e
 
@@ -67,13 +67,15 @@ class LangChainOpenAIHandler(BaseAiHandler):
         retry=retry_if_exception_type(openai.APIError) & retry_if_not_exception_type(openai.RateLimitError),
         stop=stop_after_attempt(OPENAI_RETRIES),
     )
-    async def chat_completion(self, model: str, system: str, user: str, temperature: float = 0.2, img_path: str = None):
+    async def chat_completion(
+            self, model: str, system: str, user: str, temperature: float = 0.2, img_path: str|None = None):
         if img_path:
-            get_logger().warning(f"Image path is not supported for LangChainOpenAIHandler. Ignoring image path: {img_path}")
+            get_logger().warning(
+                f"Image path is not supported for LangChainOpenAIHandler. Ignoring image path: {img_path}")
         try:
             messages = [SystemMessage(content=system), HumanMessage(content=user)]
             llm = await self._create_chat_async(deployment_id=self.deployment_id)
-            
+
             if not isinstance(llm, Runnable):
                 error_message = (
                     f"The Langchain LLM object ({type(llm)}) does not implement the Runnable interface. "
@@ -98,6 +100,13 @@ class LangChainOpenAIHandler(BaseAiHandler):
                 resp = await llm.ainvoke(input=messages)
 
             finish_reason = "completed"
+            # Count the call but not its tokens. Langchain reports usage under key names of its
+            # own (input_tokens/output_tokens) rather than the ones the collector reads, so
+            # forwarding it unmapped would render zeros. Mapping them is not worth it while this
+            # path stays cold: langchain is an optional extra (not installed by default) and no setting
+            # selects this handler, so it is reachable only by injecting it into a tool
+            # programmatically.
+            record_ai_call()
             return resp.content, finish_reason
 
         except openai.RateLimitError as e:
