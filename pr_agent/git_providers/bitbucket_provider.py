@@ -124,10 +124,13 @@ class BitbucketProvider(GitProvider):
         file_resp.raise_for_status()
         return file_resp.text.encode('utf-8')
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        return self.get_repo_default_branch() if from_default_branch else self.pr.destination_branch
+
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         # Read from the PR destination (target) branch, matching the other providers,
         # or from the repository default branch when from_default_branch is requested.
-        branch = self.get_repo_default_branch() if from_default_branch else self.pr.destination_branch
+        branch = self.get_repo_context_ref(from_default_branch)
         return self.get_pr_file_content(file_path, branch, propagate_errors=True)
 
     def get_git_repo_url(self, pr_url: str=None) -> str: #bitbucket does not support issue url, so ignore param

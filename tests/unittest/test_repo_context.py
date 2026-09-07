@@ -18,11 +18,17 @@ from pr_agent.git_providers.github_provider import GithubProvider
 
 
 class FakeProvider:
-    def __init__(self, files, pr_url=None):
+    def __init__(self, files, pr_url=None, repo_context_ref=None):
         self.files = files
         self.pr_url = pr_url
+        self.repo_context_ref = repo_context_ref
         self.requested_paths = []
         self.from_default_branch_calls = []
+
+    def get_repo_context_ref(self, from_default_branch: bool = False):
+        if self.repo_context_ref is not None:
+            return self.repo_context_ref
+        return "default" if from_default_branch else "target"
 
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         self.requested_paths.append(file_path)
@@ -183,6 +189,25 @@ def test_build_repo_context_reuses_process_cache_for_same_pr_url(repo_context_se
     assert "Changed repo purpose" not in second_context
     assert first_provider.requested_paths == ["AGENTS.md"]
     assert second_provider.requested_paths == []
+
+
+def test_build_repo_context_invalidates_cache_when_revision_changes(repo_context_settings):
+    repo_context_settings.set("CONFIG.REPO_CONTEXT_FILES", ["AGENTS.md"])
+    repo_context_settings.set("CONFIG.REPO_CONTEXT_MAX_LINES", 500)
+    provider = FakeProvider(
+        {"AGENTS.md": "Rules at base A"},
+        pr_url="https://example.com/org/repo/pull/1",
+        repo_context_ref="base-a",
+    )
+
+    first_context = build_repo_context(provider)
+    provider.files["AGENTS.md"] = "Rules at base B"
+    provider.repo_context_ref = "base-b"
+    second_context = build_repo_context(provider)
+
+    assert "Rules at base A" in first_context
+    assert "Rules at base B" in second_context
+    assert provider.requested_paths == ["AGENTS.md", "AGENTS.md"]
 
 
 def test_build_repo_context_process_cache_separates_default_and_target_branch(repo_context_settings):

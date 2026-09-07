@@ -883,6 +883,11 @@ class GiteaProvider(GitProvider):
         clone_url += f"{gitea_token}@{base_url}{repo_full_name}"
         return clone_url
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        if from_default_branch:
+            return self.repo_api.repo_get(self.owner, self.repo).default_branch
+        return self.base_sha or self.base_ref
+
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False) -> str:
         """Get content of a file from the PR target (base) branch.
 
@@ -896,11 +901,8 @@ class GiteaProvider(GitProvider):
                 self.logger.warning("Cannot get repo file content: owner or repo not set")
                 return ""
 
-            if from_default_branch:
-                ref = self.repo_api.repo_get(self.owner, self.repo).default_branch
-            else:
-                # Only trust the PR target (base) ref — never fall back to the PR head (self.sha).
-                ref = self.base_sha or self.base_ref
+            # Only trust the PR target (base) ref — never fall back to the PR head (self.sha).
+            ref = self.get_repo_context_ref(from_default_branch)
             if not ref:
                 self.logger.warning("Cannot get repo file content: no target/base ref available")
                 return ""

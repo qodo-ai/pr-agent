@@ -1477,16 +1477,20 @@ class GitLabProvider(GitProvider):
             return ""
         # Transient/unexpected errors propagate so the caller does not cache the failure.
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        if not from_default_branch:
+            target_branch = getattr(self.mr, "target_branch", None)
+            if target_branch:
+                return target_branch
+        return self.gl.projects.get(self.id_project).default_branch
+
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         try:
             project = self.gl.projects.get(self.id_project)
             # Read from the MR target branch (the branch being merged into), matching the other
             # providers; fall back to the project default branch outside of an MR context, or
             # always when from_default_branch is requested.
-            if from_default_branch:
-                ref = project.default_branch
-            else:
-                ref = getattr(self.mr, "target_branch", None) or project.default_branch
+            ref = self.get_repo_context_ref(from_default_branch)
             contents = project.files.get(file_path=file_path, ref=ref).decode()
             return decode_if_bytes(contents)
         except GitlabGetError as e:

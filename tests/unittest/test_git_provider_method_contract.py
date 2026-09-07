@@ -219,6 +219,17 @@ METHOD_CONTRACTS = (
         check_return_annotation=False,
         check_execution=False,
     ),
+    MethodContract(
+        name="get_repo_context_ref",
+        args=(),
+        noop_value=None,
+        check_supported=lambda value: isinstance(value, str),
+        tiers=_tiers(
+            supported=("github", "gitlab", "gitea", "azure-devops", "bitbucket", "bitbucket-server")
+        ),
+        # Signature and return-type contract; provider behavior is covered by repo-context tests.
+        check_execution=False,
+    ),
 )
 
 

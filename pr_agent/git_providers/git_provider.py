@@ -419,6 +419,9 @@ class GitProvider(ABC):
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         return ""
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        return None
+
     def get_workspace_name(self):
         return ""
 
