@@ -350,6 +350,7 @@ not a valid hunk
     def test_persistent_review_update_does_not_duplicate_when_status_message_fails(self):
         provider = BitbucketProvider.__new__(BitbucketProvider)
         provider.pr = MagicMock()
+        provider.max_comment_length = 32768
         provider.get_latest_commit_url = MagicMock(return_value="https://bitbucket.org/c/abc")
         provider.get_comment_url = MagicMock(return_value="https://bitbucket.org/n/1")
 
@@ -365,14 +366,13 @@ not a valid hunk
 
         provider.publish_comment = MagicMock(side_effect=publish_comment)
 
-        with patch("pr_agent.git_providers.bitbucket_provider.get_logger") as mock_get_logger:
+        with patch("pr_agent.git_providers.git_provider.get_logger") as mock_get_logger:
             provider.publish_persistent_comment(f"{header}\n\nnew review",
                                                 initial_header=header,
                                                 update_header=True,
                                                 final_update_message=True)
 
-        existing.put.assert_called_once()
-        existing._update_data.assert_called_once()
+        existing.update.assert_called_once()
         provider.publish_comment.assert_called_once()
         assert "updated to latest commit" in provider.publish_comment.call_args.args[0]
         mock_get_logger.return_value.opt.assert_called_once_with(exception=True)
@@ -382,6 +382,7 @@ not a valid hunk
     def test_persistent_review_update_falls_back_when_edit_fails(self):
         provider = BitbucketProvider.__new__(BitbucketProvider)
         provider.pr = MagicMock()
+        provider.max_comment_length = 32768
         provider.get_latest_commit_url = MagicMock(return_value="https://bitbucket.org/c/abc")
         provider.get_comment_url = MagicMock(return_value="https://bitbucket.org/n/1")
 
@@ -389,7 +390,7 @@ not a valid hunk
         new_review = f"{header}\n\nnew review"
         existing = MagicMock()
         existing.raw = f"{header}\n\nprevious review"
-        existing.put.side_effect = Exception("edit failed")
+        existing.update.side_effect = Exception("edit failed")
         provider.pr.comments.return_value = [existing]
         provider.publish_comment = MagicMock()
 
@@ -398,16 +399,20 @@ not a valid hunk
                                             update_header=True,
                                             final_update_message=True)
 
-        existing.put.assert_called_once()
-        existing._update_data.assert_not_called()
+        existing.update.assert_called_once()
         provider.publish_comment.assert_called_once_with(new_review)
 
     def _make_persistent_provider(self, comments):
         provider = BitbucketProvider.__new__(BitbucketProvider)
         provider.pr = MagicMock()
         provider.pr.comments.return_value = comments
-        provider.get_latest_commit_url = MagicMock(return_value="https://bitbucket.org/commit/abc")
-        provider.get_comment_url = MagicMock(return_value="https://bitbucket.org/comment/1")
+        provider.max_comment_length = 32768
+        provider.get_latest_commit_url = MagicMock(
+            return_value="https://bitbucket.org/commit/abc"
+        )
+        provider.get_comment_url = MagicMock(
+            return_value="https://bitbucket.org/comment/1"
+        )
         provider.publish_comment = MagicMock()
         return provider
 
@@ -425,8 +430,8 @@ not a valid hunk
             legacy_initial_header=f"{PRReviewHeader.REGULAR.value} 🔍",
         )
 
-        legacy.put.assert_called_once()
-        updated_body = legacy.put.call_args.kwargs["data"]["content"]["raw"]
+        legacy.update.assert_called_once()
+        updated_body = legacy.update.call_args.kwargs["body"]
         assert updated_body.startswith("## Guideline Compliance Check 🔍\n\n")
         assert PRReviewIdentity.REGULAR.value in updated_body
         provider.publish_comment.assert_not_called()
@@ -450,8 +455,8 @@ not a valid hunk
             legacy_initial_header=f"{PRReviewHeader.REGULAR.value} 🔍",
         )
 
-        marked.put.assert_called_once()
-        legacy.put.assert_not_called()
+        marked.update.assert_called_once()
+        legacy.update.assert_not_called()
 
     def test_persistent_review_does_not_match_quoted_identity(self):
         unrelated = MagicMock()
@@ -476,7 +481,7 @@ not a valid hunk
         provider.publish_comment.assert_called_once()
         assert PRReviewIdentity.REGULAR.value in provider.publish_comment.call_args.args[0]
 
-    def test_nonreview_persistent_comment_keeps_existing_bitbucket_matching(self):
+    def test_nonreview_persistent_comment_requires_header_at_start(self):
         existing = MagicMock()
         existing.raw = "Configuration prefix\n## PR-Agent Configuration\nbody"
         provider = self._make_persistent_provider([existing])
@@ -488,8 +493,10 @@ not a valid hunk
             final_update_message=False,
         )
 
-        existing.put.assert_called_once()
-        provider.publish_comment.assert_not_called()
+        existing.update.assert_not_called()
+        provider.publish_comment.assert_called_once_with(
+            "## PR-Agent Configuration\nnew body"
+        )
 
     def test_publish_inline_comment_maps_payload_correctly(self):
         provider = self._provider_for_code_suggestions()
@@ -629,6 +636,20 @@ not a valid hunk
         assert result is True
         request.assert_not_called()
 
+
+    def test_get_issue_comments_normalizes_cloud_comments(self):
+        provider = BitbucketProvider.__new__(BitbucketProvider)
+        provider.pr = MagicMock()
+
+        comment = MagicMock()
+        comment.raw = "## PR Review\n\nreview body"
+        provider.pr.comments.return_value = [comment]
+
+        comments = provider.get_issue_comments()
+
+        assert len(comments) == 1
+        assert comments[0].body == "## PR Review\n\nreview body"
+        assert comments[0]._cloud_comment is comment
 
 class TestBitbucketServerProvider:
     @staticmethod

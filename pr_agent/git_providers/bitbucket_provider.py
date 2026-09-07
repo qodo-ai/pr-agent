@@ -1,6 +1,7 @@
 import difflib
 import json
 import re
+from types import SimpleNamespace
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
@@ -12,7 +13,7 @@ from pr_agent.algo.types import EDIT_TYPE, FilePatchInfo
 
 from ..algo.file_filter import filter_ignored
 from ..algo.language_handler import is_valid_file
-from ..algo.utils import add_pr_review_identity, comment_matches_identity, find_line_number_of_relevant_line_in_file
+from ..algo.utils import find_line_number_of_relevant_line_in_file
 from ..config_loader import get_settings, get_verbosity_level
 from ..log import get_logger
 from .diff_parsing import to_hunk_only_patch
@@ -222,8 +223,8 @@ class BitbucketProvider(GitProvider):
         pass
 
     def is_supported(self, capability: str) -> bool:
-        if capability in ['get_issue_comments', 'publish_inline_comments', 'get_labels', 'gfm_markdown',
-                            'publish_file_comments']:
+        if capability in ['publish_inline_comments', 'get_labels',
+                  'gfm_markdown', 'publish_file_comments']:
             return False
         if capability == "push_code" and get_settings().config.restricted_mode:
             return False
@@ -369,71 +370,45 @@ class BitbucketProvider(GitProvider):
     def get_latest_commit_url(self):
         return self.pr.data['source']['commit']['links']['html']['href']
 
-    def get_comment_url(self, comment):
-        return comment.data['links']['html']['href']
+    def _get_cloud_comment(self, comment):
+        if isinstance(comment, SimpleNamespace):
+            return comment._cloud_comment
+        return comment
 
-    def publish_persistent_comment(self, pr_comment: str,
-                                   initial_header: str,
-                                   update_header: bool = True,
-                                   name='review',
-                                   final_update_message=True,
-                                   identity_marker: str | None = None,
-                                   legacy_initial_header: str | None = None):
+    def supports_review_comment_identity(self) -> bool:
+        return True
+
+    def edit_comment(self, comment, body: str):
         try:
-            pr_comment = add_pr_review_identity(pr_comment, identity_marker)
-            comments = list(self.pr.comments())
-            if identity_marker:
-                comment_to_update = next(
-                    (
-                        comment
-                        for comment in comments
-                        if comment_matches_identity(comment.raw, identity_marker)
-                    ),
-                    None,
-                )
-                if comment_to_update is None and legacy_initial_header:
-                    comment_to_update = next(
-                        (
-                            comment
-                            for comment in comments
-                            if comment_matches_identity(comment.raw, legacy_initial_header)
-                        ),
-                        None,
-                    )
-            else:
-                # Preserve Bitbucket's existing behavior for non-review persistent comments.
-                comment_to_update = next(
-                    (comment for comment in comments if initial_header in comment.raw),
-                    None,
-                )
-            if comment_to_update is not None:
-                comment = comment_to_update
-                latest_commit_url = self.get_latest_commit_url()
-                comment_url = self.get_comment_url(comment)
-                if update_header:
-                    update_message = f"#### ({name.capitalize()} updated until commit {latest_commit_url})\n"
-                    update_anchor = identity_marker or initial_header
-                    updated_anchor = f"{update_anchor}\n\n{update_message}"
-                    pr_comment_updated = pr_comment.replace(update_anchor, updated_anchor, 1)
-                else:
-                    pr_comment_updated = pr_comment
-                get_logger().info(f"Persistent mode - updating comment {comment_url} to latest {name} message")
-                d = {"content": {"raw": pr_comment_updated}}
-                comment._update_data(comment.put(None, data=d))
-                if final_update_message:
-                    try:
-                        self.publish_comment(
-                            f"**[Persistent {name}]({comment_url})** updated to latest commit {latest_commit_url}")
-                    except Exception:
-                        # The review was already updated in place; a notification failure must not reach
-                        # the outer except, whose fallback publish would duplicate the review.
-                        get_logger().opt(exception=True).warning(
-                            "Failed to publish persistent review update message; review was already updated")
-                return
+            comment = self._get_cloud_comment(comment)
+            body = self.limit_output_characters(body, self.max_comment_length)
+            comment.update(body=body)
+            return True
         except Exception as e:
-            get_logger().exception(f"Failed to update persistent review, error: {e}")
-            pass
-        self.publish_comment(pr_comment)
+            get_logger().exception(f"Failed to update comment, error: {e}")
+            return False
+
+    def publish_persistent_comment(
+        self,
+        pr_comment: str,
+        initial_header: str,
+        update_header: bool = True,
+        name='review',
+        final_update_message=True,
+        as_thread: bool = False,
+        identity_marker: str | None = None,
+        legacy_initial_header: str | None = None,
+    ):
+        return self.publish_persistent_comment_full(
+            pr_comment,
+            initial_header,
+            update_header,
+            name,
+            final_update_message,
+            as_thread=as_thread,
+            identity_marker=identity_marker,
+            legacy_initial_header=legacy_initial_header,
+        )
 
     def publish_comment(self, pr_comment: str, is_temporary: bool = False):
         if is_temporary and not get_settings().config.publish_output_progress:
@@ -444,14 +419,6 @@ class BitbucketProvider(GitProvider):
         if is_temporary:
             self.temp_comments.append(comment["id"])
         return comment
-
-    def edit_comment(self, comment, body: str):
-        try:
-            body = self.limit_output_characters(body, self.max_comment_length)
-            comment.update(body)
-        except Exception as e:
-            get_logger().exception(f"Failed to update comment, error: {e}")
-            return False
 
     def remove_initial_comment(self):
         try:
@@ -600,12 +567,21 @@ class BitbucketProvider(GitProvider):
         return 0
 
     def get_issue_comments(self):
-        raise NotImplementedError(
-            "Bitbucket provider does not support issue comments yet"
-        )
+        comments = []
 
-    def add_eyes_reaction(self, issue_comment_id: int, disable_eyes: bool = False) -> Optional[int]:
-        return None
+        for comment in self.pr.comments():
+            raw_body = getattr(comment, "raw", None)
+            if not isinstance(raw_body, str):
+                continue
+
+            comments.append(
+                SimpleNamespace(
+                    body=raw_body,
+                    _cloud_comment=comment,
+                )
+            )
+
+        return comments
 
     def remove_reaction(self, issue_comment_id: int, reaction_id: int) -> bool:
         return True
