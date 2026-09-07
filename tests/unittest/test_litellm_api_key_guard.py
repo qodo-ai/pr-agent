@@ -1801,6 +1801,74 @@ def test_noncallable_model_info_helper_does_not_silently_choose_transport(monkey
         litellm_handler._uses_openai_responses_transport("gpt-4o", "openai")
 
 
+def test_provider_environment_tables_cover_known_or_legacy_transports():
+    # LiteLLM retains explicit transports for these providers outside provider_list.
+    legacy_transports = {"aleph_alpha", "anyscale"}
+    known_providers = set(litellm.provider_list) | set(litellm_handler.JSONProviderRegistry.list_providers())
+    for table in (litellm_handler.PROVIDER_API_KEY_ENV_VARS, litellm_handler.PROVIDER_API_BASE_ENV_VARS):
+        assert set(table) <= known_providers | legacy_transports
+
+
+@pytest.mark.parametrize("provider", ("aleph_alpha", "anyscale"))
+@pytest.mark.parametrize("initial_key", (None, "handler-key"))
+@pytest.mark.asyncio
+async def test_legacy_provider_transport_uses_request_local_credentials(monkeypatch, provider, initial_key):
+    from litellm.litellm_core_utils import logging_worker
+
+    worker = logging_worker.LoggingWorker()
+    atexit.unregister(worker._flush_on_exit)
+    monkeypatch.setattr(logging_worker, "GLOBAL_LOGGING_WORKER", worker)
+    monkeypatch.setattr(openai, "organization", None)
+    settings = _make_settings()
+    settings.litellm.custom_llm_provider = provider
+    monkeypatch.setattr(litellm_handler, "get_settings", lambda: settings)
+    key_variable = "ALEPH_ALPHA_API_KEY" if provider == "aleph_alpha" else "ANYSCALE_API_KEY"
+    base_variable = "ALEPH_ALPHA_API_BASE" if provider == "aleph_alpha" else "ANYSCALE_API_BASE"
+    api_base = "https://handler.example/v1"
+    monkeypatch.setenv(base_variable, api_base)
+    if initial_key:
+        monkeypatch.setenv(key_variable, initial_key)
+    handler = LiteLLMAIHandler()
+    monkeypatch.setenv(key_variable, "another-handler-key")
+    monkeypatch.setenv(base_variable, "https://another-handler.example/v1")
+    monkeypatch.setattr(litellm, "api_key", "another-global-key")
+    monkeypatch.setattr(litellm, "aleph_alpha_key", "another-aleph-key")
+    captured = []
+
+    def respond(request):
+        captured.append(request)
+        if provider == "aleph_alpha":
+            payload = {"completions": [{"completion": "ok", "finish_reason": "stop"}]}
+        else:
+            payload = {"choices": [{"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}]}
+        return httpx.Response(200, request=request, json=payload)
+
+    def post(url, *, headers, data, stream):
+        return respond(httpx.Request("POST", url, headers=headers, content=data))
+
+    async def send(client, request, **kwargs):
+        return respond(request)
+
+    # Keep PR-Agent and LiteLLM dispatch/authentication real; intercept only HTTP.
+    monkeypatch.setattr(litellm.module_level_client, "post", post)
+    monkeypatch.setattr(httpx.AsyncClient, "send", send)
+    try:
+        content, finish_reason = await handler.chat_completion(model="model", system="sys", user="usr")
+    finally:
+        try:
+            # LiteLLM schedules the task that enqueues logging after completion.
+            await asyncio.sleep(0)
+            await worker.flush()
+        finally:
+            await worker.stop()
+
+    assert (content, finish_reason) == ("ok", "stop")
+    assert len(captured) == 1
+    expected_url = api_base if provider == "aleph_alpha" else f"{api_base}/chat/completions"
+    assert str(captured[0].url) == expected_url
+    assert captured[0].headers["authorization"] == f"Bearer {initial_key or DUMMY_LITELLM_API_KEY}"
+
+
 @pytest.mark.parametrize("entrypoint", ("chat", "probe"))
 @pytest.mark.parametrize("extra_headers", (None, {"X-Request": "handler-value"}))
 @pytest.mark.asyncio
