@@ -122,6 +122,8 @@ class TestGithubAppAuth:
             assert is_bot_user("dependabot[bot]", "Bot") is False
         finally:
             if original_github is not None:
+                settings.unset("GITHUB", force=True)
                 settings.set("GITHUB", original_github)
             if original_github_app is not None:
+                settings.unset("GITHUB_APP", force=True)
                 settings.set("GITHUB_APP", original_github_app)
