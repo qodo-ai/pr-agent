@@ -705,16 +705,48 @@ async def test_gitlab_manual_feedback_on_draft_is_unaffected(gitlab_webhook_modu
     assert agent.commands == ["/review"]
 
 
-def test_gitlab_handle_ask_line_converts_new_line_diff_note_to_right_side_command(gitlab_webhook_module):
+@pytest.mark.parametrize(
+    "line_range, expected_start, expected_end, expected_side",
+    [
+        (
+            {
+                "start": {"type": "new", "new_line": 10, "old_line": 9},
+                "end": {"type": "new", "new_line": 12, "old_line": 11},
+            },
+            10,
+            12,
+            "RIGHT",
+        ),
+        (
+            {
+                "start": {"type": "old", "new_line": None, "old_line": 9},
+                "end": {"type": "old", "new_line": None, "old_line": 11},
+            },
+            9,
+            11,
+            "LEFT",
+        ),
+        (
+            {
+                "start": {"new_line": 10},
+                "end": {"new_line": 12},
+            },
+            10,
+            12,
+            "RIGHT",
+        ),
+    ],
+)
+def test_gitlab_handle_ask_line_selects_line_numbers_and_side_from_line_range(
+    gitlab_webhook_module, line_range, expected_start, expected_end, expected_side
+):
     data = {
         "object_attributes": {
             "discussion_id": "disc-1",
             "position": {
-                "new_path": "src/app.py",
-                "line_range": {
-                    "start": {"new_line": 10},
-                    "end": {"new_line": 12},
-                },
+                "new_path": "new/src/app.py",
+                "old_path": "old/src/app.py",
+                "line_range": line_range,
             },
         }
     }
@@ -722,8 +754,8 @@ def test_gitlab_handle_ask_line_converts_new_line_diff_note_to_right_side_comman
     body = gitlab_webhook_module.handle_ask_line("/ask why this change?", data)
 
     assert body == (
-        "/ask_line --line_start=10 --line_end=12 --side=RIGHT "
-        "--file_name=src/app.py --comment_id=disc-1 why this change?"
+        f"/ask_line --line_start={expected_start} --line_end={expected_end} --side={expected_side} "
+        "--file_name=new/src/app.py --comment_id=disc-1 why this change?"
     )
 
 
