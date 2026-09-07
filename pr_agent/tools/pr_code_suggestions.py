@@ -1618,12 +1618,13 @@ class PRCodeSuggestions:
                     patches = patch_prompt.strip().split(f"\n{file_prefix}")
                     patches_new = copy.deepcopy(patches)
                     for i in range(len(patches_new)):
+                        patch_body = patches_new[i].rstrip("\n")
                         if i == 0:
-                            prefix = patches_new[i].split("\n@@")[0].strip()
+                            prefix = patch_body.split("\n@@")[0].strip()
                         else:
-                            prefix = file_prefix + patches_new[i].split("\n@@")[0][1:]
+                            prefix = file_prefix + patch_body.split("\n@@")[0]
                             prefix = prefix.strip()
-                        patches_new[i] = prefix + '\n\n' + decouple_and_convert_to_hunks_with_lines_numbers(patches_new[i],
+                        patches_new[i] = prefix + '\n\n' + decouple_and_convert_to_hunks_with_lines_numbers(patch_body,
                                                                                                           file=None).strip()
                         patches_new[i] = patches_new[i].strip()
                     patch_final = "\n\n\n".join(patches_new)
