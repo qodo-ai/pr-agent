@@ -291,6 +291,16 @@ class TestInjectArtifactContext:
             inject_artifact_context()
         assert settings.get("pr_reviewer.extra_instructions") == ""
 
+    def test_a_value_that_is_neither_bool_nor_string_stays_disabled(self, settings, report):
+        """ARTIFACTS__ENABLE=1 from the environment is off, as it was in the GitHub Action runner."""
+        settings.set("artifacts.enable", 1)
+        settings.set("artifacts.artifact_path", str(report))
+        with patch.dict(os.environ, {"GITHUB_WORKSPACE": str(report.parent)}):
+            os.environ.pop("ARTIFACT_PATH", None)
+            os.environ.pop("PR_AGENT_ARTIFACT_PATH", None)
+            inject_artifact_context()
+        assert settings.get("pr_reviewer.extra_instructions") == ""
+
     def test_env_path_enables_and_appends_to_every_target_tool(self, settings, report):
         env = {"GITHUB_WORKSPACE": str(report.parent), "ARTIFACT_PATH": str(report),
                "ARTIFACT_INSTRUCTIONS": "Flag any test failures."}

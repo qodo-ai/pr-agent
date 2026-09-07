@@ -132,7 +132,7 @@ def inject_artifact_context() -> None:
     artifacts_enabled = get_settings().get("ARTIFACTS.ENABLE", False)
     if isinstance(artifacts_enabled, str):
         artifacts_enabled = artifacts_enabled.lower() == "true"
-    if not artifacts_enabled:
+    if artifacts_enabled is not True:
         return
 
     try:
