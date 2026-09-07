@@ -754,9 +754,60 @@ def test_gitlab_handle_ask_line_selects_line_numbers_and_side_from_line_range(
     body = gitlab_webhook_module.handle_ask_line("/ask why this change?", data)
 
     assert body == (
-        f"/ask_line --line_start={expected_start} --line_end={expected_end} --side={expected_side} "
-        "--file_name=new/src/app.py --comment_id=disc-1 why this change?"
+        [
+            "/ask_line",
+            f"--line_start={expected_start}",
+            f"--line_end={expected_end}",
+            f"--side={expected_side}",
+            "--file_name=new/src/app.py",
+            "--comment_id=disc-1",
+            "why this change?",
+        ]
     )
+
+
+def test_gitlab_handle_ask_line_only_strips_leading_ask_command(gitlab_webhook_module):
+    data = {
+        "object_attributes": {
+            "discussion_id": "disc-1",
+            "position": {
+                "new_path": "src/app.py",
+                "line_range": {
+                    "start": {"type": "new", "new_line": 10},
+                    "end": {"type": "new", "new_line": 10},
+                },
+            },
+        }
+    }
+
+    body = gitlab_webhook_module.handle_ask_line(
+        "/ask explain why /ask appears in the source",
+        data,
+    )
+
+    assert body[-1] == "explain why /ask appears in the source"
+
+
+def test_gitlab_handle_ask_line_keeps_question_as_one_argv_item(gitlab_webhook_module):
+    data = {
+        "object_attributes": {
+            "discussion_id": "disc-1",
+            "position": {
+                "new_path": "src/app.py",
+                "line_range": {
+                    "start": {"type": "new", "new_line": 10},
+                    "end": {"type": "new", "new_line": 10},
+                },
+            },
+        }
+    }
+
+    body = gitlab_webhook_module.handle_ask_line(
+        "/ask explain --file_name=not-a-cli-argument and keep spaces",
+        data,
+    )
+
+    assert body[-1] == "explain --file_name=not-a-cli-argument and keep spaces"
 
 
 @pytest.mark.parametrize(

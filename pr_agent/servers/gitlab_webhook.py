@@ -458,11 +458,20 @@ def handle_ask_line(body, data):
             start_line = line_range_['start']['new_line']
             end_line = line_range_['end']['new_line']
             side = 'RIGHT'
-        question = body.replace('/ask', '').strip()
+        question = body.strip().removeprefix('/ask').strip()
         path = data['object_attributes']['position']['new_path']
         comment_id = data['object_attributes']["discussion_id"]
         get_logger().info("Handling line ")
-        body = f"/ask_line --line_start={start_line} --line_end={end_line} --side={side} --file_name={path} --comment_id={comment_id} {question}"
+        body = [
+            "/ask_line",
+            f"--line_start={start_line}",
+            f"--line_end={end_line}",
+            f"--side={side}",
+            f"--file_name={path}",
+            f"--comment_id={comment_id}",
+        ]
+        if question:
+            body.append(question)
     except Exception as e:
         get_logger().error(f"Failed to handle ask line comment: {e}")
     return body
