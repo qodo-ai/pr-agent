@@ -111,12 +111,7 @@ class GithubProvider(GitProvider):
             return None
 
     def get_incremental_commits(self, incremental: Optional[IncrementalPR] = None):
-        # Constructed here rather than in the signature: a default argument is
-        # built once at import and shared by every provider that omits it, and
-        # this one is assigned to `self` and written to on the incremental path
-        # (`_get_incremental_commits` sets commits_range and is_incremental,
-        # `get_commit_range` sets first_new_commit and last_seen_commit), so one
-        # pull request's state would be reachable from the next.
+        # Constructed per call: a default in the signature is one object shared by every provider that omits it.
         self.incremental = incremental if incremental is not None else IncrementalPR(False)
         if self.incremental.is_incremental:
             self.unreviewed_files_map = dict()
