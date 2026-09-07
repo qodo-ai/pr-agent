@@ -477,6 +477,9 @@ class AzureDevopsProvider(GitProvider):
     def supports_line_question_history(self) -> bool:
         return True
 
+    def supports_thread_resolution(self) -> bool:
+        return True
+
     def set_pr(self, pr_url: str):
         self.diff_files = None
         self._diff_path_map = None
@@ -1504,6 +1507,9 @@ class AzureDevopsProvider(GitProvider):
         except Exception as e:
             get_logger().exception(f"Failed to set thread status, error: {e}")
             return False
+
+    def resolve_comment_thread(self, comment_id: int) -> bool:
+        return self.set_thread_status(comment_id, "closed")
 
     def reply_to_thread(self, thread_id: int, body: str, is_temporary: bool = False) -> Comment:
         try:

@@ -27,6 +27,20 @@ def test_publish_description_propagates_update_failure():
         provider.publish_description("AI title", "Updated description")
 
 
+def test_azure_supports_thread_resolution():
+    provider = AzureDevopsProvider.__new__(AzureDevopsProvider)
+
+    assert provider.supports_thread_resolution() is True
+
+
+def test_azure_resolve_comment_thread_closes_thread():
+    provider = AzureDevopsProvider.__new__(AzureDevopsProvider)
+    provider.set_thread_status = MagicMock(return_value=True)
+
+    assert provider.resolve_comment_thread(42) is True
+    provider.set_thread_status.assert_called_once_with(42, "closed")
+
+
 class TestAzureDevopsProviderRepoContext:
     def test_get_repo_file_content_reads_from_target_commit(self):
         # Repo-context files must be read from the PR target (base) commit, matching
