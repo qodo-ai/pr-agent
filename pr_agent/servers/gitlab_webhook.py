@@ -362,6 +362,21 @@ async def gitlab_webhook(background_tasks: BackgroundTasks, request: Request):
                 apply_repo_settings(url)
                 await _perform_commands_gitlab("pr_commands", PRAgent(), url, log_context, data)
 
+            # for draft to ready triggered merge requests, tested before the push
+            # case below: a single update can both clear the draft flag and carry
+            # new commits, and with handle_push_trigger off -- the default -- the
+            # push branch then returned having run nothing at all. Draft to ready is
+            # the more significant of the two transitions, so it wins either way.
+            elif object_attributes.get('action') == 'update' and is_draft_ready(data):
+                url = object_attributes.get('url')
+                get_logger().info(f"Draft MR is ready: {url}")
+
+                apply_repo_settings(url)
+                if get_settings().get("gitlab.feedback_on_draft_pr", False):
+                    get_logger().info(f"Skipping draft-ready commands because draft feedback is enabled: {url}")
+                    return
+                await _perform_commands_gitlab("pr_commands", PRAgent(), url, log_context, data)
+
             # for push event triggered merge requests
             elif object_attributes.get('action') == 'update' and object_attributes.get('oldrev'):
                 url = object_attributes.get('url')
@@ -377,17 +392,6 @@ async def gitlab_webhook(background_tasks: BackgroundTasks, request: Request):
 
                 get_logger().debug(f'A push event has been received: {url}')
                 await _perform_commands_gitlab("push_commands", PRAgent(), url, log_context, data)
-
-            # for draft to ready triggered merge requests
-            elif object_attributes.get('action') == 'update' and is_draft_ready(data):
-                url = object_attributes.get('url')
-                get_logger().info(f"Draft MR is ready: {url}")
-
-                apply_repo_settings(url)
-                if get_settings().get("gitlab.feedback_on_draft_pr", False):
-                    get_logger().info(f"Skipping draft-ready commands because draft feedback is enabled: {url}")
-                    return
-                await _perform_commands_gitlab("pr_commands", PRAgent(), url, log_context, data)
 
             # for reviewer assignment triggered merge requests
             elif object_attributes.get('action') == 'update' and not object_attributes.get('oldrev'):

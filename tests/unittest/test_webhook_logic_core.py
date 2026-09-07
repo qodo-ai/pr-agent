@@ -818,3 +818,84 @@ def test_gitlab_is_bot_user_skips_non_string_entries(gitlab_webhook_module):
         ) is False
     finally:
         settings.set("CONFIG.BOT_USER_INDICATORS", original_override)
+
+
+async def _run_gitlab_update(module, monkeypatch, *, oldrev, draft_ready, handle_push_trigger):
+    """Post one merge-request `update` and report which commands ran.
+
+    Distinct `pr_commands` and `push_commands` so the two paths can be told
+    apart: the shared helper above configures `/review` for both.
+    """
+    settings = get_settings()
+    original_is_auto_command = settings.get("CONFIG.IS_AUTO_COMMAND")
+    settings.set("GITLAB.PR_COMMANDS", ["/review"])
+    settings.set("GITLAB.PUSH_COMMANDS", ["/describe"])
+    settings.set("GITLAB.HANDLE_PUSH_TRIGGER", handle_push_trigger)
+    settings.set("GITLAB.FEEDBACK_ON_DRAFT_PR", False)
+
+    agent = RecordingAgent()
+    monkeypatch.setattr(module, "apply_repo_settings", lambda _url: None)
+    monkeypatch.setattr(module, "PRAgent", lambda: agent)
+    monkeypatch.setattr(
+        module,
+        "get_fork_safe_secret_provider",
+        lambda: SimpleNamespace(get_secret=lambda _: '{"gitlab_token": "token"}'),
+    )
+
+    object_attributes = {
+        "action": "update",
+        "draft": False,
+        "url": "https://gitlab.com/org/repo/-/merge_requests/1",
+    }
+    if oldrev:
+        object_attributes["oldrev"] = "previous-revision"
+    data = _gitlab_payload(**object_attributes)
+    data["object_kind"] = "merge_request"
+    if draft_ready:
+        data["changes"] = {"draft": {"previous": True, "current": False}}
+    try:
+        response = await _post_gitlab_webhook(module.app, data)
+    finally:
+        settings.set("CONFIG.IS_AUTO_COMMAND", original_is_auto_command)
+
+    assert response.status_code == 200
+    return agent.commands
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("handle_push_trigger", [False, True])
+async def test_gitlab_update_that_is_both_a_push_and_draft_ready_still_reviews(
+    gitlab_webhook_module, monkeypatch, handle_push_trigger
+):
+    """Marking an MR ready and pushing in one action must not run nothing.
+
+    Both `update` branches match this payload. The push branch was tested
+    first, so with `handle_push_trigger` false, the common workflow -- push the
+    last commit and clear the draft flag together -- returned having run no
+    command at all, silently. Draft-to-ready is the more significant of the two
+    transitions, so it wins in either setting rather than only when the push
+    branch declines.
+    """
+    commands = await _run_gitlab_update(
+        gitlab_webhook_module,
+        monkeypatch,
+        oldrev=True,
+        draft_ready=True,
+        handle_push_trigger=handle_push_trigger,
+    )
+    assert commands == [["/review"]]
+
+
+@pytest.mark.asyncio
+async def test_gitlab_push_only_update_still_takes_the_push_branch(
+    gitlab_webhook_module, monkeypatch
+):
+    """The reordering must not steal a plain push from `push_commands`."""
+    commands = await _run_gitlab_update(
+        gitlab_webhook_module,
+        monkeypatch,
+        oldrev=True,
+        draft_ready=False,
+        handle_push_trigger=True,
+    )
+    assert commands == [["/describe"]]
