@@ -61,6 +61,7 @@ class _SpyTaskUpdater:
         self.context_id = context_id
         self.artifacts = []       # list of Part lists passed to add_artifact
         self.completed = False
+        self.cancelled = False
         self.failed_with = None   # message text passed to failed()
         type(self).last = self
 
@@ -72,6 +73,9 @@ class _SpyTaskUpdater:
 
     async def failed(self, message=None):
         self.failed_with = _message_text(message)
+
+    async def cancel(self, message=None):
+        self.cancelled = True
 
     def new_agent_message(self, parts, metadata=None):
         return _FakeMessage(parts)
@@ -228,9 +232,13 @@ class TestExecute:
         assert spy_updater.last is None
 
     @pytest.mark.asyncio
-    async def test_cancel_raises_not_implemented(self):
-        with pytest.raises(NotImplementedError):
+    async def test_cancel_marks_task_canceled(self, spy_updater):
+        with request_cycle_context({}):
             await PRAgentExecutor().cancel(_FakeRequestContext("z"), _RecordingEventQueue())
+
+        spy = spy_updater.last
+        assert (spy.task_id, spy.context_id) == ("task-001", "ctx-001")
+        assert spy.cancelled is True
 
     @pytest.mark.asyncio
     async def test_settings_writes_are_request_scoped_under_concurrency(self, monkeypatch, spy_updater):

@@ -81,7 +81,14 @@ class PRAgentExecutor(AgentExecutor):
             await updater.failed(msg)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
-        raise NotImplementedError("cancel is not supported by the PR-Agent solution agent")
+        if not context.task_id or not context.context_id:
+            raise ValueError("A2A 1.0 RequestContext missing task_id/context_id")
+
+        # DefaultRequestHandler invokes the executor before it cancels the running
+        # producer task. Publish the terminal state first so the handler can finish
+        # the cancellation handshake instead of returning a NotImplementedError.
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.cancel()
 
 
 async def health_check() -> str:
