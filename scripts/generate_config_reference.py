@@ -209,7 +209,7 @@ def render_page(sections: list) -> str:
             out.append("")
         out.append("")
 
-    return "\n".join(out) + "\n"
+    return "\n".join(out).rstrip("\n") + "\n"
 
 
 def main() -> int:

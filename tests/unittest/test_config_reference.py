@@ -1,11 +1,16 @@
+import importlib.util
 import re
 from pathlib import Path
-
-from scripts.generate_config_reference import load_sections
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 CONFIG_TOML = SCRIPTS_DIR.parent / "pr_agent/settings/configuration.toml"
 OUTPUT_PAGE = SCRIPTS_DIR.parent / "docs/docs/usage-guide/configuration_reference.md"
+
+_GENERATOR = "generate_config_reference"
+_spec = importlib.util.spec_from_file_location(_GENERATOR, SCRIPTS_DIR / f"{_GENERATOR}.py")
+_script = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_script)
+load_sections = _script.load_sections
 
 
 def test_config_reference_covers_every_active_key():
