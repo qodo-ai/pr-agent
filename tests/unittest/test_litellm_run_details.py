@@ -188,6 +188,7 @@ def _bare_handler():
     handler.repetition_penalty = None
     handler.add_litellm_callbacks = False
     handler.claude_extended_thinking_models = []
+    handler.claude_adaptive_thinking_models_override = []
     handler.no_support_temperature_models = []
     handler.support_reasoning_models = []
     handler.user_message_only_models = []

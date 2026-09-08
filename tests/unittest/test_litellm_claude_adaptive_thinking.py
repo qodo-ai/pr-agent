@@ -43,11 +43,14 @@ def _restore_litellm_globals():
                 os.environ[name] = value
 
 
-def _settings(reasoning_effort="medium", enabled=False, extended_enabled=False):
+def _settings(reasoning_effort="medium", enabled=False, extended_enabled=False,
+              adaptive_override=None):
     flags = {
         "enable_claude_adaptive_thinking": enabled,
         "enable_claude_extended_thinking": extended_enabled,
     }
+    if adaptive_override is not None:
+        flags["claude_adaptive_thinking_models_override"] = adaptive_override
     config = SimpleNamespace(
         reasoning_effort=reasoning_effort,
         ai_timeout=120,
@@ -72,11 +75,11 @@ def _response():
 
 
 async def _run_completion(monkeypatch, model, reasoning_effort="medium", enabled=False,
-                          extended_enabled=False, extended_override=None):
+                          extended_enabled=False, extended_override=None, adaptive_override=None):
     monkeypatch.setattr(
         litellm_handler,
         "get_settings",
-        lambda: _settings(reasoning_effort, enabled, extended_enabled),
+        lambda: _settings(reasoning_effort, enabled, extended_enabled, adaptive_override),
     )
     with patch(
         "pr_agent.algo.ai_handlers.litellm_ai_handler.acompletion",
@@ -207,3 +210,81 @@ async def test_non_adaptive_model_in_extended_override_still_gets_extended_think
 
     assert kwargs["thinking"]["type"] == "enabled"
     assert "budget_tokens" in kwargs["thinking"]
+
+
+# A Bedrock application-inference-profile ARN carries no model name, so the built-in pattern
+# cannot classify it. Synthetic account id and profile id on purpose.
+_PROFILE_ARN = (
+    "bedrock/converse/arn:aws:bedrock:eu-central-1:000000000000:"
+    "application-inference-profile/abc123def456"
+)
+
+
+def _handler_with_override(monkeypatch, override):
+    monkeypatch.setattr(
+        litellm_handler, "get_settings", lambda: _settings(adaptive_override=override)
+    )
+    return LiteLLMAIHandler()
+
+
+def test_opaque_model_id_is_not_detected_without_the_override(monkeypatch):
+    handler = _handler_with_override(monkeypatch, None)
+    assert LiteLLMAIHandler._is_claude_adaptive_thinking_model(_PROFILE_ARN) is False
+    assert handler._model_uses_adaptive_thinking(_PROFILE_ARN) is False
+
+
+def test_override_declares_an_opaque_model_id_adaptive(monkeypatch):
+    handler = _handler_with_override(monkeypatch, [_PROFILE_ARN])
+    assert handler._model_uses_adaptive_thinking(_PROFILE_ARN) is True
+
+
+def test_override_tolerates_surrounding_whitespace(monkeypatch):
+    handler = _handler_with_override(monkeypatch, [f"  {_PROFILE_ARN}  "])
+    assert handler._model_uses_adaptive_thinking(_PROFILE_ARN) is True
+
+
+def test_override_does_not_capture_unlisted_models(monkeypatch):
+    handler = _handler_with_override(monkeypatch, [_PROFILE_ARN])
+    assert handler._model_uses_adaptive_thinking("anthropic/claude-opus-4-6") is False
+
+
+def test_override_is_additive_and_keeps_built_in_detection(monkeypatch):
+    """The extended-thinking override replaces its list; this one must not."""
+    handler = _handler_with_override(monkeypatch, [_PROFILE_ARN])
+    assert handler._model_uses_adaptive_thinking("anthropic/claude-opus-4-8") is True
+
+
+@pytest.mark.parametrize("bad_override", ["not-a-list", [""], ["ok", 5], [None]])
+def test_malformed_override_falls_back_to_built_in_detection(monkeypatch, bad_override):
+    handler = _handler_with_override(monkeypatch, bad_override)
+    assert handler.claude_adaptive_thinking_models_override == []
+    assert handler._model_uses_adaptive_thinking(_PROFILE_ARN) is False
+    assert handler._model_uses_adaptive_thinking("anthropic/claude-opus-4-8") is True
+
+
+@pytest.mark.asyncio
+async def test_overridden_opaque_model_receives_adaptive_payload(monkeypatch):
+    kwargs = await _run_completion(
+        monkeypatch,
+        _PROFILE_ARN,
+        reasoning_effort="high",
+        enabled=True,
+        adaptive_override=[_PROFILE_ARN],
+    )
+
+    assert kwargs["thinking"] == {"type": "adaptive"}
+    assert kwargs["output_config"] == {"effort": "high"}
+    assert "temperature" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_overridden_model_sends_no_thinking_payload_while_feature_is_off(monkeypatch):
+    kwargs = await _run_completion(
+        monkeypatch,
+        _PROFILE_ARN,
+        enabled=False,
+        adaptive_override=[_PROFILE_ARN],
+    )
+
+    assert "thinking" not in kwargs
+    assert "output_config" not in kwargs
