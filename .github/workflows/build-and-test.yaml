@@ -82,3 +82,32 @@ jobs:
           docker logs pr-agent-smoke
           docker rm -f pr-agent-smoke
           exit 1
+
+  # The job above runs entirely inside docker/Dockerfile, whose base is pinned
+  # to python:3.12.14-slim, so nothing exercised the upper half of pyproject's
+  # `requires-python = ">=3.12"` -- including the google-cloud-storage pin that
+  # only applies at python_version >= '3.13'. Installing from PyPI on 3.13 was
+  # therefore an untested combination. Deliberately a separate job rather than a
+  # matrix over the docker build: the shipped images are 3.12 on purpose, and
+  # matrixing would rebuild every layer and re-run the smoke test and coverage
+  # upload for no extra signal.
+  unit-tests-py313:
+    name: Unit tests (Python 3.13)
+    runs-on: ubuntu-latest
+
+    steps:
+      - id: checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # Same uv release the Dockerfile pulls from ghcr.io/astral-sh/uv, via pipx
+      # so there is no additional action to pin. uv provisions the interpreter
+      # itself, so setup-python is not needed either.
+      - id: uv
+        name: Install uv
+        run: pipx install uv==0.12.10
+
+      - id: test-py313
+        name: Test on Python 3.13
+        env:
+          PYTHONPATH: .
+        run: uv run --frozen --python 3.13 pytest -v tests/unittest
