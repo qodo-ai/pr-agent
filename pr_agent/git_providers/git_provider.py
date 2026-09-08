@@ -185,11 +185,10 @@ class GitProvider(ABC):
         return False
 
     def supports_checkbox_commands(self) -> bool:
-        """Whether ticking a command checkbox in a published comment runs that command.
+        """Whether a published comment renders command checkboxes as checkboxes.
 
-        Providers whose entrypoint reacts to a comment edit by dispatching the marked
-        command override this; the default is no support, so tools render commands as
-        text instead of interactive checkboxes."""
+        Providers that render `- [ ]` as a tickable box override this; the default is no
+        support, so tools render commands as text instead."""
         return False
 
     def supports_markdown_tables(self) -> bool:

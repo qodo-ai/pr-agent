@@ -126,8 +126,6 @@ class GithubProvider(GitProvider):
         return True
 
     def supports_checkbox_commands(self) -> bool:
-        # Only the GitHub app routes the comment-edit event a ticked checkbox produces
-        # (see pr_agent/servers/github_app.py).
         return True
 
     def _get_owner_and_repo_path(self, given_url: str) -> str:
