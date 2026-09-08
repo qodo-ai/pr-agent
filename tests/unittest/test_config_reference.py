@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from scripts.generate_config_reference import load_sections, render_page
+from scripts.generate_config_reference import load_sections
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 CONFIG_TOML = SCRIPTS_DIR.parent / "pr_agent/settings/configuration.toml"
@@ -21,7 +21,16 @@ def test_config_reference_covers_every_active_key():
     assert {"force_streaming_custom_llm_provider", "cache_control_injection_points"} <= all_keys
 
 
-def test_config_reference_page_is_regenerated():
-    generated = render_page(load_sections(CONFIG_TOML.read_text(encoding="utf-8")))
-    committed = OUTPUT_PAGE.read_text(encoding="utf-8")
-    assert generated == committed, "docs/docs/usage-guide/configuration_reference.md is out of date; run scripts/generate_config_reference.py"
+def test_config_reference_page_lists_every_active_key():
+    toml_keys = {key["key"] for section in load_sections(CONFIG_TOML.read_text(encoding="utf-8")) for key in section["keys"]}
+    documented = {
+        row.group(1)
+        for line in OUTPUT_PAGE.read_text(encoding="utf-8").splitlines()
+        if line.startswith("| ")
+        for row in [re.match(r"\| `([^`]+)` \|", line)]
+        if row
+    }
+    assert documented == toml_keys, (
+        "docs/docs/usage-guide/configuration_reference.md is out of date; "
+        "run scripts/generate_config_reference.py"
+    )

@@ -34,6 +34,10 @@ PAGE_HEADER = f"""# Configuration Reference
 Every configuration option PR-Agent supports, grouped by section. The [configuration.toml]({SOURCE_URL})
 file is the single source of truth for defaults and inline comments; this page renders the same
 list for easy searching and linking.
+
+Rows with an empty **Description** are keys whose TOML entry carries no explanatory comment yet.
+They are listed deliberately rather than hidden, so the gaps double as the documentation
+to-do list.
 """
 
 TABLE_HEADER = "| Key | Default | Description |\n| --- | --- | --- |"
