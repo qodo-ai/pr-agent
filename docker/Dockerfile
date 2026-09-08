@@ -55,7 +55,11 @@ FROM base AS test
 RUN uv sync --frozen --no-install-project
 ADD pr_agent pr_agent
 ADD tests tests
+# Config the unit suite asserts against, copied file by file so an unrelated
+# workflow edit does not invalidate this layer.
 ADD .github/workflows/publish.yml .github/workflows/publish.yml
+ADD .github/workflows/build-and-test.yaml .github/workflows/build-and-test.yaml
+ADD docker/Dockerfile docker/Dockerfile
 ADD docker/mosaico docker/mosaico
 
 FROM base AS cli
