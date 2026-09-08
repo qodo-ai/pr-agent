@@ -2,4 +2,3 @@ root: ./
 
 structure:
   readme: ../README.md
-  summary: ./summary.md
