@@ -504,10 +504,6 @@ class GitProvider(ABC):
         """Return whether this provider can verify PR-Agent-authored review comments."""
         return False
 
-    def matches_persistent_comment_identity(self, body: str, identity: str) -> bool:
-        """Match a persistent-comment identity using the provider's matching policy."""
-        return comment_matches_identity(body, identity)
-
     def is_comment_authored_by_pr_agent(self, comment) -> bool:
         """Return whether a provider comment was authored by this PR-Agent identity."""
         return False
@@ -560,14 +556,7 @@ class GitProvider(ABC):
                 continue
             for comment in comments:
                 body = GitProvider._get_comment_body(comment)
-                matcher = getattr(
-                    self,
-                    "matches_persistent_comment_identity",
-                    lambda body, identity: GitProvider.matches_persistent_comment_identity(
-                        self, body, identity
-                    ),
-                )
-                if not matcher(body, identifier):
+                if not comment_matches_identity(body, identifier):
                     continue
                 if comment_carries_other_identity(body, identity_marker):
                     continue

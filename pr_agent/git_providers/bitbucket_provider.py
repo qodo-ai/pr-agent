@@ -382,7 +382,7 @@ class BitbucketProvider(GitProvider):
         try:
             comment = self._get_cloud_comment(comment)
             body = self.limit_output_characters(body, self.max_comment_length)
-            comment.update(body=body)
+            comment.update(content={"raw": body})
             return True
         except Exception as e:
             get_logger().exception(f"Failed to update comment, error: {e}")

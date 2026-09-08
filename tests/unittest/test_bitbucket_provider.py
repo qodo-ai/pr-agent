@@ -431,7 +431,7 @@ not a valid hunk
         )
 
         legacy.update.assert_called_once()
-        updated_body = legacy.update.call_args.kwargs["body"]
+        updated_body = legacy.update.call_args.kwargs["content"]["raw"]
         assert updated_body.startswith("## Guideline Compliance Check 🔍\n\n")
         assert PRReviewIdentity.REGULAR.value in updated_body
         provider.publish_comment.assert_not_called()
