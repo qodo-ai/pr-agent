@@ -1676,7 +1676,7 @@ class GithubProvider(GitProvider):
                         if not hasattr(file, 'patches_range'):
                             file.patches_range = []
                             patch_lines = patch_str.splitlines()
-                            for _, line in enumerate(patch_lines):
+                            for line in patch_lines:
                                 if line.startswith('@@'):
                                     match = RE_HUNK_HEADER.match(line)
                                     # identify hunk header
@@ -1696,7 +1696,7 @@ class GithubProvider(GitProvider):
                         min_distance = float('inf')
                         patch_range_min = None
                         # find the hunk that contains the comment, or the closest one
-                        for _, patch_range in enumerate(patches_range):
+                        for patch_range in patches_range:
                             d1 = comment_start_line - patch_range['start']
                             d2 = patch_range['end'] - comment_end_line
                             if d1 >= 0 and d2 >= 0:  # found a valid hunk

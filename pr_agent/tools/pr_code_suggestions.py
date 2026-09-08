@@ -837,7 +837,7 @@ class PRCodeSuggestions:
             await self.analyze_self_reflection_response(data, response_reflect)
         else:
             # get_logger().error(f"Could not self-reflect on suggestions. using default score 7")
-            for _, suggestion in enumerate(data["code_suggestions"]):
+            for suggestion in data["code_suggestions"]:
                 suggestion["score"] = 7
                 suggestion["score_why"] = ""
 
