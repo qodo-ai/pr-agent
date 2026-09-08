@@ -154,19 +154,14 @@ lint.unfixable = [
 
 lint.exclude = ["api/code_completions"]
 
-# B008 is a long-standing ignore. Everything below it is a pre-existing
+# Everything below is a pre-existing
 # violation deferred so ruff runs green on adoption — fix the code and drop
 # the entry. TODO: burn this list down.
 lint.ignore = [
-  "B008", # function call in argument defaults
   "E402", # import not at top of file
   "E501", # line too long
-  "E711", # comparison to None
   "E722", # bare `except`
-  "F811", # redefinition of unused name
   "F841", # unused local variable
-  "B006", # mutable argument default
-  "B007", # unused loop control variable
   "B011", # `assert False`
   "B017", # assertRaises(Exception)
   "B023", # function definition uses loop variable
