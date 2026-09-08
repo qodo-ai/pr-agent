@@ -208,7 +208,7 @@ PREDICATE_CONTRACTS = (
     ),
     PredicateContract(
         name="supports_thread_resolution",
-        evidence=("resolve_comment_thread", "set_thread_status"),
+        evidence=("resolve_comment_thread",),
         deliberate_mismatches={
             "gitlab": DeliberateMismatch(
                 "GitLab resolves note IDs while /ask_line addresses discussion IDs, so thread resolution "
