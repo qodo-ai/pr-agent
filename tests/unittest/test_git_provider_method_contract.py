@@ -395,3 +395,118 @@ def test_disable_eyes_short_circuits_before_any_backend_call(provider_name: str)
     provider = provider_type.__new__(provider_type)
 
     assert provider.add_eyes_reaction(COMMENT_ID, disable_eyes=True) is None
+
+
+@pytest.mark.parametrize(
+    "provider_name",
+    [
+        name
+        for name, (cls, _) in PROVIDERS.items()
+        if "publish_code_suggestions" in cls.__dict__
+    ],
+)
+def test_publish_code_suggestions_declares_bool_return(provider_name: str):
+    provider_type, _ = PROVIDERS[provider_name]
+    hints = get_type_hints(provider_type.publish_code_suggestions)
+    assert hints.get("return") is bool
+
+
+def test_gerrit_publish_code_suggestions_returns_false_on_total_failure(monkeypatch, tmp_path):
+    provider = GerritProvider.__new__(GerritProvider)
+    provider.parsed_url = SimpleNamespace()
+    provider.refspec = "refs/changes/1"
+    provider.repo_path = str(tmp_path)
+    (tmp_path / "app.py").write_text("orig\n")
+
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.upload_patch",
+        lambda *_: "https://patch.example/1",
+    )
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.diff",
+        lambda *_, **__: "patch",
+    )
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.reset_local_changes",
+        lambda *_: None,
+    )
+
+    def _fail_comment(*_):
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr("pr_agent.git_providers.gerrit_provider.add_comment", _fail_comment)
+
+    suggestions = [{
+        "relevant_file": "app.py",
+        "body": "description\n```suggestion\nnew\n```",
+        "relevant_lines_start": 1,
+        "relevant_lines_end": 1,
+    }]
+    assert provider.publish_code_suggestions(suggestions) is False
+
+
+def test_gerrit_publish_code_suggestions_returns_true_on_success(monkeypatch, tmp_path):
+    provider = GerritProvider.__new__(GerritProvider)
+    provider.parsed_url = SimpleNamespace()
+    provider.refspec = "refs/changes/1"
+    provider.repo_path = str(tmp_path)
+    (tmp_path / "app.py").write_text("orig\n")
+
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.upload_patch",
+        lambda *_: "https://patch.example/1",
+    )
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.diff",
+        lambda *_, **__: "patch",
+    )
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.reset_local_changes",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        "pr_agent.git_providers.gerrit_provider.add_comment",
+        lambda *_: None,
+    )
+
+    suggestions = [{
+        "relevant_file": "app.py",
+        "body": "description\n```suggestion\nnew\n```",
+        "relevant_lines_start": 1,
+        "relevant_lines_end": 1,
+    }]
+    assert provider.publish_code_suggestions(suggestions) is True
+
+
+def test_codecommit_publish_code_suggestions_returns_false_when_no_publishable_targets():
+    provider = CodeCommitProvider.__new__(CodeCommitProvider)
+    provider.pr_num = 123
+    provider.codecommit_client = MagicMock()
+    provider._get_target_contexts_for_file = MagicMock(return_value=[])
+
+    suggestions = [{
+        "body": "suggestion",
+        "relevant_file": "app.py",
+        "relevant_lines_start": 1,
+    }]
+    assert provider.publish_code_suggestions(suggestions) is False
+    provider.codecommit_client.publish_comment.assert_not_called()
+
+
+def test_codecommit_publish_code_suggestions_returns_true_on_success():
+    provider = CodeCommitProvider.__new__(CodeCommitProvider)
+    provider.pr_num = 123
+    provider.codecommit_client = MagicMock()
+    provider._get_target_contexts_for_file = MagicMock(return_value=[{
+        "repository_name": "repo",
+        "destination_commit": "dest",
+        "source_commit": "src",
+    }])
+
+    suggestions = [{
+        "body": "suggestion",
+        "relevant_file": "app.py",
+        "relevant_lines_start": 1,
+    }]
+    assert provider.publish_code_suggestions(suggestions) is True
+    provider.codecommit_client.publish_comment.assert_called_once()
