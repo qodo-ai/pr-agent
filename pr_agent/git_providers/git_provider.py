@@ -184,6 +184,22 @@ class GitProvider(ABC):
     def supports_line_question_history(self) -> bool:
         return False
 
+    def supports_checkbox_commands(self) -> bool:
+        """Whether ticking a command checkbox in a published comment runs that command.
+
+        Providers whose entrypoint reacts to a comment edit by dispatching the marked
+        command override this; the default is no support, so tools render commands as
+        text instead of interactive checkboxes."""
+        return False
+
+    def supports_markdown_tables(self) -> bool:
+        """Whether comments render pipe-table markdown.
+
+        Only consulted for providers without `gfm_markdown`, so that tools can degrade to
+        a plain table instead of refusing to render. Providers that render Markdown tables
+        but not GitHub-flavored markdown override this."""
+        return False
+
     #Given a url (issues or PR/MR) - get the .git repo url to which they belong. Needs to be implemented by the provider.
     def get_git_repo_url(self, issues_or_pr_url: str) -> str:
         get_logger().warning("Not implemented! Returning empty url")
