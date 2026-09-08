@@ -177,10 +177,6 @@ lint.ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Ignore import-position and unused-import in __init__.py (re-export modules).
 "__init__.py" = ["E402", "F401"]
-[tool.bandit]
-exclude_dirs = ["tests"]
-skips = ["B101"]
-tests = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
