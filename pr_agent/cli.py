@@ -28,9 +28,7 @@ def set_parser():
     - cli.py --pr_url=... describe
     - cli.py --pr_url=... improve
     - cli.py --pr_url=... ask "write me a poem about this PR"
-    - cli.py --pr_url=... reflect
     - cli.py --issue_url=... similar_issue
-    - cli.py --pr_url/--issue_url= help_docs [<asked question>]
 
     Supported commands:
     - review / review_pr - {COMMAND_DESCRIPTIONS["review"]}
@@ -42,16 +40,11 @@ def set_parser():
     - improve / improve_code - {COMMAND_DESCRIPTIONS["improve"]}
     Extended mode ('improve --extended') employs several calls, and provides a more thorough feedback
 
-    - reflect - Ask the PR author questions about the PR.
-
     - update_changelog - Update the changelog based on the PR's contents.
 
     - add_docs
 
     - generate_labels
-
-    - help_docs - Ask a question, from either an issue or PR context, on a given repo (current context or a different one)
-
 
     Configuration:
     To edit any configuration parameter from 'configuration.toml', just add -config_path=<value>.

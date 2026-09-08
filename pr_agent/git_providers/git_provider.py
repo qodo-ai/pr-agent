@@ -416,6 +416,50 @@ class GitProvider(ABC):
     def get_repo_settings(self):
         pass
 
+    def get_owning_namespace(self) -> Optional[str]:
+        """Return the org/group/workspace that owns this repository, or None when
+        the provider has no organisation-level home for global settings.
+
+        This is the hook that `_get_global_repo_settings` uses to decide which
+        namespace's `pr-agent-settings` repository (or equivalent) to consult.
+        Providers that support global settings override this; the default is None,
+        which disables global settings for the provider.
+        """
+        return None
+
+    def _get_global_repo_settings(self):
+        """Load the namespace-wide `pr-agent-settings` .pr_agent.toml, if enabled.
+
+        This is a concrete template: it gates on `use_global_settings_file`, resolves
+        the owning namespace via `get_owning_namespace()`, and delegates the actual
+        provider API call (and its 403/404 mapping) to `_fetch_global_repo_settings`,
+        all behind the shared TTL cache. Providers build the cache key through
+        `_get_global_settings_cache_key` so instance-specific keys (e.g. GitHub
+        enterprise hosts) stay distinct.
+        """
+        if not get_settings().config.use_global_settings_file:
+            return ""
+        namespace = self.get_owning_namespace()
+        if not namespace:
+            return ""
+        return get_cached_global_settings(
+            self._get_global_settings_cache_key(namespace),
+            lambda: self._fetch_global_repo_settings(namespace))
+
+    def _get_global_settings_cache_key(self, namespace: str) -> str:
+        """Cache key for a namespace's global settings.
+
+        Override to scope the key beyond the provider type (e.g. include a
+        self-hosted base URL so two instances hosting the same org don't collide).
+        """
+        return f"{type(self).__name__}:{namespace}"
+
+    def _fetch_global_repo_settings(self, namespace: str):
+        """Fetch the raw `.pr_agent.toml` from the namespace's `pr-agent-settings`
+        repository. Return "" for an expected "not found"/no-access result (so it is
+        cached) and let transient/unexpected errors propagate. Overridden per provider."""
+        return ""
+
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         return ""
 

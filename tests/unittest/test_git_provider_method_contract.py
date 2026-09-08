@@ -125,6 +125,16 @@ def _bitbucket_server(monkeypatch) -> BitbucketServerProvider:
     }]
     return provider
 
+def _bitbucket(monkeypatch) -> BitbucketProvider:
+    provider = BitbucketProvider.__new__(BitbucketProvider)
+    provider.pr = MagicMock()
+
+    comment = MagicMock()
+    comment.raw = COMMENT_BODY
+    provider.pr.comments.return_value = [comment]
+
+    return provider
+
 
 def _bare(provider_type):
     """A provider with no backend wired at all: every call on it must succeed without one."""
@@ -137,7 +147,7 @@ PROVIDERS: dict[str, tuple[type[GitProvider], Callable[[pytest.MonkeyPatch], Git
     "gitea": (GiteaProvider, _gitea),
     "gerrit": (GerritProvider, _gerrit),
     "azure-devops": (AzureDevopsProvider, _azure_devops),
-    "bitbucket": (BitbucketProvider, _bare(BitbucketProvider)),
+    "bitbucket": (BitbucketProvider, _bitbucket),
     "bitbucket-server": (BitbucketServerProvider, _bitbucket_server),
     "codecommit": (CodeCommitProvider, _bare(CodeCommitProvider)),
     "local": (LocalGitProvider, _bare(LocalGitProvider)),
@@ -187,8 +197,8 @@ METHOD_CONTRACTS = (
         noop_value=[],
         check_supported=_is_comment_sequence,
         tiers=_tiers(
-            supported=("github", "gitlab", "gitea", "gerrit", "azure-devops", "bitbucket-server"),
-            not_implemented=("bitbucket", "codecommit", "local"),
+            supported=("github", "gitlab", "gitea", "gerrit", "azure-devops", "bitbucket-server", "bitbucket"),
+            not_implemented=("codecommit", "local"),
         ),
         # Implementations narrow the base `Iterable` (a paginated list, a list of SDK objects),
         # so the return annotation is checked by behaviour rather than by equality.
