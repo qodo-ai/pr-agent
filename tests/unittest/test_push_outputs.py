@@ -1,4 +1,5 @@
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,6 +17,8 @@ def _reset_push_outputs():
     s.set('PUSH_OUTPUTS.CHANNELS', [])
     s.set('PUSH_OUTPUTS.WEBHOOK_URL', '')
     s.set('PUSH_OUTPUTS.SLACK_WEBHOOK_URL', '')
+    s.set('PUSH_OUTPUTS.TELEGRAM_BOT_TOKEN', '')
+    s.set('PUSH_OUTPUTS.TELEGRAM_CHAT_ID', '')
 
 
 class TestPushOutputs:
@@ -73,6 +76,76 @@ class TestPushOutputs:
         assert captured['url'] == slack_url
         assert captured['json'] == {"text": "a markdown review"}
 
+    def test_telegram_channel_posts_to_configured_chat(self, monkeypatch):
+        get_settings().set('PUSH_OUTPUTS.ENABLE', True)
+        get_settings().set('PUSH_OUTPUTS.CHANNELS', ['telegram'])
+        get_settings().set('PUSH_OUTPUTS.TELEGRAM_BOT_TOKEN', '123:abc_DEF')
+        get_settings().set('PUSH_OUTPUTS.TELEGRAM_CHAT_ID', '-100123')
+
+        captured = {}
+
+        def fake_post(url, json=None, timeout=None, **kwargs):
+            captured['url'] = url
+            captured['json'] = json
+            captured['timeout'] = timeout
+            captured['allow_redirects'] = kwargs.get('allow_redirects')
+
+        monkeypatch.setattr(utils.requests, 'post', fake_post)
+
+        push_outputs("review", payload={"a": 1}, markdown="a markdown review")
+
+        assert captured == {
+            'url': 'https://api.telegram.org/bot123:abc_DEF/sendMessage',
+            'json': {'chat_id': '-100123', 'text': 'a markdown review'},
+            'timeout': 5,
+            'allow_redirects': False,
+        }
+
+    def test_telegram_channel_serializes_payload_and_truncates_text(self, monkeypatch):
+        get_settings().set('PUSH_OUTPUTS.ENABLE', True)
+        get_settings().set('PUSH_OUTPUTS.CHANNELS', ['telegram'])
+        get_settings().set('PUSH_OUTPUTS.TELEGRAM_BOT_TOKEN', 'token')
+        get_settings().set('PUSH_OUTPUTS.TELEGRAM_CHAT_ID', 'chat')
+
+        posts = []
+        monkeypatch.setattr(utils.requests, 'post', lambda url, **kwargs: posts.append((url, kwargs)))
+
+        push_outputs("review", payload={"text": "x" * 5000})
+
+        assert len(posts) == 1
+        assert len(posts[0][1]['json']['text']) == 4096
+        assert posts[0][1]['json']['text'].startswith('{"text": "')
+
+    @pytest.mark.parametrize(
+        "bot_token,chat_id,missing_key",
+        [
+            ('', 'chat', 'telegram_bot_token'),
+            ('token', '', 'telegram_chat_id'),
+        ],
+    )
+    def test_telegram_channel_reports_missing_configuration(
+        self, monkeypatch, bot_token, chat_id, missing_key
+    ):
+        get_settings().set('PUSH_OUTPUTS.ENABLE', True)
+        get_settings().set('PUSH_OUTPUTS.CHANNELS', ['telegram'])
+        get_settings().set('PUSH_OUTPUTS.TELEGRAM_BOT_TOKEN', bot_token)
+        get_settings().set('PUSH_OUTPUTS.TELEGRAM_CHAT_ID', chat_id)
+        logger = MagicMock()
+        monkeypatch.setattr(utils, 'get_logger', lambda: logger)
+        posts = []
+        monkeypatch.setattr(utils.requests, 'post', lambda *args, **kwargs: posts.append(args))
+
+        push_outputs("review", payload={"a": 1}, markdown="hi")
+
+        assert posts == []
+        logger.warning.assert_called_once()
+        warning = logger.warning.call_args.args[0]
+        assert missing_key in warning
+        if bot_token:
+            assert bot_token not in warning
+        if chat_id:
+            assert chat_id not in warning
+
     def test_repo_settings_cannot_enable_push_outputs(self, monkeypatch):
         """A repo's .pr_agent.toml must not be able to enable push_outputs or set its sink URLs;
         that would allow SSRF / exfiltration of review data to an arbitrary host on a shared server."""
@@ -80,7 +153,8 @@ class TestPushOutputs:
 
         get_settings().unset("push_outputs")
         get_settings().set("push_outputs", {"enable": False, "channels": [],
-                                            "webhook_url": "", "slack_webhook_url": ""})
+                                            "webhook_url": "", "slack_webhook_url": "",
+                                            "telegram_bot_token": "", "telegram_chat_id": ""})
         get_settings().config.use_repo_settings_file = True
 
         repo_toml = (b'[push_outputs]\nenable = true\nchannels = ["webhook"]\n'

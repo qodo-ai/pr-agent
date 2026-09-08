@@ -1743,7 +1743,8 @@ def push_outputs(message_type: str, payload: dict | None = None, markdown: str |
 
     Controlled by the [push_outputs] config section (disabled by default). Supported channels:
     "stdout" (one JSON line), "file" (append JSONL), "webhook" (POST the generic record),
-    "slack" (POST {"text": ...} to a Slack Incoming Webhook). Non-fatal: never raises.
+    "slack" (POST {"text": ...} to a Slack Incoming Webhook), and "telegram"
+    (sendMessage to a configured chat). Non-fatal: never raises.
     """
     try:
         cfg = get_settings().get('push_outputs', {}) or {}
@@ -1786,6 +1787,36 @@ def push_outputs(message_type: str, payload: dict | None = None, markdown: str |
             if slack_webhook_url:
                 text = markdown if markdown is not None else json.dumps(payload or {}, ensure_ascii=False)
                 requests.post(slack_webhook_url, json={"text": text}, timeout=5, allow_redirects=False)
+
+        # The Telegram host is intentionally fixed. Unlike a generic webhook, the bot token
+        # belongs in the URL path and sendMessage requires the destination chat in its body.
+        if "telegram" in channels:
+            telegram_bot_token = str(cfg.get('telegram_bot_token') or '').strip()
+            telegram_chat_id = str(cfg.get('telegram_chat_id') or '').strip()
+            missing_keys = [
+                key
+                for key, value in (
+                    ('telegram_bot_token', telegram_bot_token),
+                    ('telegram_chat_id', telegram_chat_id),
+                )
+                if not value
+            ]
+            if missing_keys:
+                get_logger().warning(
+                    f"push_outputs: telegram channel missing {', '.join(missing_keys)}"
+                )
+            else:
+                text = markdown if markdown is not None else json.dumps(payload or {}, ensure_ascii=False)
+                telegram_url = (
+                    "https://api.telegram.org/bot"
+                    f"{quote(telegram_bot_token, safe=':')}/sendMessage"
+                )
+                requests.post(
+                    telegram_url,
+                    json={"chat_id": telegram_chat_id, "text": text[:4096]},
+                    timeout=5,
+                    allow_redirects=False,
+                )
     except Exception as e:
         # Log only the exception type: requests errors embed the (secret-bearing) URL in their text.
         get_logger().warning(f"push_outputs failed: {type(e).__name__}")
