@@ -375,7 +375,7 @@ class PRDescription:
                     required_fields.append('changes_summary')
                 valid_file_descriptions = (
                     isinstance(file_descriptions, list) and file_descriptions and
-                    all(isinstance(file_description, dict) and
+                    any(isinstance(file_description, dict) and
                         all(isinstance(file_description.get(field), str) and file_description[field].strip()
                             for field in required_fields)
                         for file_description in file_descriptions)

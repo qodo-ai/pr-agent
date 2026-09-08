@@ -671,6 +671,45 @@ description: |
         assert obj.description_failed_files == ["src/file2.py"]
 
     @pytest.mark.asyncio
+    async def test_large_pr_keeps_complete_records_from_mixed_chunk(self, monkeypatch):
+        obj = _make_large_pr_instance()
+        monkeypatch.setattr(get_settings().pr_description, "async_ai_calls", True)
+
+        async def mock_get_prediction(model, patches_diff, prompt="pr_description_prompt"):
+            if prompt == "pr_description_only_description_prompts":
+                return _header_prediction()
+            return """pr_files:
+- filename: src/file1.py
+  changes_title: Describe src/file1.py
+  changes_summary: File summary
+  label: enhancement
+- filename: src/file2.py
+  changes_title: Missing summary
+  label: enhancement"""
+
+        obj._get_prediction = AsyncMock(side_effect=mock_get_prediction)
+        with patch("pr_agent.tools.pr_description.get_pr_diff", return_value=""), patch(
+            "pr_agent.tools.pr_description.get_pr_diff_multiple_patchs",
+            return_value=(
+                [["diff --git a/src/file1.py b/src/file1.py\n... file1 ...",
+                  "diff --git a/src/file2.py b/src/file2.py\n... file2 ..."]],
+                [20],
+                [],
+                [],
+                {},
+                [["src/file1.py", "src/file2.py"]],
+            ),
+        ):
+            await obj._prepare_prediction("gpt-4o")
+
+        parsed = load_yaml(obj.prediction, keys_fix_yaml=obj.keys_fix)
+        assert [file["filename"].strip() for file in parsed["pr_files"]] == ["src/file1.py", "src/file2.py"]
+        obj._prepare_data()
+        assert obj._prepare_file_labels() == {
+            "enhancement": [("src/file1.py", "Describe src/file1.py", "File summary")]
+        }
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("async_calls", [True, False])
     async def test_large_pr_all_failed_chunks_raise_for_model_fallback(self, monkeypatch, async_calls):
         obj = _make_large_pr_instance()
