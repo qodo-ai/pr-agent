@@ -144,10 +144,11 @@ Providers without repository file fetching log a warning and skip this context.
     - Write clearly and concisely
     - Include brief code examples when helpful with before/after patterns
     - Focus on project-specific guidelines that will result in relevant suggestions you actually want to get
-    - Keep each file relatively short, under 800 lines, since:
+    - Keep each file short and focused, since:
         - AI models may not process effectively very long documents
         - Long files tend to contain generic guidelines already known to AI
-        - Maximum multiple file accumulated content is limited to 2000 lines.
+        - `config.repo_context_max_lines` limits the total rendered repository context, including wrapper and
+          truncation lines.
     - Use pattern-based structure rather than simple bullet points for better clarity
 
 ???- tip "Example of a best practices file"
