@@ -1058,3 +1058,27 @@ class TestGetMaxTokens:
         claude_thinking = {m for m in CLAUDE_EXTENDED_THINKING_MODELS if "claude" in m}
         claude_no_temp = {m for m in NO_SUPPORT_TEMPERATURE_MODELS if "claude" in m}
         assert claude_thinking.isdisjoint(claude_no_temp)
+
+
+class TestNoLiteLLMDuplicates:
+
+    def test_static_max_tokens_has_no_exact_litellm_duplicates(self):
+        """Hardcoded MAX_TOKENS entries must not just mirror LiteLLM.
+
+        get_max_tokens() already falls back to litellm.get_model_info(), so a
+        static entry that reports the identical value is dead duplication.
+        Generator-expanded Claude families are excluded: they also drive the
+        no-temperature / extended-thinking registries, and their 1M-context
+        handling is a separate, deliberate judgement (issue #3196).
+        """
+        generated = set(_generate_claude_registries()[0])
+        static = {k: v for k, v in MAX_TOKENS.items() if k not in generated}
+        dups = []
+        for model, ours in static.items():
+            try:
+                theirs = int(litellm.get_model_info(model).get("max_input_tokens"))
+            except Exception:
+                continue
+            if theirs == ours:
+                dups.append((model, ours))
+        assert not dups, f"MAX_TOKENS entries that exactly duplicate LiteLLM: {sorted(dups)}"
