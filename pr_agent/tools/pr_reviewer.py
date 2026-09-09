@@ -731,6 +731,9 @@ class PRReviewer:
         allow_resolution = (
             bool(self.prediction)
             and not bool(getattr(self.incremental, "is_incremental", False))
+            # A merged result with failed chunks is still partial, even when chunking left
+            # no additional token-budget files to report.
+            and not bool(self.review_failed_chunk_count)
             and not bool(self.remaining_files_list)
             and parsed.valid
             and current_findings is not None
