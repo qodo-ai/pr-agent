@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from github import AppAuthentication, Auth, Github, GithubException, GithubIntegration
+from github import Auth, Github, GithubException, GithubIntegration
 from github.Issue import Issue
 from retry.api import retry_call
 from starlette_context import context
@@ -463,8 +463,10 @@ class GithubProvider(GitProvider):
             return cached
         try:
             integration = GithubIntegration(
-                integration_id=str(get_settings().github.app_id),
-                private_key=get_settings().github.private_key,
+                auth=Auth.AppAuth(
+                    app_id=str(get_settings().github.app_id),
+                    private_key=get_settings().github.private_key,
+                ),
                 base_url=self.base_url,
             )
             slug = (getattr(integration.get_app(), "slug", "") or "").strip()
@@ -1383,8 +1385,10 @@ class GithubProvider(GitProvider):
                 raise ValueError("GitHub app ID and private key are required when using GitHub app deployment") from e
             if not self.installation_id:
                 raise ValueError("GitHub app installation ID is required when using GitHub app deployment")
-            auth = AppAuthentication(app_id=app_id, private_key=private_key,
-                                     installation_id=self.installation_id)
+            auth = Auth.AppInstallationAuth(
+                Auth.AppAuth(app_id=app_id, private_key=private_key),
+                installation_id=self.installation_id,
+            )
             self.auth = auth
         elif self.deployment_type == 'user':
             try:
