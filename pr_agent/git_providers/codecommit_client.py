@@ -277,3 +277,81 @@ class CodeCommitClient:
             raise ValueError("Boto3 client error calling post_comment_for_pull_request") from e
         except Exception as e:
             raise ValueError("Error calling post_comment_for_pull_request") from e
+
+    def get_comments_for_pull_request(self, pr_number: int) -> list[dict]:
+        """
+        Get comments for a pull request in CodeCommit.
+
+        Args:
+        - pr_number: number of the pull request
+
+        Returns:
+        - List of raw comment dicts
+
+        Boto3 Documentation:
+        - aws codecommit get_comments_for_pull_request
+        - https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/codecommit/client/get_comments_for_pull_request.html
+        """
+        if self.boto_client is None:
+            self._connect_boto_client()
+
+        comments = []
+        try:
+            try:
+                paginator = self.boto_client.get_paginator("get_comments_for_pull_request")
+            except Exception:
+                paginator = None
+
+            if paginator is not None:
+                for page in paginator.paginate(pullRequestId=str(pr_number)):
+                    for data in page.get("commentsForPullRequestData", []):
+                        comments.extend(data.get("comments", []))
+            else:
+                next_token = None
+                while True:
+                    kwargs = {"pullRequestId": str(pr_number)}
+                    if next_token:
+                        kwargs["nextToken"] = next_token
+                    response = self.boto_client.get_comments_for_pull_request(**kwargs)
+                    for data in response.get("commentsForPullRequestData", []):
+                        comments.extend(data.get("comments", []))
+                    next_token = response.get("nextToken")
+                    if not next_token:
+                        break
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == 'PullRequestDoesNotExistException':
+                raise ValueError(f"CodeCommit cannot retrieve comments: PR number does not exist: {pr_number}") from e
+            raise ValueError(f"CodeCommit cannot retrieve comments for PR: {pr_number}: boto client error") from e
+        except Exception as e:
+            raise ValueError(f"CodeCommit cannot retrieve comments for PR: {pr_number}") from e
+
+        return comments
+
+    def update_comment(self, comment_id: str, content: str):
+        """
+        Update the content of an existing comment in CodeCommit.
+
+        Args:
+        - comment_id: The ID of the comment to update
+        - content: The new content of the comment
+
+        Returns:
+        - None
+
+        Boto3 Documentation:
+        - aws codecommit update_comment
+        - https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/codecommit/client/update_comment.html
+        """
+        if self.boto_client is None:
+            self._connect_boto_client()
+
+        try:
+            self.boto_client.update_comment(commentId=str(comment_id), content=content)
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == 'CommentDoesNotExistException':
+                raise ValueError(f"Comment does not exist: {comment_id}") from e
+            if e.response["Error"]["Code"] == 'CommentContentRequiredException':
+                raise ValueError("Comment content is required") from e
+            raise ValueError("Boto3 client error calling update_comment") from e
+        except Exception as e:
+            raise ValueError("Error calling update_comment") from e

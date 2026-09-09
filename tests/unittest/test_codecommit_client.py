@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from pr_agent.git_providers.codecommit_client import CodeCommitClient
 
@@ -164,3 +164,85 @@ class TestCodeCommitProvider:
             ("repo-one", "source-one", "destination-one"),
             ("repo-two", "source-two", "destination-two"),
         ]
+
+    def test_get_comments_for_pull_request_with_paginator(self):
+        api = CodeCommitClient()
+        api.boto_client = MagicMock()
+
+        api.boto_client.get_paginator.return_value.paginate.return_value = [
+            {
+                "commentsForPullRequestData": [
+                    {
+                        "comments": [
+                            {"commentId": "c1", "content": "first comment", "deleted": False},
+                            {"commentId": "c2", "content": "second comment", "deleted": True},
+                        ]
+                    }
+                ]
+            },
+            {
+                "commentsForPullRequestData": [
+                    {
+                        "comments": [
+                            {"commentId": "c3", "content": "third comment", "deleted": False},
+                        ]
+                    }
+                ]
+            },
+        ]
+
+        comments = api.get_comments_for_pull_request(321)
+
+        api.boto_client.get_paginator.assert_called_once_with("get_comments_for_pull_request")
+        assert len(comments) == 3
+        assert comments[0]["commentId"] == "c1"
+        assert comments[1]["commentId"] == "c2"
+        assert comments[2]["commentId"] == "c3"
+
+    def test_get_comments_for_pull_request_manual_pagination(self):
+        api = CodeCommitClient()
+        api.boto_client = MagicMock()
+        api.boto_client.get_paginator.side_effect = Exception("No paginator")
+
+        api.boto_client.get_comments_for_pull_request.side_effect = [
+            {
+                "commentsForPullRequestData": [
+                    {
+                        "comments": [
+                            {"commentId": "c1", "content": "first comment"},
+                        ]
+                    }
+                ],
+                "nextToken": "token123",
+            },
+            {
+                "commentsForPullRequestData": [
+                    {
+                        "comments": [
+                            {"commentId": "c2", "content": "second comment"},
+                        ]
+                    }
+                ],
+            },
+        ]
+
+        comments = api.get_comments_for_pull_request(321)
+
+        assert len(comments) == 2
+        assert comments[0]["commentId"] == "c1"
+        assert comments[1]["commentId"] == "c2"
+        assert api.boto_client.get_comments_for_pull_request.call_args_list == [
+            call(pullRequestId="321"),
+            call(pullRequestId="321", nextToken="token123"),
+        ]
+
+    def test_update_comment(self):
+        api = CodeCommitClient()
+        api.boto_client = MagicMock()
+
+        api.update_comment("comment-123", "updated content")
+
+        api.boto_client.update_comment.assert_called_once_with(
+            commentId="comment-123",
+            content="updated content",
+        )

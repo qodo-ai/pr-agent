@@ -3,7 +3,14 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 
 from pr_agent.algo.types import EDIT_TYPE
-from pr_agent.git_providers.codecommit_provider import CodeCommitFile, CodeCommitProvider, PullRequestCCMimic
+from pr_agent.algo.utils import PRReviewIdentity, add_pr_review_identity, comment_matches_identity
+from pr_agent.git_providers.codecommit_provider import (
+    CodeCommitComment,
+    CodeCommitFile,
+    CodeCommitProvider,
+    PullRequestCCMimic,
+)
+from pr_agent.git_providers.git_provider import GitProvider
 
 
 class TestCodeCommitFile:
@@ -454,3 +461,155 @@ class TestCodeCommitProvider:
         input = "## PR Feedback\n<details><summary>Code feedback:</summary>\nfile foo\n</summary>\n"
         expect = "## PR Feedback\nCode feedback:\nfile foo\n\n"
         assert CodeCommitProvider._remove_markdown_html(input) == expect
+
+    def test_get_issue_comments_maps_fields_and_filters_deleted(self):
+        provider = object.__new__(CodeCommitProvider)
+        provider.pr_num = 123
+        provider.codecommit_client = MagicMock()
+        provider.codecommit_client.get_comments_for_pull_request.return_value = [
+            {"commentId": "c1", "content": "hello", "deleted": False},
+            {"commentId": "c2", "content": "deleted comment", "deleted": True},
+            {"commentId": "c3", "content": "world"},
+        ]
+
+        comments = provider.get_issue_comments()
+
+        assert len(comments) == 2
+        assert comments[0].id == "c1"
+        assert comments[0].body == "hello"
+        assert comments[0].deleted is False
+        assert comments[1].id == "c3"
+        assert comments[1].body == "world"
+        assert comments[1].deleted is False
+        provider.codecommit_client.get_comments_for_pull_request.assert_called_once_with(123)
+
+    def test_get_issue_comments_swallows_client_exceptions(self):
+        provider = object.__new__(CodeCommitProvider)
+        provider.pr_num = 123
+        provider.codecommit_client = MagicMock()
+        provider.codecommit_client.get_comments_for_pull_request.side_effect = ValueError("AWS request failed")
+
+        comments = provider.get_issue_comments()
+
+        assert comments == []
+
+    def test_edit_comment_normalises_body_and_calls_client(self):
+        provider = object.__new__(CodeCommitProvider)
+        provider.codecommit_client = MagicMock()
+        comment = CodeCommitComment({"commentId": "comm-42", "content": "old"})
+
+        result = provider.edit_comment(
+            comment,
+            "## Review\n<details><summary>Summary</summary>\nline1\nline2\n</details>",
+        )
+
+        assert result is True
+        provider.codecommit_client.update_comment.assert_called_once_with(
+            "comm-42",
+            "## Review\n\nSummary\n\nline1\n\nline2\n\n",
+        )
+
+    def test_edit_comment_accepts_dict_or_scalar_id(self):
+        provider = object.__new__(CodeCommitProvider)
+        provider.codecommit_client = MagicMock()
+
+        assert provider.edit_comment({"commentId": "dict-1"}, "body") is True
+        provider.codecommit_client.update_comment.assert_called_with("dict-1", "body")
+
+        assert provider.edit_comment({"id": "dict-2"}, "body") is True
+        provider.codecommit_client.update_comment.assert_called_with("dict-2", "body")
+
+        assert provider.edit_comment("scalar-3", "body") is True
+        provider.codecommit_client.update_comment.assert_called_with("scalar-3", "body")
+
+    def test_edit_comment_returns_false_on_client_error(self):
+        provider = object.__new__(CodeCommitProvider)
+        provider.codecommit_client = MagicMock()
+        provider.codecommit_client.update_comment.side_effect = ValueError("AWS update failed")
+
+        result = provider.edit_comment("comm-42", "updated content")
+
+        assert result is False
+
+    def test_identity_marker_survives_codecommit_body_normalisation(self):
+        """supports_review_comment_identity() is only honest if the marker round-trips.
+
+        CodeCommit rewrites every body it publishes. If normalisation ate the hidden
+        identity marker, the next run could not match it and persistence would silently
+        degrade back to creating comments.
+        """
+        marker = PRReviewIdentity.REGULAR.value
+        body = add_pr_review_identity("## PR Review\n\nSome findings.", marker)
+
+        normalised = CodeCommitProvider._remove_markdown_html(body)
+        normalised = CodeCommitProvider._add_additional_newlines(normalised)
+
+        assert marker in normalised
+        assert comment_matches_identity(normalised, marker)
+
+    def test_publish_persistent_comment_routes_to_the_persistent_path(self):
+        assert (
+            CodeCommitProvider.publish_persistent_comment
+            is not GitProvider.publish_persistent_comment
+        )
+
+    def test_publish_persistent_comment_updates_existing_review_regression_3157(self):
+        """Regression test for upstream issue #3157:
+
+        A second non-incremental review on CodeCommit should update the existing persistent
+        review comment rather than creating an additional comment (creates=1, updates=1,
+        instead of creates=2, updates=0).
+        """
+        provider = object.__new__(CodeCommitProvider)
+        provider.repo_name = "test-repo"
+        provider.pr_num = 100
+        provider.pr = PullRequestCCMimic("Test PR", [])
+        provider.pr.source_commit = "src-sha"
+        provider.pr.destination_commit = "dest-sha"
+
+        comments_store = []
+        counts = {"creates": 0, "updates": 0}
+
+        def fake_publish_comment(repo_name, pr_number, destination_commit, source_commit, comment, **kwargs):
+            counts["creates"] += 1
+            cid = f"comment-{len(comments_store) + 1}"
+            comments_store.append({"commentId": cid, "content": comment, "deleted": False})
+
+        def fake_get_comments(pr_number):
+            return list(comments_store)
+
+        def fake_update_comment(comment_id, content):
+            counts["updates"] += 1
+            for c in comments_store:
+                if c["commentId"] == comment_id:
+                    c["content"] = content
+                    return
+            raise ValueError(f"Comment {comment_id} not found")
+
+        fake_client = MagicMock()
+        fake_client.publish_comment.side_effect = fake_publish_comment
+        fake_client.get_comments_for_pull_request.side_effect = fake_get_comments
+        fake_client.update_comment.side_effect = fake_update_comment
+        provider.codecommit_client = fake_client
+
+        initial_header = "## PR Review"
+        first_review = "## PR Review\n\nFirst analysis."
+
+        # First run: no existing review comment -> 1 create, 0 updates
+        provider.publish_persistent_comment(
+            first_review,
+            initial_header=initial_header,
+            final_update_message=False,
+        )
+        assert counts["creates"] == 1
+        assert counts["updates"] == 0
+
+        # Second run: existing review comment present -> creates stays 1, updates becomes 1
+        second_review = "## PR Review\n\nUpdated analysis."
+        provider.publish_persistent_comment(
+            second_review,
+            initial_header=initial_header,
+            final_update_message=False,
+        )
+        assert counts["creates"] == 1
+        assert counts["updates"] == 1

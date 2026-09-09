@@ -57,6 +57,15 @@ class CodeCommitFile:
         self.destination_commit = destination_commit
 
 
+class CodeCommitComment:
+    """A CodeCommit pull request comment exposed with the `.body` shape GitProvider expects."""
+
+    def __init__(self, json: dict):
+        self.id = json.get("commentId", "")
+        self.body = json.get("content", "") or ""
+        self.deleted = bool(json.get("deleted", False))
+
+
 class CodeCommitProvider(GitProvider):
     """
     This class implements the GitProvider interface for AWS CodeCommit repositories.
@@ -79,7 +88,6 @@ class CodeCommitProvider(GitProvider):
 
     def is_supported(self, capability: str) -> bool:
         if capability in [
-            "get_issue_comments",
             "create_inline_comment",
             "publish_inline_comments",
             "get_labels",
@@ -325,8 +333,72 @@ class CodeCommitProvider(GitProvider):
     def get_user_id(self):
         return -1  # not implemented yet
 
-    def get_issue_comments(self):
-        raise NotImplementedError("CodeCommit provider does not support issue comments yet")
+    def get_issue_comments(self) -> list[CodeCommitComment]:
+        try:
+            pr_num = getattr(self, "pr_num", None)
+            raw_comments = self.codecommit_client.get_comments_for_pull_request(pr_num)
+            comments = []
+            for raw in raw_comments:
+                comment = CodeCommitComment(raw)
+                if not comment.deleted:
+                    comments.append(comment)
+            return comments
+        except Exception as e:
+            pr_num = getattr(self, "pr_num", None)
+            get_logger().warning(f"Failed to get issue comments for PR {pr_num}: {e}")
+            return []
+
+    def edit_comment(self, comment, body: str) -> bool:
+        try:
+            comment_id = getattr(comment, "id", None)
+            if comment_id is None and isinstance(comment, dict):
+                comment_id = comment.get("id") or comment.get("commentId")
+            if comment_id is None:
+                comment_id = comment
+
+            body = CodeCommitProvider._remove_markdown_html(body)
+            body = CodeCommitProvider._add_additional_newlines(body)
+
+            self.codecommit_client.update_comment(str(comment_id), body)
+            return True
+        except Exception as e:
+            get_logger().warning(f"Failed to edit comment {comment}: {e}")
+            return False
+
+    def supports_review_comment_identity(self) -> bool:
+        """Identity markers survive the CodeCommit body normalisation.
+
+        ``_remove_markdown_html`` only strips ``details``/``summary`` tags, and
+        ``_add_additional_newlines`` does not touch a marker that already sits on its
+        own blank-line-separated line, so a marker written on publish is still there
+        to be matched on the next run.
+        """
+        return True
+
+    def publish_persistent_comment(self, pr_comment: str,
+                                   initial_header: str,
+                                   update_header: bool = True,
+                                   name='review',
+                                   final_update_message=True,
+                                   as_thread: bool = False,
+                                   identity_marker: str | None = None,
+                                   legacy_initial_header: str | None = None):
+        """Update the previous persistent comment instead of creating another one.
+
+        The base implementation creates a new comment on every run. CodeCommit can
+        list pull request comments and update one by id, so route through the shared
+        persistent path now that ``get_issue_comments`` and ``edit_comment`` exist.
+        """
+        return self.publish_persistent_comment_full(
+            pr_comment,
+            initial_header,
+            update_header,
+            name,
+            final_update_message,
+            as_thread=as_thread,
+            identity_marker=identity_marker,
+            legacy_initial_header=legacy_initial_header,
+        )
 
     def get_repo_settings(self):
         # a local ".pr_agent.toml" settings file is optional

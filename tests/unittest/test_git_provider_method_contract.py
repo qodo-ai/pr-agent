@@ -234,7 +234,7 @@ METHOD_CONTRACTS = (
         check_supported=_is_comment_sequence,
         tiers=_tiers(
             supported=("github", "gitlab", "gitea", "gerrit", "azure-devops", "bitbucket-server", "bitbucket"),
-            not_implemented=("codecommit", "local"),
+            not_implemented=("local",),
         ),
         # Implementations narrow the base `Iterable` (a paginated list, a list of SDK objects),
         # so the return annotation is checked by behaviour rather than by equality.
