@@ -5,12 +5,12 @@ PR-Agent can run as an [A2A](https://a2a-protocol.org/) 1.0 *solution agent* for
 standard A2A surface (agent card + JSON-RPC) plus a health probe. It is **not** a fork or a
 separate project — the server is PR-Agent code under [`pr_agent/mosaico/`](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/mosaico/server.py),
 ships in every release wheel, and ships as its own Docker image (`<version>-mosaico_agent`)
-starting at `v0.37.0`. The server is unbiased about the git provider: every request carries
+starting at `v0.36.0`. The server is unbiased about the git provider: every request carries
 either a PR URL or a raw diff, and the agent answers from that input alone.
 
 ### What the mode is
 
-The A2A server exposes four endpoints:
+The A2A server exposes three endpoints:
 
 | Path | Method | Purpose |
 | --- | --- | --- |
