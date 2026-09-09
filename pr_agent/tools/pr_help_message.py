@@ -17,19 +17,6 @@ from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.log import get_logger
 
 
-def extract_header(snippet):
-    res = ''
-    lines = snippet.split('===Snippet content===')[0].split('\n')
-    highest_header = ''
-    highest_level = float('inf')
-    for line in lines[::-1]:
-        line = line.strip()
-        if line.startswith('Header '):
-            highest_header = line.split(': ')[1]
-    if highest_header:
-        res = f"#{highest_header.lower().replace(' ', '-')}"
-    return res
-
 class PRHelpMessage:
     def __init__(self, pr_url: str, args=None, ai_handler: partial[BaseAiHandler,] = LiteLLMAIHandler, return_as_string=False):
         self.git_provider = get_git_provider_with_context(pr_url)
@@ -266,26 +253,6 @@ class PRHelpMessage:
         except Exception as e:
             get_logger().exception(f"Error while running PRHelpMessage: {e}")
         return ""
-
-    async def prepare_relevant_snippets(self, sim_results):
-        # Get relevant snippets
-        relevant_snippets_full = []
-        relevant_pages_full = []
-        relevant_snippets_full_header = []
-        th = 0.75
-        for s in sim_results:
-            page = s[0].metadata['source']
-            content = s[0].page_content
-            score = s[1]
-            relevant_snippets_full.append(content)
-            relevant_snippets_full_header.append(extract_header(content))
-            relevant_pages_full.append(page)
-        # build the snippets string
-        relevant_snippets_str = ""
-        for i, s in enumerate(relevant_snippets_full):
-            relevant_snippets_str += f"Snippet {i+1}:\n\n{s}\n\n"
-            relevant_snippets_str += "-------------------\n\n"
-        return relevant_pages_full, relevant_snippets_full_header, relevant_snippets_str
 
 
 def generate_bbdc_table(column_arr_1, column_arr_2):

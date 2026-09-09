@@ -787,15 +787,6 @@ class PRCodeSuggestions:
             new_comment = git_provider.publish_comment(pr_comment, **({"as_thread": True} if as_thread else {}))
         return new_comment
 
-    def extract_link(self, s):
-        r = re.compile(r"<!--.*?-->")
-        match = r.search(s)
-
-        up_to_commit_txt = ""
-        if match:
-            up_to_commit_txt = f" up to commit {match.group(0)[4:-3].strip()}"
-        return up_to_commit_txt
-
     async def _prepare_prediction(self, model: str) -> dict:
         self.patches_diff = get_pr_diff(self.git_provider,
                                         self.token_handler,
