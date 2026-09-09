@@ -191,6 +191,10 @@ class GitProvider(ABC):
         support, so tools render commands as text instead."""
         return False
 
+    def supports_pr_chat(self) -> bool:
+        """Whether this provider is compatible with the linked PR-Agent browser-extension chat experience."""
+        return False
+
     def supports_markdown_tables(self) -> bool:
         """Whether comments render pipe-table markdown.
 
