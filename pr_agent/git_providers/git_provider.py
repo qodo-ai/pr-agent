@@ -195,6 +195,10 @@ class GitProvider(ABC):
         """Whether this provider is compatible with the linked PR-Agent browser-extension chat experience."""
         return False
 
+    def supports_html_lists(self) -> bool:
+        """Whether comment bodies render HTML list markup (`<li>`) rather than needing plain-text bullets."""
+        return False
+
     def supports_markdown_tables(self) -> bool:
         """Whether comments render pipe-table markdown.
 

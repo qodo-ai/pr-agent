@@ -34,7 +34,7 @@ from pr_agent.algo.utils import (
     show_run_details,
 )
 from pr_agent.config_loader import get_settings
-from pr_agent.git_providers import GithubProvider, get_git_provider_with_context
+from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.git_providers.git_provider import get_main_pr_language
 from pr_agent.log import get_logger
 from pr_agent.servers.help import HelpMessage
@@ -160,7 +160,7 @@ class PRDescription:
                 pr_body += HelpMessage.get_describe_usage_guide()
                 pr_body += "\n</details>\n"
             elif get_settings().pr_description.enable_help_comment and self.git_provider.is_supported("gfm_markdown"):
-                if isinstance(self.git_provider, GithubProvider):
+                if self.git_provider.supports_html_lists():
                     pr_body += ('\n\n___\n\n> <details> <summary>  Need help?</summary><li>Type <code>/help how to ...</code> '
                                 'in the comments thread for any questions about PR-Agent usage.</li><li>Check out the '
                                 '<a href="https://qodo-merge-docs.qodo.ai/usage-guide/">documentation</a> '
