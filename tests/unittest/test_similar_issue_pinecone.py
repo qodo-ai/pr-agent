@@ -36,6 +36,7 @@ def _make_tool(pc):
 
 
 def _stub_embeddings(monkeypatch):
+    pytest.importorskip("pandas")  # the indexing path imports pandas from the similar-issue group
     embedding = [0.5, 0.5]
     monkeypatch.setattr(psi, "get_settings", lambda: SettingsStub)
     monkeypatch.setattr(psi, "get_max_tokens", lambda model: 8192)
