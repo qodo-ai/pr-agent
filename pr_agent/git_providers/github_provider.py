@@ -694,7 +694,7 @@ class GithubProvider(GitProvider):
                 get_logger().info(
                     f"Persistent inline comments: all {skipped} suggestion(s) "
                     f"already posted; nothing to publish")
-                return
+                return True
             comments = deduped
         else:
             comments = [
@@ -713,6 +713,7 @@ class GithubProvider(GitProvider):
                 for body_fp, code_fp in pending_fingerprints:
                     store.add(body_fp)
                     store.add(code_fp)
+            return True
         except Exception as e:
             get_logger().info("Initially failed to publish inline comments as committable")
 
@@ -722,7 +723,8 @@ class GithubProvider(GitProvider):
                 raise e # will end up with publishing the comments one by one
 
             try:
-                self._publish_inline_comments_fallback_with_verification(comments)
+                published_count = self._publish_inline_comments_fallback_with_verification(comments)
+                return bool(published_count)
             except Exception as e:
                 get_logger().error(f"Failed to publish inline code comments fallback, error: {e}")
                 raise
@@ -887,11 +889,13 @@ class GithubProvider(GitProvider):
         then publish all the remaining valid comments in a single review.
         For invalid comments, also try removing the suggestion part and posting the comment just on the first line.
         """
+        published_count = 0
         verified_comments, invalid_comments = self._verify_code_comments(comments)
 
         # publish as a group the verified comments
         if verified_comments:
             self.pr.create_review(commit=self.last_commit_id, comments=verified_comments)
+            published_count += len(verified_comments)
 
         # try to publish one by one the invalid comments as a one-line code comment
         if invalid_comments and get_settings().github.try_fix_invalid_inline_comments:
@@ -899,9 +903,10 @@ class GithubProvider(GitProvider):
             fixed_comments_as_one_liner = self._try_fix_invalid_inline_comments(invalid_comments_list)
             for comment in fixed_comments_as_one_liner:
                 try:
-                    self.publish_inline_comments([comment], disable_fallback=True)
-                    get_logger().info(f"Published invalid comment as a single line comment: {comment}")
-                except:
+                    if self.publish_inline_comments([comment], disable_fallback=True):
+                        published_count += 1
+                        get_logger().info(f"Published invalid comment as a single line comment: {comment}")
+                except Exception:
                     get_logger().error(f"Failed to publish invalid comment as a single line comment: {comment}")
 
             dropped_count = len(invalid_comments) - len(fixed_comments_as_one_liner)
@@ -920,6 +925,7 @@ class GithubProvider(GitProvider):
                 f"Dropped {len(invalid_comments)} invalid comments "
                 f"(try_fix_invalid_inline_comments is off). Paths: {dropped_paths}"
             )
+        return published_count
 
     def _verify_code_comment(self, comment: dict):
         is_verified = False
@@ -1029,8 +1035,7 @@ class GithubProvider(GitProvider):
             post_parameters_list.append(post_parameters)
 
         try:
-            self.publish_inline_comments(post_parameters_list)
-            return True
+            return bool(self.publish_inline_comments(post_parameters_list))
         except Exception as e:
             get_logger().error(f"Failed to publish code suggestion, error: {e}")
             return False
