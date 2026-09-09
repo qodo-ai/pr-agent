@@ -976,23 +976,6 @@ class AzureDevopsProvider(GitProvider):
             self.temp_comments.append(created_comment)
         return created_comment
 
-    def publish_persistent_comment(self, pr_comment: str,
-                                   initial_header: str,
-                                   update_header: bool = True,
-                                   name='review',
-                                   final_update_message=True,
-                                   identity_marker: str | None = None,
-                                   legacy_initial_header: str | None = None):
-        return self.publish_persistent_comment_full(
-            pr_comment,
-            initial_header,
-            update_header,
-            name,
-            final_update_message,
-            identity_marker=identity_marker,
-            legacy_initial_header=legacy_initial_header,
-        )
-
     def supports_review_comment_identity(self) -> bool:
         return True
 
