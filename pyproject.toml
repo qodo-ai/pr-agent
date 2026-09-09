@@ -148,7 +148,6 @@ lint.select = [
   "F",    # Pyflakes
   "B",    # flake8-bugbear
   "I",    # isort
-  "PD"    # pandas
 ]
 
 lint.fixable = [
