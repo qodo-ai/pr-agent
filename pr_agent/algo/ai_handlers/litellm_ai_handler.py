@@ -953,12 +953,15 @@ class LiteLLMAIHandler(BaseAiHandler):
                                 kwargs["allowed_openai_params"] = ["reasoning_effort"]
 
                 # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
-                if self._is_claude_adaptive_thinking_model(model) and get_settings().config.get(
-                        "enable_claude_adaptive_thinking", False):
+                adaptive_thinking_enabled = get_settings().config.get(
+                    "enable_claude_adaptive_thinking", False)
+                extended_thinking_enabled = get_settings().config.get(
+                    "enable_claude_extended_thinking", False)
+                if self._is_claude_adaptive_thinking_model(model) and adaptive_thinking_enabled:
                     kwargs = self._configure_claude_adaptive_thinking(model, kwargs)
                 elif (
                     model in self.claude_extended_thinking_models
-                    and get_settings().config.get("enable_claude_extended_thinking", False)
+                    and extended_thinking_enabled
                 ):
                     if self._is_claude_adaptive_thinking_model(model):
                         get_logger().warning(
@@ -967,6 +970,15 @@ class LiteLLMAIHandler(BaseAiHandler):
                         )
                     else:
                         kwargs = self._configure_claude_extended_thinking(model, kwargs)
+                elif adaptive_thinking_enabled or extended_thinking_enabled:
+                    get_logger().warning(
+                        f"No thinking configuration applied for model {model}: adaptive thinking "
+                        f"requires a recognized claude 5 model name in the id and extended "
+                        f"thinking requires exact membership in claude_extended_thinking_models. "
+                        f"Ids that embed no model name, such as Bedrock application inference "
+                        f"profile ARNs, never match; address the model by name with "
+                        f"litellm.model_id carrying the ARN instead."
+                    )
 
                 # Optional output token limit; 0 = unset. Without max_tokens some
                 # providers apply a low service-side default (Bedrock Converse: 4096,
