@@ -392,28 +392,6 @@ class BitbucketProvider(GitProvider):
             get_logger().exception(f"Failed to update comment, error: {e}")
             return False
 
-    def publish_persistent_comment(
-        self,
-        pr_comment: str,
-        initial_header: str,
-        update_header: bool = True,
-        name='review',
-        final_update_message=True,
-        as_thread: bool = False,
-        identity_marker: str | None = None,
-        legacy_initial_header: str | None = None,
-    ):
-        return self.publish_persistent_comment_full(
-            pr_comment,
-            initial_header,
-            update_header,
-            name,
-            final_update_message,
-            as_thread=as_thread,
-            identity_marker=identity_marker,
-            legacy_initial_header=legacy_initial_header,
-        )
-
     def publish_comment(self, pr_comment: str, is_temporary: bool = False):
         if is_temporary and not get_settings().config.publish_output_progress:
             get_logger().debug(f"Skipping publish_comment for temporary comment: {pr_comment}")

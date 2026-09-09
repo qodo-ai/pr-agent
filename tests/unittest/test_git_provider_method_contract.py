@@ -198,7 +198,7 @@ REACTION_TIERS = _tiers(supported=("github", "gitlab", "gitea"), not_implemented
 PREDICATE_CONTRACTS = (
     PredicateContract(
         name="supports_review_comment_identity",
-        evidence=("publish_persistent_comment",),
+        evidence=("edit_comment",),
         deliberate_mismatches={
             "gitea": DeliberateMismatch(
                 "Gitea forwards identity arguments but cannot safely activate identity tracking "
@@ -287,11 +287,7 @@ def _has_evidence(provider_type: type[GitProvider], contract: PredicateContract)
     for name in contract.evidence:
         member = getattr(provider_type, name, None)
         if member is not getattr(GitProvider, name, None):
-            if contract.name == "supports_review_comment_identity":
-                if "identity_marker" in inspect.signature(member).parameters:
-                    return True
-            else:
-                return True
+            return True
     return False
 
 

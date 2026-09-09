@@ -540,6 +540,16 @@ class GitProvider(ABC):
     def resolve_outdated_inline_threads(self):  # noqa: B027 - intentional no-op
         pass
 
+    def supports_comment_editing(self) -> bool:
+        """Whether this provider can actually edit an existing comment.
+
+        The base ``edit_comment`` is a no-op that returns ``None``, which
+        ``publish_persistent_comment_full`` cannot distinguish from a successful
+        edit. A provider that has not implemented it therefore cannot persist,
+        and must create a new comment instead of silently discarding the body.
+        """
+        return type(self).edit_comment is not GitProvider.edit_comment
+
     def publish_persistent_comment(self, pr_comment: str,
                                    initial_header: str,
                                    update_header: bool = True,
@@ -548,7 +558,18 @@ class GitProvider(ABC):
                                    as_thread: bool = False,
                                    identity_marker: str | None = None,
                                    legacy_initial_header: str | None = None):
-        return self.publish_comment(pr_comment, **({'as_thread': True} if as_thread else {}))
+        if not self.supports_comment_editing():
+            return self.publish_comment(pr_comment, **({'as_thread': True} if as_thread else {}))
+        return self.publish_persistent_comment_full(
+            pr_comment,
+            initial_header,
+            update_header,
+            name,
+            final_update_message,
+            as_thread=as_thread,
+            identity_marker=identity_marker,
+            legacy_initial_header=legacy_initial_header,
+        )
 
     @staticmethod
     def _get_comment_body(comment) -> str:
