@@ -108,12 +108,6 @@ class PRSimilarIssue:
 
             # check if index exists, and if repo is already indexed
             run_from_scratch = False
-            if run_from_scratch:  # for debugging
-                if self.pc.has_index(index_name):
-                    get_logger().info('Removing index...')
-                    self.pc.delete_index(index_name)
-                    get_logger().info('Done')
-
             upsert = True
             if not self.pc.has_index(index_name):
                 run_from_scratch = True
