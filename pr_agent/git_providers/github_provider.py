@@ -131,6 +131,10 @@ class GithubProvider(GitProvider):
     def supports_pr_chat(self) -> bool:
         return True
 
+    @classmethod
+    def supports_issue_indexing(cls) -> bool:
+        return True
+
     def _get_owner_and_repo_path(self, given_url: str) -> str:
         try:
             repo_path = None

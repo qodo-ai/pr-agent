@@ -195,6 +195,18 @@ class GitProvider(ABC):
         """Whether this provider is compatible with the linked PR-Agent browser-extension chat experience."""
         return False
 
+    @classmethod
+    def supports_issue_indexing(cls) -> bool:
+        """Whether `/similar_issue` can read and index this provider's issues.
+
+        Declared on the class rather than on an instance because the tool consults it before
+        constructing a provider: `PRSimilarIssue` needs to know whether to build one at all.
+        The indexing path relies on issue listing, issue bodies and issue comments, so a
+        provider that exposes those overrides this; the default is no support, so the tool
+        reports the command as unsupported instead of failing part-way through.
+        """
+        return False
+
     def supports_markdown_tables(self) -> bool:
         """Whether comments render pipe-table markdown.
 
