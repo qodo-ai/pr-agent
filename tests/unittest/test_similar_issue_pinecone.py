@@ -1,8 +1,7 @@
 """Focused unit tests for the pinecone backend of the similar issue tool."""
+import sys
 from pathlib import Path
 from types import SimpleNamespace
-
-import pytest
 
 import pr_agent.tools.pr_similar_issue as psi
 
@@ -10,6 +9,33 @@ import pr_agent.tools.pr_similar_issue as psi
 class SettingsStub:
     class pr_similar_issue:
         skip_comments = True
+
+
+class _PandasSeries(list):
+    @property
+    def values(self):
+        return list(self)
+
+
+class _PandasDataFrame:
+    def __init__(self, records):
+        self._records = list(records)
+        self._overrides = {}
+
+    def __getitem__(self, column):
+        if column in self._overrides:
+            return _PandasSeries(self._overrides[column])
+        return _PandasSeries([row[column] for row in self._records])
+
+    def __setitem__(self, column, values):
+        self._overrides[column] = list(values)
+
+    def to_dict(self, orient="records"):
+        rows = [dict(record) for record in self._records]
+        for column, values in self._overrides.items():
+            for row, value in zip(rows, values, strict=True):
+                row[column] = value
+        return rows
 
 
 def _make_issue(number):
@@ -36,7 +62,8 @@ def _make_tool(pc):
 
 
 def _stub_embeddings(monkeypatch):
-    pytest.importorskip("pandas")  # the indexing path imports pandas from the similar-issue group
+    monkeypatch.setitem(sys.modules, "pandas",
+                        SimpleNamespace(DataFrame=_PandasDataFrame))
     embedding = [0.5, 0.5]
     monkeypatch.setattr(psi, "get_settings", lambda: SettingsStub)
     monkeypatch.setattr(psi, "get_max_tokens", lambda model: 8192)
@@ -96,7 +123,6 @@ def test_pinecone_create_index_path_builds_new_index_then_upserts(monkeypatch):
     pc = SimpleNamespace(
         Index=lambda name: FakeIndex(),
         create_index=lambda **kwargs: created.append(kwargs),
-        describe_index=lambda name: SimpleNamespace(status=SimpleNamespace(ready=True)),
     )
     tool = _make_tool(pc)
     _stub_embeddings(monkeypatch)
@@ -108,38 +134,8 @@ def test_pinecone_create_index_path_builds_new_index_then_upserts(monkeypatch):
     assert kwargs["name"] == tool.index_name
     assert kwargs["dimension"] == 2
     assert kwargs["metric"] == "cosine"
+    assert kwargs["timeout"] == 120
     assert upserted, "expected the upsert to run after index creation"
-
-
-def test_wait_until_index_ready_returns_once_ready(monkeypatch):
-    tool = _make_tool(SimpleNamespace(
-        describe_index=lambda name: SimpleNamespace(status=SimpleNamespace(ready=True))))
-    monkeypatch.setattr(psi.time, "sleep",
-                        lambda seconds: pytest.fail("should not sleep once ready"))
-
-    tool._wait_until_index_ready("issues")
-
-
-def test_wait_until_index_ready_times_out_when_never_ready(monkeypatch):
-    class StubTime:
-        def __init__(self):
-            self.now = 0.0
-
-        def time(self):
-            return self.now
-
-        def sleep(self, seconds):
-            self.now += seconds
-
-    stub_time = StubTime()
-    monkeypatch.setattr(psi.time, "time", stub_time.time)
-    monkeypatch.setattr(psi.time, "sleep", stub_time.sleep)
-
-    tool = _make_tool(SimpleNamespace(
-        describe_index=lambda name: SimpleNamespace(status=SimpleNamespace(ready=False))))
-
-    with pytest.raises(Exception, match="Timed out waiting for pinecone index"):
-        tool._wait_until_index_ready("issues", timeout=1)
 
 
 def test_vectordb_defaults_to_lancedb():

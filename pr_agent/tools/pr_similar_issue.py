@@ -516,8 +516,8 @@ class PRSimilarIssue:
         ]
         if not upsert:
             get_logger().info('Creating index from scratch...')
-            self.pc.create_index(name=self.index_name, dimension=len(embeds[0]), metric="cosine", spec=self.pc_spec)
-            self._wait_until_index_ready(self.index_name)
+            self.pc.create_index(name=self.index_name, dimension=len(embeds[0]), metric="cosine", spec=self.pc_spec,
+                                 timeout=120)
         get_logger().info('Upserting index...')
         self.pinecone_index = self.pc.Index(name=self.index_name)
         self.pinecone_index.upsert(vectors=vectors,
@@ -526,15 +526,6 @@ class PRSimilarIssue:
                                    max_concurrency=10)
         time.sleep(5)  # wait for pinecone to finalize upserting before querying
         get_logger().info('Done')
-
-    def _wait_until_index_ready(self, index_name: str, timeout: int = 120):
-        """Block until a serverless index is ready to serve reads and writes."""
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if self.pc.describe_index(index_name).status.ready:
-                return
-            time.sleep(2)
-        raise Exception(f"Timed out waiting for pinecone index '{index_name}' to become ready")
 
     def _update_table_with_issues(self, issues_list, repo_name_for_index, ingest=False):
         import pandas as pd
