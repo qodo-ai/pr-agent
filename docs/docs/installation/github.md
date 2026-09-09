@@ -845,6 +845,7 @@ Example IAM permissions to that user to allow access to CodeCommit:
                 "codecommit:List*",
                 "codecommit:PostComment*",
                 "codecommit:PutCommentReaction",
+                "codecommit:UpdateComment",
                 "codecommit:UpdatePullRequestDescription",
                 "codecommit:UpdatePullRequestTitle"
             ],
