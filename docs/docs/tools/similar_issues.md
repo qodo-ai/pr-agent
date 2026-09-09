@@ -46,6 +46,10 @@ registering to [Pinecone](https://app.pinecone.io/?sessionType=signup/). Note th
 tool uses Pinecone's serverless index API; the former `environment` setting from the
 gcp-starter pod tier is no longer supported.
 
+`cloud` and `region` are only used when the index does not exist yet and needs to be
+created. An existing index is opened by name and is never recreated, so moving an
+existing deployment to the new configuration does not lose the stored vectors.
+
 !!! note "Default vector database"
 
     `vectordb` defaults to `lancedb`, which works with no external credentials. To use
