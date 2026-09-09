@@ -203,6 +203,18 @@ class GitProvider(ABC):
         but not GitHub-flavored markdown override this."""
         return False
 
+    def supports_issue_url_tickets(self) -> bool:
+        """Tickets are linked as issue URLs in the PR description or branch name."""
+        return False
+
+    def supports_issue_reference_tickets(self) -> bool:
+        """Tickets are linked as project-scoped issue references (e.g. group/project#12)."""
+        return False
+
+    def supports_linked_work_item_tickets(self) -> bool:
+        """Tickets come from work items the platform links to the PR itself."""
+        return False
+
     #Given a url (issues or PR/MR) - get the .git repo url to which they belong. Needs to be implemented by the provider.
     def get_git_repo_url(self, issues_or_pr_url: str) -> str:
         get_logger().warning("Not implemented! Returning empty url")

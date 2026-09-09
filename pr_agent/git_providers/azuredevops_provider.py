@@ -480,6 +480,9 @@ class AzureDevopsProvider(GitProvider):
     def supports_thread_resolution(self) -> bool:
         return True
 
+    def supports_linked_work_item_tickets(self) -> bool:
+        return True
+
     def set_pr(self, pr_url: str):
         self.diff_files = None
         self._diff_path_map = None
