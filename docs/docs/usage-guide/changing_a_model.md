@@ -622,6 +622,7 @@ Models under an active GitHub Copilot subscription are available through litellm
 ```toml
 [config]
 model = "github_copilot/gpt-4o"
+fallback_models = ["github_copilot/gpt-4.1"]
 ```
 
 The GitHub identity behind the model needs an active Copilot subscription. The token budget for a Copilot model is resolved automatically from litellm's model metadata (verified against the pinned litellm 1.100.0), so `custom_model_max_tokens` is not required.
