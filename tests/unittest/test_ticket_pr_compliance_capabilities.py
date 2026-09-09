@@ -351,4 +351,3 @@ async def test_extract_tickets_catches_top_level_exception():
     provider.supports_issue_url_tickets = MagicMock(side_effect=RuntimeError("unexpected crash"))
     tickets = await extract_tickets(provider)
     assert tickets == []
-
