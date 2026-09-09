@@ -146,7 +146,7 @@ require_all_thresholds_for_incremental_review=false
 minimal_commits_for_incremental_review=0
 minimal_minutes_for_incremental_review=0
 enable_intro_text=true
-enable_help_text=false # Determines whether to include help text in the PR review. Enabled by default.
+enable_help_text=false # Determines whether to include help text in the PR review.
 enable_review_coverage_footer=true
 # large-diff chunking (opt-in). When the token budget leaves files out of the review, split the diff
 # into chunks, review each chunk, and merge the per-chunk results into one review.
@@ -438,7 +438,7 @@ allow_fallbacks = true # when provider_order is set, allow routing beyond the li
 # Invalid reasoning_effort values are warned about and treated as unset.
 # Empty inherits config.reasoning_effort for models in SUPPORT_REASONING_EFFORT_MODELS.
 # Valid values: "none", "minimal", "low", "medium", "high", "xhigh", "max".
-# OpenRouter normalizes "max" to "xhigh" to match LiteLLM 1.98.0.
+# OpenRouter normalizes "max" to "xhigh" for LiteLLM/OpenRouter compatibility.
 # Model-specific support varies; mandatory reasoning models reject "none".
 reasoning_effort = ""
 # A positive value overrides global effort and non-none OpenRouter-specific efforts.

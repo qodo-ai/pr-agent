@@ -1,4 +1,3 @@
-# enum EDIT_TYPE (ADDED, DELETED, MODIFIED, RENAMED)
 import os
 import re
 import shutil
@@ -236,13 +235,9 @@ class GitProvider(ABC):
         get_logger().warning("Not implemented! Returning None")
         return None
 
-    # Does a shallow clone, using a forked process to support a timeout guard.
-    # In case operation has failed, it is expected to throw an exception as this method does not return a value.
+    # Run a shallow, blob-filtered clone in a subprocess so the timeout can terminate the operation.
+    # Failures propagate to clone(), which handles and logs them.
     def _clone_inner(self, repo_url: str, dest_folder: str, operation_timeout_in_seconds: int=None) -> None:
-        #The following ought to be equivalent to:
-        # #Repo.clone_from(repo_url, dest_folder)
-        # , but with throwing an exception upon timeout.
-        # Note: This can only be used in context that supports using pipes.
         try:
             ssl_env = get_git_ssl_env()
         except Exception as e:
