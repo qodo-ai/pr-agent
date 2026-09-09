@@ -92,16 +92,16 @@ def test_declared_capability_beats_the_configured_provider_id(monkeypatch):
     """A non-`github` id that declares the capability is supported.
 
     This is the behavior change: the previous `config.git_provider == "github"` comparison
-    turned any other id away regardless of what the provider could do. Construction is
-    interrupted with a sentinel as soon as the provider is built, so the test observes that
-    the guard let it through without running the indexing path.
+    turned any other id away regardless of what the provider could do. The provider is built and
+    interrupted at its GitHub client hook, so the test observes that the guard let it through
+    without running the indexing path.
     """
 
     class Sentinel(Exception):
         pass
 
     class CapableProvider(GithubProvider):
-        def __init__(self, *args, **kwargs):
+        def _get_github_client(self):
             raise Sentinel
 
         @classmethod
