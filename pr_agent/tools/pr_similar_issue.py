@@ -67,10 +67,25 @@ def _qdrant_collection_name(base_name: str) -> str:
     return f"{base_name}-v2"
 
 
+def _provider_supports_issue_indexing() -> bool:
+    """Whether the configured provider can back `/similar_issue`.
+
+    The check is on the provider class rather than on the configured id, so a provider
+    registered through `register_git_provider()` is judged by the capability it declares.
+    An unresolvable configuration is reported as unsupported, which is what the tool's
+    `run()` already handles, rather than raised out of `__init__`.
+    """
+    try:
+        provider_class = get_git_provider()
+    except ValueError:
+        return False
+    return provider_class.supports_issue_indexing()
+
+
 class PRSimilarIssue:
     def __init__(self, issue_url: str, ai_handler, args: list = None):
         self.issue_url = issue_url
-        self.supported = get_settings().config.git_provider == "github"
+        self.supported = _provider_supports_issue_indexing()
         if not self.supported:
             return
 
@@ -310,7 +325,7 @@ class PRSimilarIssue:
 
     async def run(self):
         if not self.supported:
-            message = "The /similar_issue tool is currently supported only for GitHub."
+            message = "The /similar_issue tool is not supported by the configured git provider."
             if get_settings().config.publish_output:
                 try:
                     from pr_agent.git_providers import get_git_provider_with_context
