@@ -1007,6 +1007,33 @@ def sanitize_yaml_control_chars(text: str, log: bool = True) -> str:
     return sanitized
 
 
+def drop_sign_off_after_wrapper_fence(text: str) -> str:
+    """Drop a closing remark the model added after the wrapper's closing fence.
+
+    The prompts ask for YAML "and nothing else", but the model sometimes signs off
+    anyway. That either leaves the document unparseable or, for a single block
+    scalar, parses the fence and the remark into the value.
+
+    No existing fallback recovers it. The one that extracts a fenced block needs
+    both fences, but most prompts end with an open fence for the model to continue
+    from, so the reply carries only the closing one.
+    """
+    lines = text.split('\n')
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i] != '```':
+            continue
+        if not ''.join(lines[i + 1:]).strip():
+            return text
+        candidate = '\n'.join(lines[:i])
+        try:
+            if isinstance(yaml.safe_load(candidate), dict):
+                return candidate
+        except Exception:
+            pass
+        return text
+    return text
+
+
 def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", last_key="") -> dict:
     response_text_original = copy.deepcopy(response_text)
     response_text = response_text.strip('\n')
@@ -1016,6 +1043,7 @@ def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", l
     if unfenced == response_text:
         unfenced = response_text.removeprefix('yaml')
     response_text = unfenced.rstrip()
+    response_text = drop_sign_off_after_wrapper_fence(response_text)
     if response_text.split('\n')[-1] == '```':
         response_text = response_text.removesuffix('```')
     response_text = sanitize_yaml_control_chars(response_text)
