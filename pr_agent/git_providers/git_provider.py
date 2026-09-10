@@ -195,6 +195,15 @@ class GitProvider(ABC):
         """Whether this provider is compatible with the linked PR-Agent browser-extension chat experience."""
         return False
 
+    def supports_inline_help_footer(self) -> bool:
+        """Whether the `/describe` help footer is rendered as an inline `<li>` list.
+
+        Scoped to that footer's layout, not to HTML lists in general: the changes
+        walkthrough already emits `<ul>` and `<li>` for every provider that passes the
+        `gfm_markdown` gate. Providers whose `<details>` summary renders a sibling `<li>`
+        inline override this; the default falls back to `<br>`-separated bullets."""
+        return False
+
     def supports_markdown_tables(self) -> bool:
         """Whether comments render pipe-table markdown.
 
