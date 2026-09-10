@@ -13,6 +13,7 @@
 * [BitBucket Integration](installation/bitbucket.md)
 * [Azure DevOps Integration](installation/azure.md)
 * [Gitea Integration](installation/gitea.md)
+* [MOSAICO A2A Server](installation/mosaico_server.md)
 
 ## Usage Guide
 
