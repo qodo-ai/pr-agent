@@ -1059,6 +1059,32 @@ class TestGetMaxTokens:
         claude_no_temp = {m for m in NO_SUPPORT_TEMPERATURE_MODELS if "claude" in m}
         assert claude_thinking.isdisjoint(claude_no_temp)
 
+    @pytest.mark.parametrize(
+        "model, expected",
+        [
+            ("gpt-4o", 128000),
+            ("gpt-4.1", 1047576),
+            ("gemini/gemini-3.8-flash", 1048576),
+        ],
+    )
+    def test_ignore_max_model_tokens_returns_unreduced_litellm_value(self, monkeypatch, model, expected):
+        """Sites that bypass the max_model_tokens clamp (pr_help_message, pr_help_docs,
+        pr_code_suggestions) must still get the raw model context even after the exact
+        LiteLLM duplicates left the registry: the value now resolves from LiteLLM, while
+        the default path keeps clamping to config.max_model_tokens."""
+        fake_settings = type('', (), {
+            'config': type('', (), {
+                'custom_model_max_tokens': 0,
+                'max_model_tokens': 32000
+            })()
+        })()
+
+        monkeypatch.setattr(utils, "get_settings", lambda: fake_settings)
+        monkeypatch.setattr(utils, "MAX_TOKENS", {})  # simulate deletion of the entry
+
+        assert get_max_tokens(model) == 32000
+        assert get_max_tokens(model, ignore_max_model_tokens=True) == expected
+
 
 class TestNoLiteLLMDuplicates:
 
