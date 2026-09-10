@@ -3,7 +3,7 @@ import re
 from functools import partial
 from pathlib import Path
 
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, select_autoescape
 
 from pr_agent.algo import MAX_TOKENS
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
@@ -47,17 +47,17 @@ class PRHelpMessage:
                                               get_settings().pr_help_prompts.user)
 
     async def _prepare_prediction(self, model: str):
-        try:
-            variables = copy.deepcopy(self.vars)
-            environment = Environment(undefined=StrictUndefined)
-            system_prompt = environment.from_string(get_settings().pr_help_prompts.system).render(variables)
-            user_prompt = environment.from_string(get_settings().pr_help_prompts.user).render(variables)
-            response, finish_reason = await self.ai_handler.chat_completion(
-                model=model, temperature=get_settings().config.temperature, system=system_prompt, user=user_prompt)
-            return response
-        except Exception as e:
-            get_logger().error(f"Error while preparing prediction: {e}")
-            return ""
+        variables = copy.deepcopy(self.vars)
+        # These string templates produce plain-text model prompts, not HTML.
+        environment = Environment(
+            autoescape=select_autoescape(default_for_string=False),
+            undefined=StrictUndefined,
+        )
+        system_prompt = environment.from_string(get_settings().pr_help_prompts.system).render(variables)
+        user_prompt = environment.from_string(get_settings().pr_help_prompts.user).render(variables)
+        response, finish_reason = await self.ai_handler.chat_completion(
+            model=model, temperature=get_settings().config.temperature, system=system_prompt, user=user_prompt)
+        return response
 
     def parse_args(self, args):
         if args and len(args) > 0:
