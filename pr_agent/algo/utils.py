@@ -502,7 +502,7 @@ def convert_to_markdown_v2(output_data: dict,
                     markdown_text += f"{emoji}&nbsp;<strong>Recommended focus areas for review</strong><br><br>\n\n"
                 else:
                     markdown_text += f"### {emoji} Recommended focus areas for review\n\n#### \n"
-                for i, issue in enumerate(issues):
+                for issue in issues:
                     try:
                         if not issue or not isinstance(issue, dict):
                             continue
@@ -705,7 +705,7 @@ def process_can_be_split(emoji, value):
             markdown_text += f"{emoji} <strong>No multiple PR themes</strong>\n\n"
         else:
             markdown_text += f"{emoji} <strong>{key_nice}</strong><br><br>\n\n"
-            for i, split in enumerate(value):
+            for split in value:
                 title = split.get('title', '')
                 relevant_files = split.get('relevant_files', [])
                 markdown_text += f"<details><summary>\nSub-PR theme: <b>{title}</b></summary>\n\n"
@@ -1007,7 +1007,9 @@ def sanitize_yaml_control_chars(text: str, log: bool = True) -> str:
     return sanitized
 
 
-def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", last_key="") -> dict:
+def load_yaml(response_text: str, keys_fix_yaml: List[str] | None = None, first_key="", last_key="") -> dict:
+    if keys_fix_yaml is None:
+        keys_fix_yaml = []
     response_text_original = copy.deepcopy(response_text)
     response_text = response_text.strip('\n')
     # strip the fence label only when it is a complete info string, so a key such as
@@ -1046,10 +1048,12 @@ def load_yaml(response_text: str, keys_fix_yaml: List[str] = [], first_key="", l
 
 
 def try_fix_yaml(response_text: str,
-                 keys_fix_yaml: List[str] = [],
+                 keys_fix_yaml: List[str] | None = None,
                  first_key="",
                  last_key="",
                  response_text_original="") -> dict:
+    if keys_fix_yaml is None:
+        keys_fix_yaml = []
     response_text_lines = response_text.split('\n')
 
     keys_yaml = ['relevant line:', 'suggestion content:', 'relevant file:', 'existing code:',
