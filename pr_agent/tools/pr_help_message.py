@@ -57,7 +57,7 @@ class PRHelpMessage:
             return response
         except Exception as e:
             get_logger().error(f"Error while preparing prediction: {e}")
-            return ""
+            raise
 
     def parse_args(self, args):
         if args and len(args) > 0:
