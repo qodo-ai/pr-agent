@@ -200,7 +200,7 @@ class GitProvider(ABC):
 
         `/update_changelog --push_changelog_changes=true` posts its summary as a review on the
         commit it just pushed. Providers exposing a commit-scoped review API override this;
-        the default is no support, so tools publish a plain comment instead.
+        the default is no support, so the review is simply skipped.
         """
         return False
 
