@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from github import Auth, Github, GithubException, GithubIntegration
+from github import Auth, Github, GithubException, GithubIntegration, GithubRetry
 from github.Issue import Issue
 from retry.api import retry_call
 from starlette_context import context
@@ -1378,8 +1378,9 @@ class GithubProvider(GitProvider):
         if self.deployment_type == 'app':
             try:
                 private_key = get_settings().github.private_key
-                # The app id is an integer in the settings toml, but PyJWT >=2.11 requires a
-                # string `iss` claim, and PyGithub 1.59 passes it through raw (#2955).
+                # The app id is an integer in the settings toml. PyJWT >=2.11 requires a
+                # string `iss` claim; PyGithub 2.7+ normalizes an int app id to a string
+                # upstream (#2955, PyGithub#3272), so the cast is harmless on the 2.10 pin.
                 app_id = str(get_settings().github.app_id)
             except AttributeError as e:
                 raise ValueError("GitHub app ID and private key are required when using GitHub app deployment") from e
@@ -1399,7 +1400,21 @@ class GithubProvider(GitProvider):
                     "https://github.com/Codium-ai/pr-agent#method-2-run-from-source") from e
             self.auth = Auth.Token(token)
         if self.auth:
-            return Github(auth=self.auth, base_url=self.base_url)
+            github_config = get_settings().github
+            # PyGithub 2.x defaults to pacing and retries (0.25s between requests, 1s between
+            # writes, 10 retries); these had no equivalent on 1.59. The settings mirror the
+            # 1.59 behaviour, so the upgrade stays behaviour-neutral unless an operator opts in.
+            seconds_between_requests = github_config.get("seconds_between_requests", 0)
+            seconds_between_writes = github_config.get("seconds_between_writes", 0)
+            api_retries = github_config.get("api_retries", 0)
+            retry = GithubRetry(total=api_retries) if api_retries else None
+            return Github(
+                auth=self.auth,
+                base_url=self.base_url,
+                seconds_between_requests=seconds_between_requests,
+                seconds_between_writes=seconds_between_writes,
+                retry=retry,
+            )
         else:
             raise ValueError("Could not authenticate to GitHub")
 
