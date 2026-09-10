@@ -41,7 +41,7 @@ class StubProvider:
     def is_supported(self, capability: str) -> bool:
         return capability == "gfm_markdown"
 
-    def supports_html_lists(self) -> bool:
+    def supports_inline_help_footer(self) -> bool:
         self.html_lists_queries += 1
         return self._html_lists
 
@@ -110,5 +110,5 @@ async def test_description_help_rendering_follows_html_list_capability(
 
 
 def test_providers_declare_html_list_capability():
-    assert GithubProvider.__new__(GithubProvider).supports_html_lists() is True
-    assert GitLabProvider.__new__(GitLabProvider).supports_html_lists() is False
+    assert GithubProvider.__new__(GithubProvider).supports_inline_help_footer() is True
+    assert GitLabProvider.__new__(GitLabProvider).supports_inline_help_footer() is False

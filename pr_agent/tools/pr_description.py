@@ -160,12 +160,12 @@ class PRDescription:
                 pr_body += HelpMessage.get_describe_usage_guide()
                 pr_body += "\n</details>\n"
             elif get_settings().pr_description.enable_help_comment and self.git_provider.is_supported("gfm_markdown"):
-                if self.git_provider.supports_html_lists():
+                if self.git_provider.supports_inline_help_footer():
                     pr_body += ('\n\n___\n\n> <details> <summary>  Need help?</summary><li>Type <code>/help how to ...</code> '
                                 'in the comments thread for any questions about PR-Agent usage.</li><li>Check out the '
                                 '<a href="https://qodo-merge-docs.qodo.ai/usage-guide/">documentation</a> '
                                 'for more information.</li></details>')
-                else: # gitlab
+                else:  # bullets separated by <br>, for providers whose footer cannot inline a list
                     pr_body += ("\n\n___\n\n<details><summary>Need help?</summary>- Type <code>/help how to ...</code> in the comments "
                                 "thread for any questions about PR-Agent usage.<br>- Check out the "
                                 "<a href='https://qodo-merge-docs.qodo.ai/usage-guide/'>documentation</a> for more information.</details>")

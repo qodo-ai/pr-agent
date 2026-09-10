@@ -128,7 +128,7 @@ class GithubProvider(GitProvider):
     def supports_checkbox_commands(self) -> bool:
         return True
 
-    def supports_html_lists(self) -> bool:
+    def supports_inline_help_footer(self) -> bool:
         return True
 
     def supports_pr_chat(self) -> bool:
