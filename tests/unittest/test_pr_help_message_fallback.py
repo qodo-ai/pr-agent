@@ -64,6 +64,21 @@ def attempted_models(tool):
     return [call.kwargs["model"] for call in tool.ai_handler.chat_completion.await_args_list]
 
 
+async def test_model_prompt_preserves_question_and_documentation_markup(help_tool):
+    tool, _, _ = help_tool
+    question = "What does `<review enabled=\"true\"> & 'notes'` mean?"
+    snippets = "Use `a < b && c > d` and `<review enabled=\"true\">`."
+    tool.vars.update(question=question, snippets=snippets)
+    tool.ai_handler.chat_completion.return_value = ANSWER, "stop"
+
+    assert await tool._prepare_prediction(PRIMARY) == ANSWER
+
+    tool.ai_handler.chat_completion.assert_awaited_once()
+    user_prompt = tool.ai_handler.chat_completion.await_args.kwargs["user"]
+    assert question in user_prompt
+    assert snippets in user_prompt
+
+
 async def test_primary_failure_uses_backup_answer(help_tool):
     tool, details, _ = help_tool
     tool.ai_handler.chat_completion.side_effect = [RuntimeError("primary unavailable"), (ANSWER, "stop")]
