@@ -112,7 +112,7 @@ class PRHelpMessage:
                 # get all the 'md' files inside docs_path and its subdirectories
                 md_files = list(docs_path.glob('**/*.md'))
                 folders_to_exclude = ['/finetuning_benchmark/']
-                files_to_exclude = {'EXAMPLE_BEST_PRACTICE.md', 'compression_strategy.md', '/docs/overview/index.md'}
+                files_to_exclude = {'compression_strategy.md', '/docs/overview/index.md'}
                 md_files = [file for file in md_files if not any(folder in str(file) for folder in folders_to_exclude) and not any(file.name == file_to_exclude for file_to_exclude in files_to_exclude)]
 
                 # sort the 'md_files' so that 'priority_files' will be at the top
