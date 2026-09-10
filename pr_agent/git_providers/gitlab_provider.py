@@ -424,6 +424,9 @@ class GitLabProvider(GitProvider):
     def supports_incremental_kind(self, kind: str) -> bool:
         return kind in self._INCREMENTAL_ANCHOR_PREFIXES
 
+    def supports_issue_reference_tickets(self) -> bool:
+        return True
+
     def _get_project_path_from_pr_or_issue_url(self, pr_or_issue_url: str) -> str:
         repo_project_path = None
         if 'issues' in pr_or_issue_url:
