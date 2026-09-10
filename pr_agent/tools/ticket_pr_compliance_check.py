@@ -15,7 +15,9 @@ from pr_agent.log import get_logger
 
 # Compile the regex pattern once, outside the function
 GITHUB_TICKET_PATTERN = re.compile(
-     r'(https://github[^/]+/[^/]+/[^/]+/issues/\d+)|(\b(\w+)/(\w+)#(\d+)\b)|(#\d+)'
+    r'(https://github[^/]+/[^/]+/[^/]+/issues/\d+)'
+    r'|((?<![\w./-])([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)/([A-Za-z0-9._-]+)#(\d+)\b)'
+    r'|(#\d+)'
 )
 # Option A: issue number at start of branch or after /, followed by - or end (e.g. feature/1-test-issue, 123-fix)
 BRANCH_ISSUE_PATTERN = re.compile(r"(?:^|/)(\d{1,6})(?=-|$)")
