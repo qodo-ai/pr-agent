@@ -9,11 +9,11 @@ It can be invoked manually by commenting on any PR:
 
 ## Example usage
 
-![similar_issue_original_issue](https://codium.ai/images/pr_agent/similar_issue_original_issue.png){width=768}
+![similar_issue_original_issue](../assets/similar_issue_original_issue.png){width=768}
 
-![similar_issue_comment](https://codium.ai/images/pr_agent/similar_issue_comment.png){width=768}
+![similar_issue_comment](../assets/similar_issue_comment.png){width=768}
 
-![similar_issue](https://codium.ai/images/pr_agent/similar_issue.png){width=768}
+![similar_issue](../assets/similar_issue.png){width=768}
 
 Note that to perform retrieval, the `similar_issue` tool indexes all the repo previous issues (once).
 

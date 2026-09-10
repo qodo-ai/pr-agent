@@ -12,7 +12,7 @@ It can be invoked manually by commenting on any PR:
 
 Invoke the tool manually by commenting `/add_docs` on any PR:
 
-![Add Docs](https://codium.ai/images/pr_agent/add_docs_comment.png){width=512}
+![Add Docs](../assets/add_docs_comment.png){width=512}
 
 The tool will generate documentation suggestions as inline code suggestions:
 
