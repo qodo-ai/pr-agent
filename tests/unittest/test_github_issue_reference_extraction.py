@@ -105,4 +105,3 @@ def test_regression_full_url_still_wins():
 def test_regression_mid_token_does_not_match_cross_repo():
     assert _links("see x/my-org/my-repo#42") == [f"{BASE}/{REPO}/issues/42"]
     assert _links("see x/other/project#12345") == [f"{BASE}/{REPO}/issues/12345"]
-
