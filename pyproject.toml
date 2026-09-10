@@ -52,7 +52,7 @@ dependencies = [
   "loguru==0.7.2",
   "msrest==0.7.1",
   "openai>=1.55.3",
-  "PyGithub==1.59.*",
+  "PyGithub>=2.10,<3",
   "PyJWT>=2.13.0,<3",
   "PyYAML==6.0.1",
   "python-gitlab==8.3.0",
