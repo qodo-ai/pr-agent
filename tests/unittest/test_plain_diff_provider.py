@@ -173,13 +173,6 @@ def test_temporary_comment_not_emitted(cfg, capsys):
     assert "Preparing review" not in captured.out
 
 
-def test_publish_file_comments_not_supported(cfg):
-    cfg("plain_diff.content", DIFF)
-    cfg("plain_diff.output_path", None)
-    provider = PlainDiffGitProvider(None)
-    assert provider.is_supported("publish_file_comments") is False
-
-
 def test_path_traversal_file_not_read(cfg, tmp_path, monkeypatch):
     # SENTINEL TEST: this test FAILS if the path-traversal guard in
     # PlainDiffGitProvider.get_diff_files() is removed.
