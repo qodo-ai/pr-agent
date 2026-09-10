@@ -971,14 +971,17 @@ class LiteLLMAIHandler(BaseAiHandler):
                     else:
                         kwargs = self._configure_claude_extended_thinking(model, kwargs)
                 elif adaptive_thinking_enabled or extended_thinking_enabled:
-                    get_logger().warning(
+                    message = (
                         f"No thinking configuration applied for model {model}: adaptive thinking "
                         f"requires a recognized claude 5 model name in the id and extended "
-                        f"thinking requires exact membership in claude_extended_thinking_models. "
-                        f"Ids that embed no model name, such as Bedrock application inference "
-                        f"profile ARNs, never match; address the model by name with "
-                        f"litellm.model_id carrying the ARN instead."
+                        f"thinking requires exact membership in claude_extended_thinking_models."
                     )
+                    if "arn:aws:bedrock:" in model:
+                        message += (
+                            " For a Bedrock inference profile, address the model by name and pass "
+                            "the ARN with litellm.model_id."
+                        )
+                    get_logger().warning(message)
 
                 # Optional output token limit; 0 = unset. Without max_tokens some
                 # providers apply a low service-side default (Bedrock Converse: 4096,

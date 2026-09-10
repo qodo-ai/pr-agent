@@ -261,3 +261,24 @@ async def test_extended_enabled_with_no_matching_model_warns(monkeypatch):
     assert "thinking" not in kwargs
     logger.warning.assert_called_once()
     assert "opus-4-6" in logger.warning.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_non_arn_model_warns_without_bedrock_advice(monkeypatch):
+    """The Bedrock remedy must stay gated to Bedrock ids: a plain provider id that reaches the
+    warning branch only gets the generic message, never the litellm.model_id ARN advice."""
+    logger = MagicMock()
+    with patch("pr_agent.algo.ai_handlers.litellm_ai_handler.get_logger",
+               return_value=logger):
+        kwargs = await _run_completion(
+            monkeypatch,
+            "openai/gpt-4o",
+            enabled=True,
+        )
+
+    assert "thinking" not in kwargs
+    logger.warning.assert_called_once()
+    message = logger.warning.call_args.args[0]
+    assert "gpt-4o" in message
+    assert "litellm.model_id" not in message
+    assert "arn" not in message
