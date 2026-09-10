@@ -449,7 +449,7 @@ _This section only documents commented-out examples; see the [TOML source](https
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `url` | "" |  |
+| `url` | "" | URL to the BitBucket Server instance |
 
 
 ## `[litellm]`
@@ -576,16 +576,8 @@ _This section only documents commented-out examples; see the [TOML source](https
 | `enable` | false | Enable artifact injection into tool prompts (off by default; auto-enabled when artifact_path input is set) |
 | `artifact_path` | "" | File path to the artifact (relative to GITHUB_WORKSPACE, or absolute) |
 | `artifact_instructions` | "" | Custom instructions appended after the artifact content (leave empty for a sensible default) |
-**Label shown to the AI — defaults to the filename when empty**
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `artifact_label` | "" |  |
-**Which tools receive artifact context**
-
-| Key | Default | Description |
-| --- | --- | --- |
-| `target_tools` | ["pr_reviewer", "pr_description", "pr_code_suggestions"] |  |
+| `artifact_label` | "" | Label shown to the AI — defaults to the filename when empty. |
+| `target_tools` | ["pr_reviewer", "pr_description", "pr_code_suggestions"] | Which tools receive artifact context. |
 | `max_artifact_size` | 50000 | Max artifact size in characters (content is truncated if exceeded) |
 
 

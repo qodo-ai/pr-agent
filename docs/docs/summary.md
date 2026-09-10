@@ -19,6 +19,7 @@
 * [Usage Guide](usage-guide/index.md)
 * [Introduction](usage-guide/introduction.md)
 * [Configuration File](usage-guide/configuration_options.md)
+* [Configuration Reference](usage-guide/configuration_reference.md)
 * [Usage and Automation](usage-guide/automations_and_usage.md)
 * [Managing Mail Notifications](usage-guide/mail_notifications.md)
 * [Changing a Model](usage-guide/changing_a_model.md)
