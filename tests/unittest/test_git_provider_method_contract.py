@@ -265,6 +265,18 @@ METHOD_CONTRACTS = (
         check_return_annotation=False,
         check_execution=False,
     ),
+    MethodContract(
+        name="get_repo_context_ref",
+        args=(),
+        noop_value=None,
+        check_supported=lambda _: None,
+        tiers=_tiers(
+            supported=("github", "gitlab", "gitea", "azure-devops", "bitbucket", "bitbucket-server"),
+        ),
+        # Signature + return-annotation contract: the providers that fetch repo-context files
+        # must expose the same hook so the cache can key on the revision being read.
+        check_execution=False,
+    ),
 )
 
 

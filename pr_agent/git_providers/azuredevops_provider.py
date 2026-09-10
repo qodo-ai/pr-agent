@@ -728,6 +728,13 @@ class AzureDevopsProvider(GitProvider):
                 return ""
             raise
 
+    def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
+        # The PR target (base) commit is the cached revision; the default branch is selected by
+        # omitting the version, so it carries no explicit ref, mirroring get_repo_file_content.
+        if from_default_branch:
+            return None
+        return self.pr.last_merge_target_commit.commit_id
+
     def get_files(self):
         if (isinstance(getattr(self, "incremental", None), IncrementalPR)
                 and self.incremental.is_incremental
