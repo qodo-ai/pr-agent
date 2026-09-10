@@ -1279,12 +1279,23 @@ class GithubProvider(GitProvider):
             raise
 
     def get_repo_context_ref(self, from_default_branch: bool = False) -> Optional[str]:
-        # Match get_repo_file_content: the PR target (base) commit is the cached revision, and
-        # the default branch carries no explicit ref (None).
-        if from_default_branch:
+        # Match get_repo_file_content: the PR target (base) commit is the cached revision.
+        # When the default branch is read (explicitly, or because no PR base exists) resolve
+        # its head commit so a push to the default branch invalidates cached content within
+        # the TTL instead of serving it from a moved commit.
+        if not from_default_branch:
+            base = getattr(getattr(self, "pr", None), "base", None)
+            ref = getattr(base, "sha", None) or getattr(base, "ref", None)
+            if ref:
+                return ref
+        repo_obj = getattr(self, "repo_obj", None)
+        if repo_obj is None:
             return None
-        base = getattr(getattr(self, "pr", None), "base", None)
-        return getattr(base, "sha", None) or getattr(base, "ref", None)
+        try:
+            return repo_obj.get_branch(repo_obj.default_branch).commit.sha
+        except Exception as e:
+            get_logger().debug(f"Could not resolve the default branch revision for repo context: {e}")
+            return None
 
     def get_workspace_name(self):
         return self.repo.split('/')[0]

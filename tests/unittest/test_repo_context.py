@@ -734,10 +734,65 @@ def test_get_repo_context_ref_github_returns_base_sha():
     provider.pr = Mock(base=Mock(sha="base-sha", ref="release/1.0"))
 
     assert provider.get_repo_context_ref() == "base-sha"
-    assert provider.get_repo_context_ref(from_default_branch=True) is None
 
+
+def test_get_repo_context_ref_github_resolves_default_branch_head():
+    """Reading the default branch keys the cache on its head commit, so a push to it
+    invalidates cached content within the TTL instead of serving a moved commit."""
+    provider = GithubProvider.__new__(GithubProvider)
+    provider.repo_obj = Mock()
+    provider.repo_obj.default_branch = "main"
+    provider.repo_obj.get_branch.return_value.commit.sha = "default-sha"
+
+    assert provider.get_repo_context_ref(from_default_branch=True) == "default-sha"
+    provider.repo_obj.get_branch.assert_called_once_with("main")
+
+
+def test_get_repo_context_ref_github_without_pr_base_reads_default_branch_head():
+    """Without a PR base the fallback read also comes from the default branch, so the
+    same key rule applies."""
+    provider = GithubProvider.__new__(GithubProvider)
     provider.pr = None
+    provider.repo_obj = Mock()
+    provider.repo_obj.default_branch = "main"
+    provider.repo_obj.get_branch.return_value.commit.sha = "default-sha"
+
+    assert provider.get_repo_context_ref() == "default-sha"
+    provider.repo_obj.get_branch.assert_called_once_with("main")
+
+
+def test_get_repo_context_ref_github_falls_back_to_none_without_repo_obj():
+    provider = GithubProvider.__new__(GithubProvider)
+
+    assert provider.get_repo_context_ref(from_default_branch=True) is None
     assert provider.get_repo_context_ref() is None
+
+
+def test_build_repo_context_github_invalidates_default_branch_cache_when_head_moves(repo_context_settings):
+    """The shipping default reads repo-context from the default branch; a push to it
+    within the TTL must not serve the previous head's content. Keying the cache on the
+    resolved head commit closes the gap the review called out on GitHub."""
+    repo_context_settings.set("CONFIG.REPO_CONTEXT_FILES", ["AGENTS.md"])
+    repo_context_settings.set("CONFIG.REPO_CONTEXT_MAX_LINES", 500)
+    repo_context_settings.set("CONFIG.REPO_CONTEXT_FROM_DEFAULT_BRANCH", True)
+    provider = GithubProvider.__new__(GithubProvider)
+    provider.pr = Mock(base=Mock(sha="base-sha", ref="release/1.0"))
+    provider.repo_obj = Mock()
+    provider.repo_obj.default_branch = "main"
+    provider.repo_obj.get_contents.return_value.decoded_content = b"before push"
+    provider.repo_obj.get_branch.return_value.commit.sha = "head-1"
+
+    first_context = build_repo_context(provider)
+    assert "before push" in first_context
+
+    provider.repo_obj.get_contents.return_value.decoded_content = b"after push"
+    provider.repo_obj.get_branch.return_value.commit.sha = "head-2"
+
+    second_context = build_repo_context(provider)
+
+    assert "after push" in second_context
+    assert "before push" not in second_context
+    assert provider.repo_obj.get_contents.call_count == 2
 
 
 def test_get_repo_context_ref_gitlab_returns_target_branch():
