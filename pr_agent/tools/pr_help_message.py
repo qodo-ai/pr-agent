@@ -99,14 +99,6 @@ class PRHelpMessage:
             if self.question_str:
                 get_logger().info(f'Answering a PR question about the PR {self.git_provider.pr_url} ')
 
-                if not get_settings().get('openai.key'):
-                    if get_settings().config.publish_output:
-                        self.git_provider.publish_comment(
-                            "The `Help` tool chat feature requires an OpenAI API key for calculating embeddings")
-                    else:
-                        get_logger().error("The `Help` tool chat feature requires an OpenAI API key for calculating embeddings")
-                    return
-
                 # current path
                 docs_path= Path(__file__).parent.parent.parent / 'docs' / 'docs'
                 # get all the 'md' files inside docs_path and its subdirectories
