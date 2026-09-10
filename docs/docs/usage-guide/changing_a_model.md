@@ -343,6 +343,39 @@ model_id = "your-application-inference-profile-arn"
 
 The `litellm.model_id` parameter applies only to classic `bedrock/` calls made through the `bedrock-runtime` APIs. It does not apply to `bedrock_mantle/`; for cost allocation with the Mantle Chat Completions and Responses APIs, use [Amazon Bedrock Projects](https://docs.aws.amazon.com/bedrock/latest/userguide/cost-mgmt-projects.html).
 
+#### Claude 5 thinking with an application inference profile ARN
+
+Claude Sonnet 5 on Bedrock is invoked through an inference profile rather than a direct
+foundation-model id. When that profile is an application inference profile, its ARN is an
+opaque value that carries no model name. Thinking configuration in PR-Agent is gated on
+recognizing the model, so the opaque ARN can never match: `enable_claude_adaptive_thinking`
+requires a recognized Claude 5 model name in the id, and `enable_claude_extended_thinking`
+requires exact membership in `claude_extended_thinking_models`. PR-Agent logs a warning in
+that case, so the unconfigured state is no longer silent.
+
+Address the model by name and pass the profile ARN through `litellm.model_id`, which is what
+the invocation actually uses:
+
+```toml
+[config] # in configuration.toml
+model = "bedrock/converse/eu.anthropic.claude-sonnet-5"
+fallback_models = ["bedrock/converse/eu.anthropic.claude-sonnet-5"]
+enable_claude_adaptive_thinking = true # requires a recognizable claude 5 model name in `model`
+
+[litellm]
+model_id = "arn:aws:bedrock:eu-central-1:<account-id>:application-inference-profile/<profile-id>"
+```
+
+Cost attribution is preserved through the application inference profile, and because `model`
+is the named id, the adaptive-thinking payload is applied and kept intact.
+
+Two caveats. First, ARNs only fail the detection when the suffix is opaque: an ARN that
+embeds the model family, for example `...:inference-profile/us.anthropic.claude-sonnet-5`,
+normalises to a string the adaptive regex does match. The miss is specific to application
+inference profiles with an opaque hex suffix. Second, `litellm.model_id` is a single global
+value applied to every model whose id contains `bedrock/`, so this configuration cannot point
+different models at different profiles within one fallback chain without per-call handling.
+
 #### Using a Custom VPC Endpoint (PrivateLink)
 
 To route Bedrock traffic through a VPC interface endpoint instead of the public `bedrock-runtime` endpoint, set `AWS_BEDROCK_RUNTIME_ENDPOINT` either as an environment variable or in `[aws]`:
@@ -692,6 +725,11 @@ built-in defaults.
     `claude_extended_thinking_models_override` anyway, PR-Agent skips the extended-thinking payload
     for it and logs a warning rather than sending a request the provider would reject — use
     `enable_claude_adaptive_thinking` for those models instead.
+
+Both thinking gates only fire when the model id itself is recognizable: an opaque id such as a
+Bedrock application inference profile ARN matches neither gate, and PR-Agent logs a warning
+instead of silently sending nothing. See [Claude 5 thinking with an application inference
+profile ARN](#claude-5-thinking-with-an-application-inference-profile-arn).
 
 ## Output token limit
 
