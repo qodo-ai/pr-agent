@@ -4,7 +4,7 @@ from pr_agent.command_descriptions import COMMAND_DESCRIPTIONS
 class HelpMessage:
     @staticmethod
     def get_general_commands_text():
-       commands_text = f"> - **/review**: {COMMAND_DESCRIPTIONS['review']}   \n" \
+       commands_text = f"> - **/review [alias+effort]**: {COMMAND_DESCRIPTIONS['review']}   \n" \
                 f"> - **/describe**: {COMMAND_DESCRIPTIONS['describe']}   \n" \
                 f"> - **/improve [--extended]**: {COMMAND_DESCRIPTIONS['improve']} Extended mode provides more thorough feedback.   \n" \
                 "> - **/ask \\<QUESTION\\>**: Ask a question about the PR.   \n" \
@@ -32,6 +32,11 @@ class HelpMessage:
 ```
 /review --pr_reviewer.some_config1=... --pr_reviewer.some_config2=...
 ```
+- When an operator has enabled command model aliases, use one `alias+effort` selector:
+```
+/review fable+high
+```
+The selector uses the operator-configured model alias and the existing reasoning-effort path for this review only.
 - With a [configuration file](https://pr-agent-docs.codium.ai/usage-guide/configuration_options/), use the following template:
 ```
 [pr_reviewer]
