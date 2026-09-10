@@ -184,6 +184,25 @@ class GitProvider(ABC):
     def supports_line_question_history(self) -> bool:
         return False
 
+    def supports_checkbox_commands(self) -> bool:
+        """Whether a published comment renders command checkboxes as checkboxes.
+
+        Providers that render `- [ ]` as a tickable box override this; the default is no
+        support, so tools render commands as text instead."""
+        return False
+
+    def supports_pr_chat(self) -> bool:
+        """Whether this provider is compatible with the linked PR-Agent browser-extension chat experience."""
+        return False
+
+    def supports_markdown_tables(self) -> bool:
+        """Whether comments render pipe-table markdown.
+
+        Only consulted for providers without `gfm_markdown`, so that tools can degrade to
+        a plain table instead of refusing to render. Providers that render Markdown tables
+        but not GitHub-flavored markdown override this."""
+        return False
+
     #Given a url (issues or PR/MR) - get the .git repo url to which they belong. Needs to be implemented by the provider.
     def get_git_repo_url(self, issues_or_pr_url: str) -> str:
         get_logger().warning("Not implemented! Returning empty url")
@@ -415,6 +434,50 @@ class GitProvider(ABC):
     @abstractmethod
     def get_repo_settings(self):
         pass
+
+    def get_owning_namespace(self) -> Optional[str]:
+        """Return the org/group/workspace that owns this repository, or None when
+        the provider has no organisation-level home for global settings.
+
+        This is the hook that `_get_global_repo_settings` uses to decide which
+        namespace's `pr-agent-settings` repository (or equivalent) to consult.
+        Providers that support global settings override this; the default is None,
+        which disables global settings for the provider.
+        """
+        return None
+
+    def _get_global_repo_settings(self):
+        """Load the namespace-wide `pr-agent-settings` .pr_agent.toml, if enabled.
+
+        This is a concrete template: it gates on `use_global_settings_file`, resolves
+        the owning namespace via `get_owning_namespace()`, and delegates the actual
+        provider API call (and its 403/404 mapping) to `_fetch_global_repo_settings`,
+        all behind the shared TTL cache. Providers build the cache key through
+        `_get_global_settings_cache_key` so instance-specific keys (e.g. GitHub
+        enterprise hosts) stay distinct.
+        """
+        if not get_settings().config.use_global_settings_file:
+            return ""
+        namespace = self.get_owning_namespace()
+        if not namespace:
+            return ""
+        return get_cached_global_settings(
+            self._get_global_settings_cache_key(namespace),
+            lambda: self._fetch_global_repo_settings(namespace))
+
+    def _get_global_settings_cache_key(self, namespace: str) -> str:
+        """Cache key for a namespace's global settings.
+
+        Override to scope the key beyond the provider type (e.g. include a
+        self-hosted base URL so two instances hosting the same org don't collide).
+        """
+        return f"{type(self).__name__}:{namespace}"
+
+    def _fetch_global_repo_settings(self, namespace: str):
+        """Fetch the raw `.pr_agent.toml` from the namespace's `pr-agent-settings`
+        repository. Return "" for an expected "not found"/no-access result (so it is
+        cached) and let transient/unexpected errors propagate. Overridden per provider."""
+        return ""
 
     def get_repo_file_content(self, file_path: str, from_default_branch: bool = False):
         return ""

@@ -3,8 +3,6 @@ from __future__ import annotations
 import traceback
 from typing import Callable, List, Tuple
 
-from github import RateLimitExceededException
-
 from pr_agent.algo.git_patch_processing import (
     decouple_and_convert_to_hunks_with_lines_numbers,
     extend_patch,
@@ -59,11 +57,7 @@ def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
         PATCH_EXTRA_LINES_BEFORE = cap_and_log_extra_lines(PATCH_EXTRA_LINES_BEFORE, "before")
         PATCH_EXTRA_LINES_AFTER = cap_and_log_extra_lines(PATCH_EXTRA_LINES_AFTER, "after")
 
-    try:
-        diff_files = git_provider.get_diff_files()
-    except RateLimitExceededException as e:
-        get_logger().error(f"Rate limit exceeded for git provider API. original message {e}")
-        raise
+    diff_files = git_provider.get_diff_files()
 
     # get pr languages
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)
@@ -153,11 +147,7 @@ def get_pr_diff(git_provider: GitProvider, token_handler: TokenHandler,
 
 def get_pr_diff_multiple_patchs(git_provider: GitProvider, token_handler: TokenHandler, model: str,
                 add_line_numbers_to_hunks: bool = False, disable_extra_lines: bool = False):
-    try:
-        diff_files = git_provider.get_diff_files()
-    except RateLimitExceededException as e:
-        get_logger().error(f"Rate limit exceeded for git provider API. original message {e}")
-        raise
+    diff_files = git_provider.get_diff_files()
 
     # get pr languages
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)
@@ -300,7 +290,6 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
             continue
 
         patch = data['patch']
-        new_patch_tokens = data['tokens']
         edit_type = data['edit_type']
 
         # Hard Stop, no more tokens
@@ -308,6 +297,16 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
             get_logger().warning(f"File was fully skipped, no more tokens: {filename}.")
             remaining_files_list_new.append(filename)
             continue
+
+        if patch:
+            if not convert_hunks_to_line_numbers:
+                patch_final = f"\n\n## File: '{filename.strip()}'\n\n{patch.strip()}\n"
+            else:
+                patch_final = "\n\n" + patch.strip()
+            new_patch_tokens = token_handler.count_tokens(patch_final)
+        else:
+            patch_final = ""
+            new_patch_tokens = 0
 
         # If the patch is too large, just show the file name
         if total_tokens + new_patch_tokens > max_tokens_model - OUTPUT_BUFFER_TOKENS_SOFT_THRESHOLD:
@@ -320,12 +319,8 @@ def generate_full_patch(convert_hunks_to_line_numbers, file_dict, max_tokens_mod
             continue
 
         if patch:
-            if not convert_hunks_to_line_numbers:
-                patch_final = f"\n\n## File: '{filename.strip()}'\n\n{patch.strip()}\n"
-            else:
-                patch_final = "\n\n" + patch.strip()
             patches.append(patch_final)
-            total_tokens += token_handler.count_tokens(patch_final)
+            total_tokens += new_patch_tokens
             files_in_patch_list.append(filename)
             if get_verbosity_level() >= 2:
                 get_logger().info(f"Tokens: {total_tokens}, last filename: {filename}")
@@ -419,14 +414,8 @@ def get_pr_multi_diffs(git_provider: GitProvider,
         List[str]: A list of final diff strings, split into multiple groups based on the maximum number of tokens allowed for the given model.
         With `return_remaining_files`, a tuple of that list and the list of omitted file names.
 
-    Raises:
-        RateLimitExceededException: If the rate limit for the Git provider API is exceeded.
     """
-    try:
-        diff_files = git_provider.get_diff_files()
-    except RateLimitExceededException as e:
-        get_logger().error(f"Rate limit exceeded for git provider API. original message {e}")
-        raise
+    diff_files = git_provider.get_diff_files()
 
     # Sort files by main language
     pr_languages = sort_files_by_main_languages(git_provider.get_languages(), diff_files)

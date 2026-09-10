@@ -72,3 +72,58 @@ class TestGithubAppAuth:
             assert is_bot_user("some-bot[bot]", "Bot") is False
         finally:
             settings.set("GITHUB.IGNORE_BOT_PR", original)
+
+    def test_ignore_bot_pr_ships_under_the_github_section(self):
+        """The premise of #3017's fix, read from the file rather than settings.
+
+        `is_bot_user` falls back to `[github]` only because that is the section
+        `configuration.toml` ships the option in. If it ever moves, the fallback
+        silently becomes the only reader of a key nobody sets, and the two tests
+        above would still pass because they set `GITHUB.IGNORE_BOT_PR`
+        themselves. Read through `get_settings()` and an environment override
+        could answer for the file, so this opens the file.
+        """
+        import tomllib
+        from pathlib import Path
+
+        import pr_agent
+
+        toml_path = Path(pr_agent.__file__).parent / "settings" / "configuration.toml"
+        config = tomllib.loads(toml_path.read_text(encoding="utf-8"))
+
+        assert "ignore_bot_pr" in config["github"], (
+            "is_bot_user reads [github].ignore_bot_pr; configuration.toml must ship it there"
+        )
+        assert "ignore_bot_pr" not in config.get("github_app", {}), (
+            "two homes for one option is what #3017 was: the [github_app] key is legacy only"
+        )
+
+    def test_legacy_github_app_key_still_overrides_the_github_section(self):
+        """The legacy key wins where both are set, which is what makes it a fallback.
+
+        Anyone who set `GITHUB_APP.IGNORE_BOT_PR` before #3068 keeps the
+        behaviour they configured; removing the fallback turns this red, which
+        is the whole point of the test.
+
+        Both sections are snapshotted whole rather than by key: Dynaconf's
+        `unset` does not remove a dotted key, so a key this test adds can only
+        be taken back out by restoring the section it lives in.
+        """
+        import copy
+
+        from pr_agent.servers.github_app import is_bot_user
+
+        settings = get_settings()
+        original_github = copy.deepcopy(settings.get("GITHUB", None))
+        original_github_app = copy.deepcopy(settings.get("GITHUB_APP", None))
+        settings.set("GITHUB.IGNORE_BOT_PR", True)
+        settings.set("GITHUB_APP.IGNORE_BOT_PR", False)
+        try:
+            assert is_bot_user("dependabot[bot]", "Bot") is False
+        finally:
+            if original_github is not None:
+                settings.unset("GITHUB", force=True)
+                settings.set("GITHUB", original_github)
+            if original_github_app is not None:
+                settings.unset("GITHUB_APP", force=True)
+                settings.set("GITHUB_APP", original_github_app)
