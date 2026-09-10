@@ -465,6 +465,10 @@ def _provider_supports(git_provider, capability: str) -> bool:
     Objects outside the GitProvider hierarchy (test doubles, minimal adapters) may not
     define the method at all; absence means the capability is not supported, which keeps
     the previous behaviour for providers that matched none of the concrete classes.
+
+    Two consequences of reading the capability by name: a permissive double such as a bare
+    MagicMock answers every capability truthily and so takes the first branch, and a
+    mistyped `capability` reads as unsupported rather than raising.
     """
     check = getattr(git_provider, capability, None)
     return bool(check()) if callable(check) else False
