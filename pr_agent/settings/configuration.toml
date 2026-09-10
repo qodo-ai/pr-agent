@@ -474,7 +474,7 @@ include_error_details = false # set to true to attach exception messages and rej
 skip_comments = false
 force_update_dataset = false
 max_issues_to_scan = 500
-vectordb = "pinecone" # options: "pinecone", "lancedb", "qdrant"
+vectordb = "lancedb" # options: "pinecone", "lancedb", "qdrant"
 
 [pr_find_similar_component]
 class_name = ""
@@ -487,7 +487,10 @@ number_of_results = 5
 [pinecone]
 # fill and place in .secrets.toml
 #api_key = ...
-# environment = "gcp-starter"
+# Serverless index deployment for the modern SDK. `cloud` is one of "aws",
+# "gcp" or "azure"; pick a `region` offered by that cloud.
+cloud = "aws"
+region = "us-east-1"
 
 [lancedb]
 uri = "./lancedb"
