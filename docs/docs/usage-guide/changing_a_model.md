@@ -615,6 +615,26 @@ Create the credential per branch in the [Neon Console](https://console.neon.tech
 !!! note "Chat completions only"
     Some model IDs in Neon's catalog are served through the OpenAI Responses API, which Neon exposes under `/openai/v1` instead of `/v1`. The configuration above points at the chat-completions endpoint, so it cannot reach those models. Neon also documents a few models that return `message.content` as an array of typed blocks rather than a string, and PR-Agent reads the reply as a string.
 
+### GitHub Copilot
+
+Models under an active GitHub Copilot subscription are available through litellm's `github_copilot` provider, which authenticates as your GitHub identity rather than with a dedicated API key:
+
+```toml
+[config]
+model = "github_copilot/gpt-4o"
+fallback_models = ["github_copilot/gpt-4.1"]
+```
+
+The GitHub identity behind the model needs an active Copilot subscription. The token budget for a Copilot model is resolved automatically from litellm's model metadata (verified against the pinned litellm 1.100.0), so `custom_model_max_tokens` is not required.
+
+Authentication uses the [GitHub Copilot provider](https://docs.litellm.ai/docs/providers/github_copilot) flow:
+
+1. litellm first looks for a pre-seeded GitHub access token in `access-token` under `GITHUB_COPILOT_TOKEN_DIR` (default `~/.config/litellm/github_copilot`; the filename is overridable with `GITHUB_COPILOT_ACCESS_TOKEN_FILE`). In a CI runner, write that token before the job runs - for example, mount a secret into the directory or point the variable at a mounted secret directory - and the flow never becomes interactive.
+2. Only when the file is missing or empty does litellm fall back to the interactive device-code flow (`POST https://github.com/login/device/code`, up to three attempts), which does not suit unattended runners.
+3. The Copilot API key (`api-key.json` in the same directory) is refreshed automatically against `https://api.github.com/copilot_internal/v2/token`, using the pre-seeded access token.
+
+Whether Copilot's terms permit this programmatic use is a question for GitHub rather than a guarantee this project can make, so confirm before relying on the route.
+
 ### Custom models
 
 If the relevant model doesn't appear [here](https://github.com/the-pr-agent/pr-agent/blob/main/pr_agent/algo/__init__.py), you can still use it as a custom model:
