@@ -399,9 +399,8 @@ webhook_password = ""
 # patch_server_token = ""
 
 [bitbucket_server]
-# URL to the BitBucket Server instance
 # url = "https://git.bitbucket.com"
-url = ""
+url = "" # URL to the BitBucket Server instance
 
 [litellm]
 # use_client = false
@@ -531,9 +530,9 @@ enable = false
 artifact_path = ""
 # Custom instructions appended after the artifact content (leave empty for a sensible default)
 artifact_instructions = ""
-# Label shown to the AI — defaults to the filename when empty
+# Label shown to the AI — defaults to the filename when empty.
 artifact_label = ""
-# Which tools receive artifact context
+# Which tools receive artifact context.
 target_tools = ["pr_reviewer", "pr_description", "pr_code_suggestions"]
 # Max artifact size in characters (content is truncated if exceeded)
 max_artifact_size = 50000
